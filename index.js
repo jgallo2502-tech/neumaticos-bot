@@ -180,6 +180,7 @@ app.post('/webhook', async (req, res) => {
   const twiml = new twilio.twiml.MessagingResponse();
   const body = (req.body.Body || '').trim();
   const lower = body.toLowerCase();
+  console.log('Mensaje recibido:', body);
 
   // Derivar a humano
   if (lower.includes('hablar') || lower.includes('humano') || lower.includes('persona') || lower.includes('alguien')) {

@@ -113,6 +113,7 @@ function preciosProducto(precio) {
 
 const PIE = `📌 *Precio unitario. Promociones por compra de 2 o más neumáticos.*
 🔧 Colocación sin cargo en nuestros locales. Válvulas, balanceo y alineación se cobran aparte.
+⚡ Stock Express disponible en 48 hs hábiles.
 🌐 Compra online: tienda.neumaticosgallo.com.ar (6 pagos o contado -20%, envíos a todo el país sin cargo superando mínimo de compra)
 
 📍 *Suc. Victoria:* Pres. Perón 3479 — ☎️ 11-3773-5246

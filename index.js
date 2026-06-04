@@ -125,9 +125,12 @@ function armarRespuesta(productos, medidaOriginal) {
     return `No encontré neumáticos para la medida *${medidaOriginal}* en este momento.\n\nPodés consultar disponibilidad escribiendo "hablar con alguien" y te atendemos a la brevedad. 🙋`;
   }
 
+  // Limitar a 8 productos para no exceder límite de WhatsApp
+  const productosLimitados = productos.slice(0, 8);
+
   // Agrupar por categoría
   const grupos = { 1: [], 2: [], 3: [], 4: [] };
-  for (const p of productos) {
+  for (const p of productosLimitados) {
     const { cat, orden } = categoriaYEmoji(p.marca);
     grupos[orden].push({ ...p, cat });
   }
@@ -163,6 +166,10 @@ function armarRespuesta(productos, medidaOriginal) {
         msg += `   💵 Contado (20% off): $${fmt(contado)}\n`;
       }
     }
+  }
+
+  if (productos.length > 8) {
+    msg += `\n_...y ${productos.length - 8} opciones más. Escribí una marca para filtrar (ej: "185/65R15 Michelin")_\n`;
   }
 
   msg += `\n━━━━━━━━━━━━━━━━━━━\n`;

@@ -174,7 +174,7 @@ app.post('/webhook', async (req, res) => {
   // Saludo inicial
   if (lower.match(/^(hola|buenos|buenas|hi|hey|buen dia|buen día)/) && !normalizarMedida(body)) {
     twiml.message(
-      '👋 ¡Hola! Soy el asistente virtual de *[Tu Neumáticos]*. 🤖\n\n' +
+      '👋 ¡Hola! Soy el asistente virtual de *Neumáticos Gallo*. 🤖\n\n' +
       'Puedo consultarte precios de neumáticos. Escribime la medida que buscás, por ejemplo:\n\n' +
       '• *185/65R15*\n• *195/55R16 Michelin*\n• *205/55-16*\n\n' +
       'También podés indicar la marca si tenés preferencia.\n\n' +

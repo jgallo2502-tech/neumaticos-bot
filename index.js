@@ -70,17 +70,22 @@ async function obtenerPrecios(medida, marca) {
     const coincideMedida = normalizarMedida(rowMedida) === medida;
     const coincideMarca = marca ? rowMarca.toLowerCase().includes(marca) : true;
 
-    if (coincideMedida && coincideMarca) {
+    const sVic  = parseInt(stockVic.toString().replace(/\D/g, '')) || 0;
+    const sNor  = parseInt(stockNor.toString().replace(/\D/g, '')) || 0;
+    const sExpr = parseInt(stockExpr.toString().replace(/\D/g, '')) || 0;
+    const stockTotal = sVic + sNor + sExpr;
+
+    // Solo mostrar productos con 4 o más unidades en stock
+    if (coincideMedida && coincideMarca && stockTotal >= 4) {
       resultados.push({
         descripcion: rowDesc,
         marca: rowMarca,
-        modelo: rowModelo,
         medida: rowMedida,
         precio: parseInt(rowPrecio.toString().replace(/\D/g, '')),
         promocion: rowPromo,
-        stockVic: parseInt(stockVic.toString().replace(/\D/g, '')) || 0,
-        stockNor: parseInt(stockNor.toString().replace(/\D/g, '')) || 0,
-        stockExpr: parseInt(stockExpr.toString().replace(/\D/g, '')) || 0,
+        stockVic: sVic,
+        stockNor: sNor,
+        stockExpr: sExpr,
       });
     }
   }
@@ -93,77 +98,57 @@ function fmt(n) {
   return n.toLocaleString('es-AR');
 }
 
-// --- Calcular info de promoción ---
-function calcularPromo(precio, promoTexto) {
-  const lines = [];
-  const lower = promoTexto.toLowerCase();
-
-  // Contado con 20% de descuento
-  const precioContado = Math.round(precio * 0.80);
-  lines.push(`💵 Contado (20% off): $${fmt(precioContado)}`);
-
-  // Cuotas sin interés
-  const matchCuotas = lower.match(/(\d+)\s*cuotas?\s*sin\s*inter[eé]s/);
-  if (matchCuotas) {
-    const cuotas = parseInt(matchCuotas[1]);
-    const valorCuota = Math.round(precio / cuotas);
-    lines.push(`💳 ${cuotas} cuotas sin interés: $${fmt(valorCuota)}/cuota (total $${fmt(precio)})`);
-  }
-
-  // Otras promos especiales
-  const otrasPromos = promoTexto.replace(/\d+\s*cuotas?\s*sin\s*inter[eé]s/gi, '').trim();
-  if (otrasPromos && otrasPromos.length > 2) {
-    lines.push(`🏷️ Promo: ${otrasPromos}`);
-  }
-
-  return lines.join('\n');
+// --- Armar bloque de precios para un producto ---
+function preciosProducto(precio) {
+  const p6  = Math.round(precio / 6);
+  const p3  = Math.round(precio * 0.85 / 3);
+  const contado = Math.round(precio * 0.80);
+  return `💳 12 pagos: $${fmt(precio)}\n💳 6 cuotas (-10%): $${fmt(Math.round(precio * 0.90))} — $${fmt(p6)}/cuota\n💳 3 cuotas (-15%): $${fmt(Math.round(precio * 0.85))} — $${fmt(p3)}/cuota\n💵 Contado (-20%): $${fmt(contado)}`;
 }
+
+const PIE = `📌 *Precio unitario. Promociones por compra de 2 o más neumáticos.*
+🔧 Colocación sin cargo en nuestros locales. Válvulas, balanceo y alineación se cobran aparte.
+🌐 Compra online: tienda.neumaticosgallo.com.ar (6 pagos o contado -20%, envíos a todo el país sin cargo superando mínimo de compra)
+
+📍 *Suc. Victoria:* Pres. Perón 3479 — ☎️ 11-3773-5246
+📍 *Suc. Nordelta:* Agustín García 6318, Tigre — ☎️ 11-5734-7692
+🕐 Lun-Vie 8 a 19 hs | Sáb 8 a 16 hs
+
+🤖 _Soy un bot. Escribí *"hablar con alguien"* para atención humana._`;
 
 // --- Armar lista de mensajes de precios (uno por producto) ---
 function armarMensajes(productos, medidaOriginal) {
   if (productos.length === 0) {
-    return [`No encontré neumáticos para la medida *${medidaOriginal}* en este momento.\n\nEscribí "hablar con alguien" y te atendemos a la brevedad. 🙋`];
+    return [`No encontré neumáticos *${medidaOriginal}* con stock disponible.\n\nEscribí "hablar con alguien" para consultar disponibilidad. 🙋`];
   }
 
   const mensajes = [];
-
-  // Encabezado
   const total = productos.length;
   const mostrados = Math.min(total, 6);
-  mensajes.push(`🔍 *${medidaOriginal}* — ${total} opciones encontradas (mostrando ${mostrados} por precio):\n\n⭐ Premium: Michelin, Continental, Dunlop, Yokohama\n✅ Precio-calidad: Nexen, Giti, Hankook\n💰 Económicas: Westlake, Tracmax, Linglong`);
 
-  // Un mensaje por producto (máximo 6)
+  mensajes.push(`🔍 *${medidaOriginal}* — ${total} opción${total > 1 ? 'es' : ''} con stock (mostrando ${mostrados}, mayor a menor precio):\n\n⭐ Premium: Michelin, Continental, Dunlop, Yokohama\n✅ Precio-calidad: Nexen, Giti, Hankook\n💰 Económicas: Westlake, Tracmax, Linglong`);
+
   for (const p of productos.slice(0, 6)) {
     const { cat } = categoriaYEmoji(p.marca);
     const stockLineas = [];
     if (p.stockVic > 0)  stockLineas.push(`Victoria: ${p.stockVic}`);
     if (p.stockNor > 0)  stockLineas.push(`Nordelta: ${p.stockNor}`);
     if (p.stockExpr > 0) stockLineas.push(`Express 48hs: ${p.stockExpr}`);
-    const stockTexto = stockLineas.length > 0 ? stockLineas.join(' | ') : 'Sin stock en depósito';
+    const stockTexto = stockLineas.join(' | ');
 
-    const contado = Math.round(p.precio * 0.80);
-    let msg = `${cat}\n*${p.descripcion}*\n`;
-    msg += `📦 ${stockTexto}\n`;
-    msg += `💳 Lista 6 cuotas: $${fmt(p.precio)}\n`;
-    msg += `💵 Contado -20%: $${fmt(contado)}`;
+    let msg = `${cat}\n*${p.descripcion}*\n📦 Stock: ${stockTexto}\n\n`;
+    msg += preciosProducto(p.precio);
     if (p.promocion) {
-      const matchCuotas = p.promocion.toLowerCase().match(/(\d+)\s*cuotas?\s*sin\s*inter[eé]s/);
-      if (matchCuotas) {
-        const cuotas = parseInt(matchCuotas[1]);
-        msg += `\n💳 ${cuotas} cuotas s/i: $${fmt(Math.round(p.precio / cuotas))}/cuota`;
-      }
-      msg += `\n🏷️ ${p.promocion} _(solo presencial)_`;
+      msg += `\n🏷️ _Promo: ${p.promocion} (presencial, 2+ neumáticos)_`;
     }
     mensajes.push(msg);
   }
 
   if (total > 6) {
-    mensajes.push(`_...y ${total - 6} opciones más. Filtrá por marca, ej: "185/65R15 Michelin"_`);
+    mensajes.push(`_...y ${total - 6} opciones más. Filtrá por marca, ej: "${medidaOriginal} Michelin"_`);
   }
 
-  // Pie
-  mensajes.push(`📌 Precio unitario. Colocación sin cargo.\nAlineación, balanceo y válvulas se cobran aparte.\n🌐 Envíos sin cargo superando el mínimo (pedidos: tu-web.com)\n\n🤖 _Bot de neumáticos — escribí *"hablar con alguien"* para atención humana_`);
-
+  mensajes.push(PIE);
   return mensajes;
 }
 

@@ -119,67 +119,52 @@ function calcularPromo(precio, promoTexto) {
   return lines.join('\n');
 }
 
-// --- Armar respuesta de precios ---
-function armarRespuesta(productos, medidaOriginal) {
+// --- Armar lista de mensajes de precios (uno por producto) ---
+function armarMensajes(productos, medidaOriginal) {
   if (productos.length === 0) {
-    return `No encontré neumáticos para la medida *${medidaOriginal}* en este momento.\n\nPodés consultar disponibilidad escribiendo "hablar con alguien" y te atendemos a la brevedad. 🙋`;
+    return [`No encontré neumáticos para la medida *${medidaOriginal}* en este momento.\n\nEscribí "hablar con alguien" y te atendemos a la brevedad. 🙋`];
   }
 
-  // Limitar a 8 productos para no exceder límite de WhatsApp
-  const productosLimitados = productos.slice(0, 8);
+  const mensajes = [];
 
-  // Agrupar por categoría
-  const grupos = { 1: [], 2: [], 3: [], 4: [] };
-  for (const p of productosLimitados) {
-    const { cat, orden } = categoriaYEmoji(p.marca);
-    grupos[orden].push({ ...p, cat });
-  }
+  // Encabezado
+  const total = productos.length;
+  const mostrados = Math.min(total, 6);
+  mensajes.push(`🔍 *${medidaOriginal}* — ${total} opciones encontradas (mostrando ${mostrados} por precio):\n\n⭐ Premium: Michelin, Continental, Dunlop, Yokohama\n✅ Precio-calidad: Nexen, Giti, Hankook\n💰 Económicas: Westlake, Tracmax, Linglong`);
 
-  let msg = `🔍 Resultados para medida *${medidaOriginal}*:\n`;
-  msg += `━━━━━━━━━━━━━━━━━━━\n`;
+  // Un mensaje por producto (máximo 6)
+  for (const p of productos.slice(0, 6)) {
+    const { cat } = categoriaYEmoji(p.marca);
+    const stockLineas = [];
+    if (p.stockVic > 0)  stockLineas.push(`Victoria: ${p.stockVic}`);
+    if (p.stockNor > 0)  stockLineas.push(`Nordelta: ${p.stockNor}`);
+    if (p.stockExpr > 0) stockLineas.push(`Express 48hs: ${p.stockExpr}`);
+    const stockTexto = stockLineas.length > 0 ? stockLineas.join(' | ') : 'Sin stock en depósito';
 
-  const nombresGrupo = {
-    1: '⭐ *PREMIUM*',
-    2: '✅ *PRECIO-CALIDAD*',
-    3: '💰 *ECONÓMICAS*',
-    4: '📦 *OTRAS*',
-  };
-
-  for (const orden of [1, 2, 3, 4]) {
-    if (grupos[orden].length === 0) continue;
-    msg += `\n${nombresGrupo[orden]}\n`;
-    for (const p of grupos[orden]) {
-      const stockLineas = [];
-      if (p.stockVic > 0)  stockLineas.push(`Victoria: ${p.stockVic}`);
-      if (p.stockNor > 0)  stockLineas.push(`Nordelta: ${p.stockNor}`);
-      if (p.stockExpr > 0) stockLineas.push(`Pedido Express 48hs: ${p.stockExpr}`);
-      const stockTexto = stockLineas.length > 0 ? stockLineas.join(' | ') : '⚠️ Sin stock en depósito';
-
-      msg += `\n🔹 *${p.descripcion}*\n`;
-      msg += `   📦 Stock: ${stockTexto}\n`;
-      msg += `   Precio lista (6 cuotas): $${fmt(p.precio)}\n`;
-      if (p.promocion) {
-        msg += calcularPromo(p.precio, p.promocion) + '\n';
-        msg += `   ⚠️ _Promos válidas solo presencialmente_\n`;
-      } else {
-        const contado = Math.round(p.precio * 0.80);
-        msg += `   💵 Contado (20% off): $${fmt(contado)}\n`;
+    const contado = Math.round(p.precio * 0.80);
+    let msg = `${cat}\n*${p.descripcion}*\n`;
+    msg += `📦 ${stockTexto}\n`;
+    msg += `💳 Lista 6 cuotas: $${fmt(p.precio)}\n`;
+    msg += `💵 Contado -20%: $${fmt(contado)}`;
+    if (p.promocion) {
+      const matchCuotas = p.promocion.toLowerCase().match(/(\d+)\s*cuotas?\s*sin\s*inter[eé]s/);
+      if (matchCuotas) {
+        const cuotas = parseInt(matchCuotas[1]);
+        msg += `\n💳 ${cuotas} cuotas s/i: $${fmt(Math.round(p.precio / cuotas))}/cuota`;
       }
+      msg += `\n🏷️ ${p.promocion} _(solo presencial)_`;
     }
+    mensajes.push(msg);
   }
 
-  if (productos.length > 8) {
-    msg += `\n_...y ${productos.length - 8} opciones más. Escribí una marca para filtrar (ej: "185/65R15 Michelin")_\n`;
+  if (total > 6) {
+    mensajes.push(`_...y ${total - 6} opciones más. Filtrá por marca, ej: "185/65R15 Michelin"_`);
   }
 
-  msg += `\n━━━━━━━━━━━━━━━━━━━\n`;
-  msg += `📌 *Precio unitario. Colocación sin cargo.*\n`;
-  msg += `📌 Alineación, balanceo y válvulas se cobran aparte.\n`;
-  msg += `🌐 Envíos sin cargo superando el mínimo de compra (precio de lista vigente + 20% desc. contado).\n`;
-  msg += `   👉 Pedidos por envío: *[tu web aquí]*\n`;
-  msg += `\n🤖 _Soy un bot. Si necesitás atención personalizada escribí_ *"hablar con alguien"*`;
+  // Pie
+  mensajes.push(`📌 Precio unitario. Colocación sin cargo.\nAlineación, balanceo y válvulas se cobran aparte.\n🌐 Envíos sin cargo superando el mínimo (pedidos: tu-web.com)\n\n🤖 _Bot de neumáticos — escribí *"hablar con alguien"* para atención humana_`);
 
-  return msg;
+  return mensajes;
 }
 
 // --- Webhook principal ---
@@ -225,7 +210,10 @@ app.post('/webhook', async (req, res) => {
     console.log('Consultando Google Sheets...');
     const productos = await obtenerPrecios(medidaNorm, marca);
     console.log('Productos encontrados:', productos.length);
-    twiml.message(armarRespuesta(productos, medidaNorm));
+    const mensajes = armarMensajes(productos, medidaNorm);
+    for (const m of mensajes) {
+      twiml.message(m);
+    }
   } catch (err) {
     console.error('Error al consultar precios:', err.message);
     twiml.message('❌ Hubo un error al consultar los precios. Por favor intentá de nuevo o escribí *"hablar con alguien"*.');

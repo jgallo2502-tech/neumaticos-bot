@@ -90,7 +90,12 @@ async function obtenerPrecios(medida, marca) {
     }
   }
 
-  return resultados.sort((a, b) => b.precio - a.precio);
+  return resultados.sort((a, b) => {
+    const { orden: oA } = categoriaYEmoji(a.marca);
+    const { orden: oB } = categoriaYEmoji(b.marca);
+    if (oA !== oB) return oA - oB;
+    return b.precio - a.precio;
+  });
 }
 
 // --- Formatear precio con puntos ---
@@ -136,7 +141,7 @@ function armarMensajes(productos, medidaOriginal) {
     if (p.stockExpr > 0) stockLineas.push(`Express 48hs: ${p.stockExpr}`);
     const stockTexto = stockLineas.join(' | ');
 
-    let msg = `${cat}\n*${p.descripcion}*\n📦 Stock: ${stockTexto}\n\n`;
+    let msg = `${cat}\n*${p.descripcion}*\n\n`;
     msg += preciosProducto(p.precio);
     if (p.promocion) {
       msg += `\n🏷️ _Promo: ${p.promocion} (presencial, 2+ neumáticos)_`;

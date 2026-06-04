@@ -212,15 +212,19 @@ app.post('/webhook', async (req, res) => {
   }
 
   const marca = extraerMarca(body);
+  console.log('Medida normalizada:', medidaNorm, '| Marca:', marca);
 
   try {
+    console.log('Consultando Google Sheets...');
     const productos = await obtenerPrecios(medidaNorm, marca);
+    console.log('Productos encontrados:', productos.length);
     twiml.message(armarRespuesta(productos, medidaNorm));
   } catch (err) {
-    console.error('Error al consultar precios:', err);
+    console.error('Error al consultar precios:', err.message);
     twiml.message('❌ Hubo un error al consultar los precios. Por favor intentá de nuevo o escribí *"hablar con alguien"*.');
   }
 
+  console.log('Enviando respuesta TwiML...');
   res.type('text/xml').send(twiml.toString());
 });
 

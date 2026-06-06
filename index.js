@@ -162,10 +162,7 @@ function preciosProducto(precio, esRev = false, marca = '') {
   if (esRev) {
     const desc = descuentoRevendedor(marca);
     const precioRev = Math.round(precio * (1 - desc));
-    const p6  = Math.round(precioRev / 6);
-    const p3  = Math.round(precioRev * 0.85 / 3);
-    const contado = Math.round(precioRev * 0.80);
-    return `💳 12 pagos: $${fmt(precioRev)}\n💳 6 cuotas (-10%): $${fmt(Math.round(precioRev * 0.90))} — $${fmt(p6)}/cuota\n💳 3 cuotas (-15%): $${fmt(Math.round(precioRev * 0.85))} — $${fmt(p3)}/cuota\n💵 Contado (-20%): $${fmt(contado)}`;
+    return `💲 Precio reventa: $${fmt(precioRev)}`;
   }
   const p6  = Math.round(precio / 6);
   const p3  = Math.round(precio * 0.85 / 3);

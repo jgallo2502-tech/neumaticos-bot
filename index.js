@@ -76,7 +76,7 @@ async function esRevendedor(numero) {
 }
 
 // --- Registrar consulta en Google Sheets ---
-async function registrarConsulta(numero, medida, marca, cantProductos) {
+async function registrarConsulta(numero, medida, marca, productos) {
   try {
     const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
     const auth = new google.auth.GoogleAuth({
@@ -84,15 +84,27 @@ async function registrarConsulta(numero, medida, marca, cantProductos) {
       scopes: ['https://www.googleapis.com/auth/spreadsheets'],
     });
     const sheets = google.sheets({ version: 'v4', auth });
-    const ahora = new Date();
-    const fecha = ahora.toLocaleDateString('es-AR');
-    const hora  = ahora.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+
+    // Hora Argentina (UTC-3)
+    const ahora = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    const fecha = ahora.toISOString().slice(0, 10).split('-').reverse().join('/');
+    const hora  = ahora.toISOString().slice(11, 16);
+
+    // Resumen de productos encontrados
+    let detalles = '';
+    if (productos.length === 0) {
+      detalles = 'Sin stock disponible';
+    } else {
+      detalles = productos.slice(0, 5).map(p => `${p.marca} $${fmt(p.precio)}`).join(' | ');
+      if (productos.length > 5) detalles += ` (+${productos.length - 5} más)`;
+    }
+
     await sheets.spreadsheets.values.append({
       spreadsheetId: process.env.GOOGLE_SHEET_ID,
-      range: 'Consultas!A:F',
+      range: 'Consultas!A:G',
       valueInputOption: 'USER_ENTERED',
       requestBody: {
-        values: [[fecha, hora, numero, medida, marca || '', cantProductos]],
+        values: [[fecha, hora, numero, medida, marca || '', productos.length, detalles]],
       },
     });
   } catch (err) {
@@ -306,7 +318,7 @@ app.post('/webhook', async (req, res) => {
       esRevendedor(fromNumber),
     ]);
     console.log('Productos encontrados:', productos.length, '| Revendedor:', esRev, '| From:', fromNumber);
-    registrarConsulta(fromNumber, medidaNorm, marca, productos.length); // sin await, no bloqueamos
+    registrarConsulta(fromNumber, medidaNorm, marca, productos); // sin await, no bloqueamos
     const mensajes = armarMensajes(productos, medidaNorm, esRev);
     for (const m of mensajes) {
       twiml.message(m);

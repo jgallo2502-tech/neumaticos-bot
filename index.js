@@ -352,6 +352,35 @@ function armarMensajes(productos, medidaOriginal, esRev = false) {
 }
 
 // --- Webhook principal ---
+// --- Info de marcas ---
+function infoDeMarca(marca) {
+  const m = marca.toLowerCase();
+  const info = {
+    michelin: '🥇 *Michelin* es la marca N°1 del mundo. Líder en frenado y agarre en lluvia, y mayor duración. Sus modelos principales:\n• *Pilot Sport 4/5*: alto rendimiento deportivo\n• *Primacy 4/5*: confort y seguridad en ruta\n• *Energy XM2+*: autos compactos, excelente duración\n• *LTX Trail / LTX Force*: pickups y camionetas, uso mixto\n• *Primacy SUV / SUV+*: SUVs, suave y silenciosa',
+    continental: '🏆 *Continental* es el principal competidor de Michelin, con excelente tecnología alemana. Muy buenas prestaciones en seguridad y confort, a veces con precio más accesible.',
+    yokohama: '🇯🇵 *Yokohama* es una marca japonesa de altísima calidad. Se destaca por su andar suave y excelentes prestaciones. Modelos:\n• *BluEarth ES32*: autos compactos\n• *AE51/AE61*: autos medianos y SUVs\n• *ADVAN V701*: alto rendimiento\n• *Geolandar G015*: camioneta mixta, 3PMSF (apta nieve)\n• *Geolandar G016*: tipo Rugged Terrain',
+    dunlop: '🏎️ *Dunlop* es marca japonesa similar a Yokohama, con algo más de duración. Es equipo original de Toyota en casi todos sus modelos. Modelos:\n• *Touring R1*: compactos\n• *FM800*: medianos y SUVs\n• *Sportmaxx*: alto rendimiento\n• *Grandtrek PT3/PT5*: camioneta ruta\n• *AT5/AT20/AT25*: mixtas, equipo original Hilux y SW4',
+    bfgoodrich: '🛻 *BFGoodrich* pertenece al Grupo Michelin. La marca más reconocida en 4x4 y camionetas. Modelos:\n• *Trail Terrain*: AT suave\n• *AT KO2*: All Terrain super probada, robusta\n• *Mud Terrain*: uso en barro\n• *HD Terrain*: Heavy Duty, máxima resistencia',
+    giti: '🔬 *Giti* tiene sede en Singapur, laboratorios en Alemania y fábricas de alta tecnología. Top 10 mundial en crecimiento. Equipo original de Ford Territory, Peugeot 2008/3008/5008, VW Polo, BYD, Chery y más.',
+    gtradial: '⚙️ *GTRadial* es del grupo Giti, excelente opción precio-calidad para camionetas. Modelos:\n• *AT/HT*: confiables para trabajo\n• *AT70*: muy buen desempeño en tierra y barro\n• *AT71/HT71*: equipo original pickups BYD Shark\n• *XT71*: Rugged Terrain, muy llamativa\n• *AT200*: próximamente, prestaciones tipo BFGoodrich AT',
+    nexen: '🇰🇷 *Nexen* es marca coreana de altísima calidad, equipo original de BMW, Hyundai y Kia. Prestaciones premium a precio menor.',
+    hankook: '🇰🇷 *Hankook* también coreana, equipo original de BMW y Hyundai. Gran reconocimiento mundial y prestaciones de primer nivel.',
+    falken: '🏔️ *Falken* es la marca de camioneta y 4x4 del grupo Dunlop. Muy popular en EEUU, enfocada en off-road y competición.',
+    tracmax: '💡 *Tracmax* es nuestra marca económica representada. Excelente calidad para el segmento económico, fabricada en planta 4.0 (alta robotización). Muy buen balanceo y confiabilidad.',
+    linglong: '🇨🇳 *Linglong* es una de las empresas chinas más importantes. Equipo original de VW Polo Track, Chevrolet Spark y VW Tera.',
+    westlake: '💰 *Westlake* es una opción económica confiable del mercado.',
+  };
+  return info[m] || null;
+}
+
+// --- Detectar sucursal mencionada ---
+function detectarSucursal(texto) {
+  const lower = texto.toLowerCase();
+  if (lower.includes('victoria') || lower.includes('vic')) return 'victoria';
+  if (lower.includes('nordelta') || lower.includes('tigre') || lower.includes('nord')) return 'nordelta';
+  return null;
+}
+
 app.post('/webhook', async (req, res) => {
   const twiml = new twilio.twiml.MessagingResponse();
   const body = (req.body.Body || '').trim();
@@ -364,8 +393,29 @@ app.post('/webhook', async (req, res) => {
 
   // Derivar a humano
   if (lower.includes('hablar') || lower.includes('humano') || lower.includes('persona') || lower.includes('alguien')) {
-    twiml.message('👋 ¡Entendido! Un asesor te atenderá a la brevedad. Gracias por tu paciencia. 🙏\n\n🤖 _Bot de neumáticos_');
+    twiml.message('👋 ¡Entendido! Un asesor te atenderá a la brevedad. Gracias por tu paciencia. 🙏\n\n📍 *Suc. Victoria:* wa.me/541137735246\n📍 *Suc. Nordelta:* wa.me/541157347692\n\n🤖 _Bot de neumáticos_');
     return res.type('text/xml').send(twiml.toString());
+  }
+
+  // Respuesta si menciona sucursal
+  const sucursal = detectarSucursal(body);
+  if (sucursal && !normalizarMedida(body)) {
+    if (sucursal === 'victoria') {
+      twiml.message('📍 *Sucursal Victoria*\nPres. Perón 3479, Victoria\n☎️ 11-3773-5246\n💬 WhatsApp: wa.me/541137735246\n\n🕐 Lun-Vie 8 a 19 hs | Sáb 8 a 16 hs\n\n¡Te esperamos! Podés pasar directamente o coordinar por WhatsApp. 😊');
+    } else {
+      twiml.message('📍 *Sucursal Nordelta*\nAgustín García 6318, Tigre\n☎️ 11-5734-7692\n💬 WhatsApp: wa.me/541157347692\n\n🕐 Lun-Vie 8 a 19 hs | Sáb 8 a 16 hs\n\n¡Te esperamos! Podés pasar directamente o coordinar por WhatsApp. 😊');
+    }
+    return res.type('text/xml').send(twiml.toString());
+  }
+
+  // Info de marca sin medida
+  const marcaInfo = extraerMarca(body);
+  if (marcaInfo && !normalizarMedida(body)) {
+    const info = infoDeMarca(marcaInfo);
+    if (info) {
+      twiml.message(info + '\n\n_Escribime la medida que buscás y te paso precios disponibles. 👇_');
+      return res.type('text/xml').send(twiml.toString());
+    }
   }
 
   // Saludo inicial
@@ -380,13 +430,18 @@ app.post('/webhook', async (req, res) => {
     return res.type('text/xml').send(twiml.toString());
   }
 
+  // Preguntas sobre garantía
+  if (lower.includes('garantia') || lower.includes('garantía')) {
+    twiml.message('✅ *Garantía*\nTodos nuestros neumáticos tienen *5 años de garantía* por defecto de fabricación.\n\n¿Hay algo más en lo que te pueda ayudar?');
+    return res.type('text/xml').send(twiml.toString());
+  }
+
   // Buscar medida en el mensaje
   const medidaNorm = normalizarMedida(body);
   if (!medidaNorm) {
     twiml.message(
       '🔍 No encontré una medida de neumático en tu mensaje.\n\n' +
-      'Escribime la medida así:\n• *185/65R15*\n• *195/55-16*\n• *205/55R16 Michelin*\n\n' +
-      '_Para atención humana escribí *"hablar con alguien"*_'
+      'Podés consultarme:\n• *Una medida*: ej. 185/65R15\n• *Info de una marca*: ej. "info Michelin"\n• *Garantía*\n• O escribí *"hablar con alguien"* para atención humana'
     );
     return res.type('text/xml').send(twiml.toString());
   }
@@ -402,10 +457,21 @@ app.post('/webhook', async (req, res) => {
       esRevendedor(fromNumber),
     ]);
     console.log('Productos encontrados:', productos.length, '| Revendedor:', esRev, '| From:', fromNumber);
-    registrarConsulta(fromNumber, medidaNorm, marca, productos); // sin await, no bloqueamos
+    registrarConsulta(fromNumber, medidaNorm, marca, productos);
     const mensajes = armarMensajes(productos, medidaNorm, esRev);
     for (const m of mensajes) {
       twiml.message(m);
+    }
+
+    // Mensaje de cierre motivador (solo para clientes, no revendedores)
+    if (!esRev && productos.length > 0) {
+      twiml.message(
+        '¿Te puedo ayudar con algo más? 😊\n\n' +
+        '📍 ¿Cuál sucursal te queda más cómoda?\n' +
+        '• *Victoria* — Pres. Perón 3479 | wa.me/541137735246\n' +
+        '• *Nordelta* — Agustín García 6318, Tigre | wa.me/541157347692\n\n' +
+        'Podés coordinar la colocación directamente por WhatsApp con la sucursal. La colocación es *sin cargo*. 🔧'
+      );
     }
   } catch (err) {
     console.error('Error al consultar precios:', err.message);

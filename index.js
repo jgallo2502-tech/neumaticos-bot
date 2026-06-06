@@ -105,7 +105,7 @@ function normalizarMedida(texto) {
 
 // --- Extraer marca del texto ---
 const MARCAS_PREMIUM = ['michelin', 'continental', 'dunlop', 'yokohama', 'bfgoodrich'];
-const MARCAS_PRECIO_CALIDAD = ['nexen', 'giti', 'hankook'];
+const MARCAS_PRECIO_CALIDAD = ['gtradial', 'giti', 'nexen', 'falken', 'hankook'];
 const MARCAS_ECONOMICAS = ['westlake', 'tracmax', 'linglong'];
 const TODAS_MARCAS = [...MARCAS_PREMIUM, ...MARCAS_PRECIO_CALIDAD, ...MARCAS_ECONOMICAS];
 const MARCAS_DESCUENTO_35 = ['michelin', 'bfgoodrich'];
@@ -255,7 +255,7 @@ async function obtenerPrecios(medida, marca, incluirRunFlat = false) {
   // Orden: categoría → marca preferida primero → stock total desc
   const ORDEN_MARCA = {
     'michelin': 1, 'yokohama': 2, 'continental': 3, 'dunlop': 4, 'bfgoodrich': 5,
-    'giti': 1, 'gtradial': 1, 'nexen': 2, 'hankook': 3,
+    'gtradial': 1, 'giti': 2, 'nexen': 3, 'falken': 4, 'hankook': 5,
     'tracmax': 1, 'linglong': 2, 'westlake': 3,
   };
 

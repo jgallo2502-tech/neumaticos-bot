@@ -78,7 +78,7 @@ async function esRevendedor(numero) {
 // --- Leer Google Sheets ---
 // Columnas: A=Cod.Art | B=Cod.Alt | C=Descripción | D=Marca | E=Modelo | F=Medida
 //           G=Victoria | H=Nordelta | I=Pedido Express 48hs | J=Precio | K=Promoción
-async function obtenerPrecios(medida, marca) {
+async function obtenerPrecios(medida, marca, incluirRunFlat = false) {
   const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
   const auth = new google.auth.GoogleAuth({
     credentials,
@@ -114,6 +114,10 @@ async function obtenerPrecios(medida, marca) {
     const sExpr = parseInt(stockExpr.toString().replace(/\D/g, '')) || 0;
     const stockTotal = sVic + sNor + sExpr;
 
+    // Excluir run flat salvo que el cliente los pida explícitamente
+    const esRunFlat = /runflat|run flat|run-flat|\bRFT\b|\bZP\b/i.test(rowDesc);
+    if (esRunFlat && !incluirRunFlat) continue;
+
     // Solo mostrar productos con 4 o más unidades en stock
     if (coincideMedida && coincideMarca && stockTotal >= 4) {
       resultados.push({
@@ -125,15 +129,26 @@ async function obtenerPrecios(medida, marca) {
         stockVic: sVic,
         stockNor: sNor,
         stockExpr: sExpr,
+        stockTotal,
       });
     }
   }
+
+  // Orden: categoría → marca preferida primero → stock total desc
+  const ORDEN_MARCA = {
+    'michelin': 1, 'yokohama': 2, 'continental': 3, 'dunlop': 4, 'bfgoodrich': 5,
+    'giti': 1, 'gtradial': 1, 'nexen': 2, 'hankook': 3,
+    'tracmax': 1, 'linglong': 2, 'westlake': 3,
+  };
 
   return resultados.sort((a, b) => {
     const { orden: oA } = categoriaYEmoji(a.marca);
     const { orden: oB } = categoriaYEmoji(b.marca);
     if (oA !== oB) return oA - oB;
-    return b.precio - a.precio;
+    const mA = ORDEN_MARCA[a.marca.toLowerCase()] || 99;
+    const mB = ORDEN_MARCA[b.marca.toLowerCase()] || 99;
+    if (mA !== mB) return mA - mB;
+    return b.stockTotal - a.stockTotal;
   });
 }
 
@@ -182,11 +197,11 @@ function armarMensajes(productos, medidaOriginal, esRev = false) {
   const headerExtra = esRev ? ' _(precios de revendedor)_' : '';
   mensajes.push(`🔍 *${medidaOriginal}* — ${total} opción${total > 1 ? 'es' : ''} con stock disponible${headerExtra}:`);
 
-  // Agrupar por categoría
+  // Agrupar por categoría — máx 3 por categoría para no saturar
   const grupos = { 1: [], 2: [], 3: [], 4: [] };
-  for (const p of productos.slice(0, 8)) {
+  for (const p of productos) {
     const { orden } = categoriaYEmoji(p.marca);
-    grupos[orden].push(p);
+    if (grupos[orden].length < 3) grupos[orden].push(p);
   }
 
   const nombresGrupo = {
@@ -204,7 +219,7 @@ function armarMensajes(productos, medidaOriginal, esRev = false) {
       const express = p.stockExpr > 0 ? '\n⚡ _Disponible también vía Pedido Express en 48 hs hábiles_' : '';
       msg += `\n🔹 *${p.descripcion}*\n`;
       msg += preciosProducto(p.precio, esRev, p.marca);
-      if (p.promocion && !esRev) {
+      if (p.promocion && !esRev && p.promocion.trim()) {
         msg += `\n🏷️ _Promo: ${p.promocion} (presencial, 2+ neumáticos)_`;
       }
       msg += express;
@@ -259,12 +274,13 @@ app.post('/webhook', async (req, res) => {
   }
 
   const marca = extraerMarca(body);
-  console.log('Medida normalizada:', medidaNorm, '| Marca:', marca);
+  const pidioRunFlat = /runflat|run flat|run-flat|\brft\b|\bzp\b/i.test(lower);
+  console.log('Medida normalizada:', medidaNorm, '| Marca:', marca, '| RunFlat:', pidioRunFlat);
 
   try {
     console.log('Consultando Google Sheets...');
     const [productos, esRev] = await Promise.all([
-      obtenerPrecios(medidaNorm, marca),
+      obtenerPrecios(medidaNorm, marca, pidioRunFlat),
       esRevendedor(fromNumber),
     ]);
     console.log('Productos encontrados:', productos.length, '| Revendedor:', esRev);

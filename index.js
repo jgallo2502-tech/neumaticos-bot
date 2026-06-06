@@ -66,7 +66,9 @@ async function esRevendedor(numero) {
       revendedoresCache = new Set(rows.flat().map(n => n.toString().replace(/\D/g, '')));
       revendedoresCacheTime = ahora;
     }
-    return revendedoresCache.has(numero.replace(/\D/g, ''));
+    const numLimpio = numero.replace(/\D/g, '');
+    console.log('Verificando revendedor:', numLimpio, '| Lista:', [...revendedoresCache]);
+    return revendedoresCache.has(numLimpio);
   } catch (err) {
     console.error('Error al leer revendedores:', err.message);
     return false;

@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nuevo Presupuesto — Neumáticos Gallo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #f5f5f5; color: #222; }
+    header {
+      background: #1a1a2e;
+      color: white;
+      padding: 14px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    header h1 { font-size: 18px; }
+    header span { font-size: 13px; opacity: 0.7; }
+    .logout { background: none; border: 1px solid rgba(255,255,255,0.3); color: white; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .container { max-width: 900px; margin: 24px auto; padding: 0 16px; }
+    .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    h2 { font-size: 16px; font-weight: 600; color: #1a1a2e; margin-bottom: 16px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media(max-width: 600px) { .row { grid-template-columns: 1fr; } }
+    label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
+    input, select {
+      width: 100%;
+      padding: 11px 14px;
+      border: 2px solid #e8e8e8;
+      border-radius: 8px;
+      font-size: 15px;
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus { outline: none; border-color: #e63946; }
+    .btn-buscar {
+      background: #e63946;
+      color: white;
+      border: none;
+      padding: 12px 28px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 20px;
+      width: 100%;
+    }
+    .btn-buscar:hover { background: #c1121f; }
+
+    /* Resultados */
+    .categoria { margin-bottom: 20px; }
+    .cat-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 10px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      display: inline-block;
+    }
+    .premium { background: #fff3cd; color: #856404; }
+    .precio-calidad { background: #d1e7dd; color: #0f5132; }
+    .economica { background: #e2e3e5; color: #41464b; }
+    .otras { background: #cfe2ff; color: #084298; }
+
+    .producto-card {
+      border: 2px solid #e8e8e8;
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .producto-card:hover { border-color: #e63946; background: #fff5f5; }
+    .producto-card.seleccionado { border-color: #e63946; background: #fff5f5; }
+    .producto-nombre { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+    .producto-precios { font-size: 12px; color: #555; line-height: 1.6; }
+    .producto-precio-main { font-size: 18px; font-weight: 700; color: #e63946; }
+    .check { font-size: 22px; color: #e63946; display: none; }
+    .producto-card.seleccionado .check { display: block; }
+
+    /* Presupuesto generado */
+    #presupuesto-generado { display: none; }
+    .presup-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 20px; }
+    .presup-empresa h3 { font-size: 20px; font-weight: 700; color: #1a1a2e; }
+    .presup-empresa p { font-size: 12px; color: #666; line-height: 1.5; }
+    .presup-numero { text-align: right; font-size: 12px; color: #666; }
+    .presup-numero strong { font-size: 18px; color: #1a1a2e; display: block; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    th { background: #1a1a2e; color: white; padding: 10px 12px; text-align: left; font-size: 12px; }
+    td { padding: 10px 12px; border-bottom: 1px solid #eee; font-size: 13px; }
+    tr:last-child td { border-bottom: none; }
+    .total-row td { font-weight: 700; font-size: 15px; background: #f9f9f9; }
+    .acciones { display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap; }
+    .btn-accion {
+      flex: 1;
+      min-width: 140px;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+    }
+    .btn-imprimir { background: #1a1a2e; color: white; }
+    .btn-whatsapp { background: #25d366; color: white; }
+    .btn-nuevo { background: #e8e8e8; color: #333; }
+    .nota { font-size: 11px; color: #888; margin-top: 16px; line-height: 1.5; }
+    .loading { text-align: center; padding: 30px; color: #888; }
+    .sin-stock { text-align: center; padding: 30px; color: #888; background: #f9f9f9; border-radius: 10px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🔴 Neumáticos Gallo — Presupuestos</h1>
+    <div>
+      <span id="vendedor-nombre"></span>
+      <button class="logout" onclick="logout()">Salir</button>
+    </div>
+  </header>
+
+  <div class="container">
+
+    <!-- Datos del cliente y búsqueda -->
+    <div class="card" id="form-card">
+      <h2>📋 Datos del cliente</h2>
+      <div class="row">
+        <div>
+          <label>Nombre del cliente</label>
+          <input type="text" id="cliente-nombre" placeholder="Nombre y apellido">
+        </div>
+        <div>
+          <label>WhatsApp</label>
+          <input type="tel" id="cliente-tel" placeholder="11 xxxx-xxxx">
+        </div>
+      </div>
+      <div class="row" style="margin-top:16px">
+        <div>
+          <label>Medida 1</label>
+          <input type="text" id="medida1" placeholder="185/65R15">
+        </div>
+        <div>
+          <label>Medida 2 (opcional)</label>
+          <input type="text" id="medida2" placeholder="205/55R16">
+        </div>
+      </div>
+      <button class="btn-buscar" onclick="buscar()">🔍 Buscar precios</button>
+    </div>
+
+    <!-- Resultados -->
+    <div id="resultados"></div>
+
+    <!-- Botón generar -->
+    <div id="btn-generar-wrap" style="display:none">
+      <button class="btn-buscar" onclick="generarPresupuesto()">📄 Generar Presupuesto</button>
+    </div>
+
+    <!-- Presupuesto generado -->
+    <div class="card" id="presupuesto-generado">
+      <div class="presup-header">
+        <div class="presup-empresa">
+          <h3>🔴 Neumáticos Gallo</h3>
+          <p>Suc. Victoria: Pres. Perón 3479 | 11-3773-5246<br>Suc. Nordelta: Agustín García 6318, Tigre | 11-5734-7692<br>tienda.neumaticosgallo.com.ar</p>
+        </div>
+        <div class="presup-numero">
+          <strong id="presup-num">#0001</strong>
+          <span id="presup-fecha"></span>
+        </div>
+      </div>
+      <p><strong>Cliente:</strong> <span id="presup-cliente"></span></p>
+      <p style="margin-top:4px"><strong>WhatsApp:</strong> <span id="presup-tel"></span></p>
+      <table id="presup-tabla" style="margin-top:16px">
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th>Cant.</th>
+            <th>Precio unit. (12 pagos)</th>
+            <th>Contado (-20%)</th>
+            <th>Subtotal contado</th>
+          </tr>
+        </thead>
+        <tbody id="presup-body"></tbody>
+      </table>
+      <p class="nota">
+        ✅ Garantía: 5 años por defecto de fabricación.<br>
+        🔧 Colocación sin cargo en nuestros locales. Válvulas, balanceo y alineación se cobran aparte.<br>
+        💳 Precio de lista en 12 pagos | 6 cuotas -10% | 3 cuotas -15% | Contado -20%<br>
+        ⚠️ Promociones válidas presencialmente por compra de 2 o más neumáticos.
+      </p>
+      <div class="acciones">
+        <button class="btn-accion btn-imprimir" onclick="imprimir()">🖨️ Imprimir</button>
+        <button class="btn-accion btn-whatsapp" onclick="enviarWhatsApp()">💬 Enviar por WhatsApp</button>
+        <button class="btn-accion btn-nuevo" onclick="nuevoPresupuesto()">+ Nuevo</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const token = localStorage.getItem('token');
+    if (!token) window.location.href = '/app/login.html';
+    document.getElementById('vendedor-nombre').textContent = localStorage.getItem('vendedor') || '';
+
+    let seleccionados = {};
+    let presupuestoActual = null;
+
+    function fmt(n) {
+      return '$' + Math.round(n).toLocaleString('es-AR');
+    }
+
+    function logout() {
+      localStorage.clear();
+      window.location.href = '/app/login.html';
+    }
+
+    async function buscar() {
+      const medida1 = document.getElementById('medida1').value.trim();
+      const medida2 = document.getElementById('medida2').value.trim();
+      if (!medida1) { alert('Ingresá al menos una medida'); return; }
+
+      document.getElementById('resultados').innerHTML = '<div class="loading">🔍 Buscando...</div>';
+      document.getElementById('btn-generar-wrap').style.display = 'none';
+      document.getElementById('presupuesto-generado').style.display = 'none';
+      seleccionados = {};
+
+      const medidas = [medida1];
+      if (medida2) medidas.push(medida2);
+
+      const res = await fetch('/app/precios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ medidas })
+      });
+
+      if (res.status === 401) { window.location.href = '/app/login.html'; return; }
+      const data = await res.json();
+      mostrarResultados(data);
+    }
+
+    function mostrarResultados(data) {
+      let html = '';
+      for (const medida of Object.keys(data)) {
+        const productos = data[medida];
+        html += `<div class="card"><h2>Medida: ${medida}</h2>`;
+        if (productos.length === 0) {
+          html += '<div class="sin-stock">No hay stock disponible para esta medida.</div>';
+        } else {
+          const grupos = { Premium: [], 'Precio-Calidad': [], Económicas: [], Otras: [] };
+          for (const p of productos) {
+            if (['michelin','continental','dunlop','yokohama','bfgoodrich'].includes(p.marca.toLowerCase())) grupos.Premium.push(p);
+            else if (['gtradial','giti','nexen','falken','hankook'].includes(p.marca.toLowerCase())) grupos['Precio-Calidad'].push(p);
+            else if (['westlake','tracmax','linglong'].includes(p.marca.toLowerCase())) grupos.Económicas.push(p);
+            else grupos.Otras.push(p);
+          }
+          for (const [cat, prods] of Object.entries(grupos)) {
+            if (prods.length === 0) continue;
+            const cls = cat === 'Premium' ? 'premium' : cat === 'Precio-Calidad' ? 'precio-calidad' : cat === 'Económicas' ? 'economica' : 'otras';
+            html += `<div class="categoria"><span class="cat-title ${cls}">${cat}</span>`;
+            for (const p of prods) {
+              const id = `${medida}__${p.descripcion}`;
+              const contado = Math.round(p.precio * 0.80);
+              const c6 = Math.round(p.precio * 0.90);
+              const c3 = Math.round(p.precio * 0.85);
+              html += `<div class="producto-card" id="card-${btoa(id).replace(/=/g,'')}" onclick="toggleSeleccion('${medida}', ${JSON.stringify(p).replace(/'/g,"&#39;")})">
+                <div>
+                  <div class="producto-nombre">${p.descripcion}</div>
+                  <div class="producto-precios">
+                    12 pagos: ${fmt(p.precio)} &nbsp;|&nbsp; 6 cuotas (-10%): ${fmt(c6)} &nbsp;|&nbsp; 3 cuotas (-15%): ${fmt(c3)}
+                  </div>
+                </div>
+                <div style="text-align:right">
+                  <div class="producto-precio-main">${fmt(contado)}</div>
+                  <div style="font-size:11px;color:#888">contado</div>
+                  <div class="check">✓</div>
+                </div>
+              </div>`;
+            }
+            html += '</div>';
+          }
+        }
+        html += '</div>';
+      }
+      document.getElementById('resultados').innerHTML = html;
+    }
+
+    function toggleSeleccion(medida, producto) {
+      const id = `${medida}__${producto.descripcion}`;
+      const key = btoa(id).replace(/=/g,'');
+      const card = document.getElementById('card-' + key);
+      if (seleccionados[id]) {
+        delete seleccionados[id];
+        card.classList.remove('seleccionado');
+      } else {
+        // Solo uno por medida
+        for (const k of Object.keys(seleccionados)) {
+          if (k.startsWith(medida + '__')) {
+            delete seleccionados[k];
+            const oldKey = btoa(k).replace(/=/g,'');
+            const oldCard = document.getElementById('card-' + oldKey);
+            if (oldCard) oldCard.classList.remove('seleccionado');
+          }
+        }
+        seleccionados[id] = { medida, ...producto };
+        card.classList.add('seleccionado');
+      }
+      document.getElementById('btn-generar-wrap').style.display = Object.keys(seleccionados).length > 0 ? 'block' : 'none';
+    }
+
+    function generarPresupuesto() {
+      const cliente = document.getElementById('cliente-nombre').value.trim() || 'Sin nombre';
+      const tel = document.getElementById('cliente-tel').value.trim() || '-';
+      const fecha = new Date().toLocaleDateString('es-AR');
+      const num = '#' + String(Date.now()).slice(-6);
+
+      document.getElementById('presup-num').textContent = num;
+      document.getElementById('presup-fecha').textContent = fecha;
+      document.getElementById('presup-cliente').textContent = cliente;
+      document.getElementById('presup-tel').textContent = tel;
+
+      let tbody = '';
+      let totalLista = 0;
+      let totalContado = 0;
+      const items = Object.values(seleccionados);
+
+      for (const p of items) {
+        const contado = Math.round(p.precio * 0.80);
+        totalLista += p.precio * 4;
+        totalContado += contado * 4;
+        tbody += `<tr>
+          <td>${p.descripcion}</td>
+          <td>4</td>
+          <td>${fmt(p.precio)}</td>
+          <td>${fmt(contado)}</td>
+          <td>${fmt(contado * 4)}</td>
+        </tr>`;
+      }
+      tbody += `<tr class="total-row">
+        <td colspan="3"><strong>TOTAL</strong></td>
+        <td>${fmt(totalLista / 4)} lista / und.</td>
+        <td>${fmt(totalContado)}</td>
+      </tr>`;
+
+      document.getElementById('presup-body').innerHTML = tbody;
+      document.getElementById('presupuesto-generado').style.display = 'block';
+      document.getElementById('presupuesto-generado').scrollIntoView({ behavior: 'smooth' });
+
+      presupuestoActual = { cliente, tel, num, fecha, items };
+
+      // Guardar en servidor
+      fetch('/app/guardar-presupuesto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify(presupuestoActual)
+      });
+    }
+
+    function imprimir() {
+      window.print();
+    }
+
+    async function enviarWhatsApp() {
+      if (!presupuestoActual) return;
+      const btn = event.target;
+      btn.textContent = '⏳ Enviando...';
+      btn.disabled = true;
+
+      const res = await fetch('/app/enviar-presupuesto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify(presupuestoActual)
+      });
+
+      if (res.ok) {
+        btn.textContent = '✅ Enviado!';
+      } else {
+        btn.textContent = '❌ Error al enviar';
+      }
+      setTimeout(() => { btn.textContent = '💬 Enviar por WhatsApp'; btn.disabled = false; }, 3000);
+    }
+
+    function nuevoPresupuesto() {
+      seleccionados = {};
+      presupuestoActual = null;
+      document.getElementById('cliente-nombre').value = '';
+      document.getElementById('cliente-tel').value = '';
+      document.getElementById('medida1').value = '';
+      document.getElementById('medida2').value = '';
+      document.getElementById('resultados').innerHTML = '';
+      document.getElementById('btn-generar-wrap').style.display = 'none';
+      document.getElementById('presupuesto-generado').style.display = 'none';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  </script>
+</body>
+</html>

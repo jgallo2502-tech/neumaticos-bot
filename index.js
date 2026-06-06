@@ -3,11 +3,15 @@ const express = require('express');
 const twilio = require('twilio');
 const { google } = require('googleapis');
 const Anthropic = require('@anthropic-ai/sdk');
+const appRouter = require('./app');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const app = express();
 app.use(express.urlencoded({ extended: false }));
+
+// --- App de presupuestos ---
+app.use('/app', appRouter);
 
 // --- Historial de conversaciones ---
 // Guarda mensajes por número y cierra la sesión tras 30 min de inactividad
@@ -503,3 +507,6 @@ app.post('/webhook', async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Bot corriendo en puerto ${PORT}`));
+
+// Exportar funciones para uso en app.js
+module.exports = { obtenerPrecios, normalizarMedida };

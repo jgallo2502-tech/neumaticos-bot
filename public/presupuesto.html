@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
@@ -242,43 +242,52 @@
       mostrarResultados(data);
     }
 
+    window.productosIdx = {};
+
     function mostrarResultados(data) {
+      window.productosIdx = {};
       let html = '';
+      let idx = 0;
       for (const medida of Object.keys(data)) {
         const productos = data[medida];
-        html += `<div class="card"><h2>Medida: ${medida}</h2>`;
+        html += '<div class="card"><h2>Medida: ' + medida + '</h2>';
         if (productos.length === 0) {
           html += '<div class="sin-stock">No hay stock disponible para esta medida.</div>';
         } else {
-          const grupos = { Premium: [], 'Precio-Calidad': [], Económicas: [], Otras: [] };
+          const grupos = { Premium: [], PrecioCalidad: [], Economicas: [], Otras: [] };
           for (const p of productos) {
-            if (['michelin','continental','dunlop','yokohama','bfgoodrich'].includes(p.marca.toLowerCase())) grupos.Premium.push(p);
-            else if (['gtradial','giti','nexen','falken','hankook'].includes(p.marca.toLowerCase())) grupos['Precio-Calidad'].push(p);
-            else if (['westlake','tracmax','linglong'].includes(p.marca.toLowerCase())) grupos.Económicas.push(p);
+            const m = p.marca.toLowerCase();
+            if (['michelin','continental','dunlop','yokohama','bfgoodrich'].includes(m)) grupos.Premium.push(p);
+            else if (['gtradial','giti','nexen','falken','hankook'].includes(m)) grupos.PrecioCalidad.push(p);
+            else if (['westlake','tracmax','linglong'].includes(m)) grupos.Economicas.push(p);
             else grupos.Otras.push(p);
           }
+          const catInfo = {
+            Premium: { label: 'Premium', cls: 'premium' },
+            PrecioCalidad: { label: 'Precio-Calidad', cls: 'precio-calidad' },
+            Economicas: { label: 'Economicas', cls: 'economica' },
+            Otras: { label: 'Otras', cls: 'otras' }
+          };
           for (const [cat, prods] of Object.entries(grupos)) {
             if (prods.length === 0) continue;
-            const cls = cat === 'Premium' ? 'premium' : cat === 'Precio-Calidad' ? 'precio-calidad' : cat === 'Económicas' ? 'economica' : 'otras';
-            html += `<div class="categoria"><span class="cat-title ${cls}">${cat}</span>`;
+            const { label, cls } = catInfo[cat];
+            html += '<div class="categoria"><span class="cat-title ' + cls + '">' + label + '</span>';
             for (const p of prods) {
-              const id = `${medida}__${p.descripcion}`;
+              window.productosIdx[idx] = { medida, ...p };
               const contado = Math.round(p.precio * 0.80);
               const c6 = Math.round(p.precio * 0.90);
               const c3 = Math.round(p.precio * 0.85);
-              html += `<div class="producto-card" id="card-${btoa(id).replace(/=/g,'')}" onclick="toggleSeleccion('${medida}', ${JSON.stringify(p).replace(/'/g,"&#39;")})">
-                <div>
-                  <div class="producto-nombre">${p.descripcion}</div>
-                  <div class="producto-precios">
-                    12 pagos: ${fmt(p.precio)} &nbsp;|&nbsp; 6 cuotas (-10%): ${fmt(c6)} &nbsp;|&nbsp; 3 cuotas (-15%): ${fmt(c3)}
-                  </div>
-                </div>
-                <div style="text-align:right">
-                  <div class="producto-precio-main">${fmt(contado)}</div>
-                  <div style="font-size:11px;color:#888">contado</div>
-                  <div class="check">✓</div>
-                </div>
-              </div>`;
+              html += '<div class="producto-card" id="card-' + idx + '" onclick="toggleSeleccion(' + idx + ')">';
+              html += '<div>';
+              html += '<div class="producto-nombre">' + p.descripcion + '</div>';
+              html += '<div class="producto-precios">12 pagos: ' + fmt(p.precio) + ' &nbsp;|&nbsp; 6 cuotas (-10%): ' + fmt(c6) + ' &nbsp;|&nbsp; 3 cuotas (-15%): ' + fmt(c3) + '</div>';
+              html += '</div>';
+              html += '<div style="text-align:right">';
+              html += '<div class="producto-precio-main">' + fmt(contado) + '</div>';
+              html += '<div style="font-size:11px;color:#888">contado</div>';
+              html += '<div class="check">✓</div>';
+              html += '</div></div>';
+              idx++;
             }
             html += '</div>';
           }
@@ -288,24 +297,23 @@
       document.getElementById('resultados').innerHTML = html;
     }
 
-    function toggleSeleccion(medida, producto) {
-      const id = `${medida}__${producto.descripcion}`;
-      const key = btoa(id).replace(/=/g,'');
-      const card = document.getElementById('card-' + key);
-      if (seleccionados[id]) {
-        delete seleccionados[id];
+    function toggleSeleccion(idx) {
+      const p = window.productosIdx[idx];
+      const medida = p.medida;
+      const card = document.getElementById('card-' + idx);
+      if (seleccionados[idx]) {
+        delete seleccionados[idx];
         card.classList.remove('seleccionado');
       } else {
-        // Solo uno por medida
+        // Deseleccionar otros de la misma medida
         for (const k of Object.keys(seleccionados)) {
-          if (k.startsWith(medida + '__')) {
+          if (window.productosIdx[k] && window.productosIdx[k].medida === medida) {
             delete seleccionados[k];
-            const oldKey = btoa(k).replace(/=/g,'');
-            const oldCard = document.getElementById('card-' + oldKey);
-            if (oldCard) oldCard.classList.remove('seleccionado');
+            const old = document.getElementById('card-' + k);
+            if (old) old.classList.remove('seleccionado');
           }
         }
-        seleccionados[id] = { medida, ...producto };
+        seleccionados[idx] = p;
         card.classList.add('seleccionado');
       }
       document.getElementById('btn-generar-wrap').style.display = Object.keys(seleccionados).length > 0 ? 'block' : 'none';
@@ -398,3 +406,4 @@
   </script>
 </body>
 </html>
+

@@ -6,6 +6,87 @@ const { google } = require('googleapis');
 const app = express();
 app.use(express.urlencoded({ extended: false }));
 
+// --- Historial de conversaciones ---
+// Guarda mensajes por número y cierra la sesión tras 30 min de inactividad
+const sesiones = new Map(); // numero -> { mensajes: [], timer, inicio }
+const INACTIVIDAD_MS = 30 * 60 * 1000; // 30 minutos
+
+function registrarMensajeSesion(numero, rol, texto) {
+  if (!sesiones.has(numero)) {
+    sesiones.set(numero, {
+      mensajes: [],
+      timer: null,
+      inicio: new Date(Date.now() - 3 * 60 * 60 * 1000),
+    });
+  }
+  const sesion = sesiones.get(numero);
+  sesion.mensajes.push({ rol, texto });
+
+  // Reiniciar timer de inactividad
+  if (sesion.timer) clearTimeout(sesion.timer);
+  sesion.timer = setTimeout(() => cerrarSesion(numero), INACTIVIDAD_MS);
+}
+
+async function cerrarSesion(numero) {
+  const sesion = sesiones.get(numero);
+  if (!sesion) return;
+  sesiones.delete(numero);
+
+  if (sesion.mensajes.length === 0) return;
+
+  // Generar resumen de la conversación
+  const resumen = generarResumen(sesion.mensajes, sesion.inicio);
+  await guardarResumenSesion(numero, sesion.inicio, resumen);
+  console.log('Sesión cerrada para', numero, '| Resumen guardado');
+}
+
+function generarResumen(mensajes, inicio) {
+  const medidas = new Set();
+  const marcas = new Set();
+  let pidioPersona = false;
+  let pidioTurno = false;
+
+  for (const m of mensajes) {
+    if (m.rol === 'cliente') {
+      const med = normalizarMedida(m.texto);
+      if (med) medidas.add(med);
+      const marc = extraerMarca(m.texto);
+      if (marc) marcas.add(marc);
+      const lower = m.texto.toLowerCase();
+      if (lower.includes('hablar') || lower.includes('persona') || lower.includes('alguien')) pidioPersona = true;
+      if (lower.includes('turno') || lower.includes('cita') || lower.includes('instalar')) pidioTurno = true;
+    }
+  }
+
+  const partes = [];
+  if (medidas.size > 0) partes.push(`Medidas consultadas: ${[...medidas].join(', ')}`);
+  if (marcas.size > 0) partes.push(`Marcas de interés: ${[...marcas].join(', ')}`);
+  if (pidioPersona) partes.push('Solicitó atención humana');
+  if (pidioTurno) partes.push('Consultó sobre turno/instalación');
+  partes.push(`Total mensajes: ${mensajes.length}`);
+
+  return partes.join(' | ');
+}
+
+async function guardarResumenSesion(numero, inicio, resumen) {
+  try {
+    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const ahora = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    const fecha = ahora.toISOString().slice(0, 10).split('-').reverse().join('/');
+    const hora  = ahora.toISOString().slice(11, 16);
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Consultas!A:H',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [[fecha, hora, numero, '', '', '', '', resumen]] },
+    });
+  } catch (err) {
+    console.error('Error al guardar resumen sesión:', err.message);
+  }
+}
+
 // --- Normalizar medida de neumático ---
 // Acepta: 185/65R15, 185-65-15, 185/65-15, 18565r15, 205 55 16, 2055516, etc.
 function normalizarMedida(texto) {
@@ -277,6 +358,9 @@ app.post('/webhook', async (req, res) => {
   const lower = body.toLowerCase();
   const fromNumber = (req.body.From || '').replace('whatsapp:', '');
   console.log('Mensaje recibido:', body);
+
+  // Registrar mensaje en sesión
+  registrarMensajeSesion(fromNumber, 'cliente', body);
 
   // Derivar a humano
   if (lower.includes('hablar') || lower.includes('humano') || lower.includes('persona') || lower.includes('alguien')) {

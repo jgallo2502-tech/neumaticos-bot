@@ -299,21 +299,12 @@
 
     function toggleSeleccion(idx) {
       const p = window.productosIdx[idx];
-      const medida = p.medida;
       const card = document.getElementById('card-' + idx);
       if (seleccionados[idx]) {
         delete seleccionados[idx];
         card.classList.remove('seleccionado');
       } else {
-        // Deseleccionar otros de la misma medida
-        for (const k of Object.keys(seleccionados)) {
-          if (window.productosIdx[k] && window.productosIdx[k].medida === medida) {
-            delete seleccionados[k];
-            const old = document.getElementById('card-' + k);
-            if (old) old.classList.remove('seleccionado');
-          }
-        }
-        seleccionados[idx] = p;
+        seleccionados[idx] = { ...p, cantidad: 4 };
         card.classList.add('seleccionado');
       }
       document.getElementById('btn-generar-wrap').style.display = Object.keys(seleccionados).length > 0 ? 'block' : 'none';
@@ -336,16 +327,11 @@
       const items = Object.values(seleccionados);
 
       for (const p of items) {
+        const cant = p.cantidad || 4;
         const contado = Math.round(p.precio * 0.80);
-        totalLista += p.precio * 4;
-        totalContado += contado * 4;
-        tbody += `<tr>
-          <td>${p.descripcion}</td>
-          <td>4</td>
-          <td>${fmt(p.precio)}</td>
-          <td>${fmt(contado)}</td>
-          <td>${fmt(contado * 4)}</td>
-        </tr>`;
+        totalLista += p.precio * cant;
+        totalContado += contado * cant;
+        tbody += '<tr><td>' + p.descripcion + '</td><td>' + cant + '</td><td>' + fmt(p.precio) + '</td><td>' + fmt(contado) + '</td><td>' + fmt(contado * cant) + '</td></tr>';
       }
       tbody += `<tr class="total-row">
         <td colspan="3"><strong>TOTAL</strong></td>
@@ -406,4 +392,6 @@
   </script>
 </body>
 </html>
+
+
 

@@ -283,7 +283,7 @@ app.post('/webhook', async (req, res) => {
       obtenerPrecios(medidaNorm, marca, pidioRunFlat),
       esRevendedor(fromNumber),
     ]);
-    console.log('Productos encontrados:', productos.length, '| Revendedor:', esRev);
+    console.log('Productos encontrados:', productos.length, '| Revendedor:', esRev, '| From:', fromNumber);
     const mensajes = armarMensajes(productos, medidaNorm, esRev);
     for (const m of mensajes) {
       twiml.message(m);

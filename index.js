@@ -51,21 +51,26 @@ let revendedoresCache = null;
 let revendedoresCacheTime = 0;
 
 async function esRevendedor(numero) {
-  const ahora = Date.now();
-  // Refrescar cache cada 5 minutos
-  if (!revendedoresCache || ahora - revendedoresCacheTime > 5 * 60 * 1000) {
-    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
-    const sheets = google.sheets({ version: 'v4', auth });
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: process.env.GOOGLE_SHEET_ID,
-      range: 'Revendedores!A:A',
-    });
-    const rows = res.data.values || [];
-    revendedoresCache = new Set(rows.flat().map(n => n.toString().replace(/\D/g, '')));
-    revendedoresCacheTime = ahora;
+  try {
+    const ahora = Date.now();
+    // Refrescar cache cada 5 minutos
+    if (!revendedoresCache || ahora - revendedoresCacheTime > 5 * 60 * 1000) {
+      const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+      const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+      const sheets = google.sheets({ version: 'v4', auth });
+      const res = await sheets.spreadsheets.values.get({
+        spreadsheetId: process.env.GOOGLE_SHEET_ID,
+        range: 'Revendedores!A:A',
+      });
+      const rows = res.data.values || [];
+      revendedoresCache = new Set(rows.flat().map(n => n.toString().replace(/\D/g, '')));
+      revendedoresCacheTime = ahora;
+    }
+    return revendedoresCache.has(numero.replace(/\D/g, ''));
+  } catch (err) {
+    console.error('Error al leer revendedores:', err.message);
+    return false;
   }
-  return revendedoresCache.has(numero.replace(/\D/g, ''));
 }
 
 // --- Leer Google Sheets ---

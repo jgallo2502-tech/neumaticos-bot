@@ -82,6 +82,8 @@
     .producto-precio-main { font-size: 18px; font-weight: 700; color: #e63946; }
     .check { font-size: 22px; color: #e63946; display: none; }
     .producto-card.seleccionado .check { display: block; }
+    .stock-info { font-size: 11px; color: #2d6a4f; background: #d1e7dd; padding: 3px 8px; border-radius: 4px; margin-top: 5px; display: inline-block; }
+    @media print { .no-print { display: none !important; } header { display: none; } .btn-buscar, .acciones, #form-card, #resultados, #btn-generar-wrap { display: none !important; } #presupuesto-generado { display: block !important; } }
 
     /* Presupuesto generado */
     #presupuesto-generado { display: none; }
@@ -277,10 +279,16 @@
               const contado = Math.round(p.precio * 0.80);
               const c6 = Math.round(p.precio * 0.90);
               const c3 = Math.round(p.precio * 0.85);
+              const stockParts = [];
+              if (p.stockVic > 0) stockParts.push('Victoria: ' + p.stockVic);
+              if (p.stockNor > 0) stockParts.push('Nordelta: ' + p.stockNor);
+              if (p.stockExpr > 0) stockParts.push('Express 48hs: ' + p.stockExpr);
+              const stockStr = stockParts.length > 0 ? stockParts.join(' | ') : 'Sin stock en depósito';
               html += '<div class="producto-card" id="card-' + idx + '" onclick="toggleSeleccion(' + idx + ')">';
               html += '<div>';
               html += '<div class="producto-nombre">' + p.descripcion + '</div>';
               html += '<div class="producto-precios">12 pagos: ' + fmt(p.precio) + ' &nbsp;|&nbsp; 6 cuotas (-10%): ' + fmt(c6) + ' &nbsp;|&nbsp; 3 cuotas (-15%): ' + fmt(c3) + '</div>';
+              html += '<div class="stock-info no-print">📦 ' + stockStr + '</div>';
               html += '</div>';
               html += '<div style="text-align:right">';
               html += '<div class="producto-precio-main">' + fmt(contado) + '</div>';

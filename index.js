@@ -23,10 +23,11 @@ function normalizarMedida(texto) {
 }
 
 // --- Extraer marca del texto ---
-const MARCAS_PREMIUM = ['michelin', 'continental', 'dunlop', 'yokohama'];
+const MARCAS_PREMIUM = ['michelin', 'continental', 'dunlop', 'yokohama', 'bfgoodrich'];
 const MARCAS_PRECIO_CALIDAD = ['nexen', 'giti', 'hankook'];
 const MARCAS_ECONOMICAS = ['westlake', 'tracmax', 'linglong'];
 const TODAS_MARCAS = [...MARCAS_PREMIUM, ...MARCAS_PRECIO_CALIDAD, ...MARCAS_ECONOMICAS];
+const MARCAS_DESCUENTO_35 = ['michelin', 'bfgoodrich'];
 
 function extraerMarca(texto) {
   const lower = texto.toLowerCase();
@@ -39,6 +40,32 @@ function categoriaYEmoji(marca) {
   if (MARCAS_PRECIO_CALIDAD.includes(m)) return { cat: '✅ Precio-Calidad', orden: 2 };
   if (MARCAS_ECONOMICAS.includes(m)) return { cat: '💰 Económicas', orden: 3 };
   return { cat: '📦 Otras', orden: 4 };
+}
+
+function descuentoRevendedor(marca) {
+  return MARCAS_DESCUENTO_35.includes(marca.toLowerCase()) ? 0.35 : 0.28;
+}
+
+// --- Cache de revendedores ---
+let revendedoresCache = null;
+let revendedoresCacheTime = 0;
+
+async function esRevendedor(numero) {
+  const ahora = Date.now();
+  // Refrescar cache cada 5 minutos
+  if (!revendedoresCache || ahora - revendedoresCacheTime > 5 * 60 * 1000) {
+    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Revendedores!A:A',
+    });
+    const rows = res.data.values || [];
+    revendedoresCache = new Set(rows.flat().map(n => n.toString().replace(/\D/g, '')));
+    revendedoresCacheTime = ahora;
+  }
+  return revendedoresCache.has(numero.replace(/\D/g, ''));
 }
 
 // --- Leer Google Sheets ---
@@ -109,7 +136,15 @@ function fmt(n) {
 }
 
 // --- Armar bloque de precios para un producto ---
-function preciosProducto(precio) {
+function preciosProducto(precio, esRev = false, marca = '') {
+  if (esRev) {
+    const desc = descuentoRevendedor(marca);
+    const precioRev = Math.round(precio * (1 - desc));
+    const p6  = Math.round(precioRev / 6);
+    const p3  = Math.round(precioRev * 0.85 / 3);
+    const contado = Math.round(precioRev * 0.80);
+    return `💳 12 pagos: $${fmt(precioRev)}\n💳 6 cuotas (-10%): $${fmt(Math.round(precioRev * 0.90))} — $${fmt(p6)}/cuota\n💳 3 cuotas (-15%): $${fmt(Math.round(precioRev * 0.85))} — $${fmt(p3)}/cuota\n💵 Contado (-20%): $${fmt(contado)}`;
+  }
   const p6  = Math.round(precio / 6);
   const p3  = Math.round(precio * 0.85 / 3);
   const contado = Math.round(precio * 0.80);
@@ -128,7 +163,7 @@ const PIE = `📌 *Precio unitario. Promociones por compra de 2 o más neumátic
 🤖 _Soy un bot. Escribí *"hablar con alguien"* para atención humana._`;
 
 // --- Armar lista de mensajes (uno por categoría) ---
-function armarMensajes(productos, medidaOriginal) {
+function armarMensajes(productos, medidaOriginal, esRev = false) {
   if (productos.length === 0) {
     return [`No encontré neumáticos *${medidaOriginal}* con stock disponible.\n\nEscribí "hablar con alguien" para consultar disponibilidad. 🙋`];
   }
@@ -137,7 +172,8 @@ function armarMensajes(productos, medidaOriginal) {
   const total = productos.length;
 
   // Encabezado
-  mensajes.push(`🔍 *${medidaOriginal}* — ${total} opción${total > 1 ? 'es' : ''} con stock disponible:`);
+  const headerExtra = esRev ? ' _(precios de revendedor)_' : '';
+  mensajes.push(`🔍 *${medidaOriginal}* — ${total} opción${total > 1 ? 'es' : ''} con stock disponible${headerExtra}:`);
 
   // Agrupar por categoría
   const grupos = { 1: [], 2: [], 3: [], 4: [] };
@@ -160,8 +196,8 @@ function armarMensajes(productos, medidaOriginal) {
     for (const p of grupos[orden]) {
       const express = p.stockExpr > 0 ? '\n⚡ _Disponible también vía Pedido Express en 48 hs hábiles_' : '';
       msg += `\n🔹 *${p.descripcion}*\n`;
-      msg += preciosProducto(p.precio);
-      if (p.promocion) {
+      msg += preciosProducto(p.precio, esRev, p.marca);
+      if (p.promocion && !esRev) {
         msg += `\n🏷️ _Promo: ${p.promocion} (presencial, 2+ neumáticos)_`;
       }
       msg += express;
@@ -183,6 +219,7 @@ app.post('/webhook', async (req, res) => {
   const twiml = new twilio.twiml.MessagingResponse();
   const body = (req.body.Body || '').trim();
   const lower = body.toLowerCase();
+  const fromNumber = (req.body.From || '').replace('whatsapp:', '');
   console.log('Mensaje recibido:', body);
 
   // Derivar a humano
@@ -219,9 +256,12 @@ app.post('/webhook', async (req, res) => {
 
   try {
     console.log('Consultando Google Sheets...');
-    const productos = await obtenerPrecios(medidaNorm, marca);
-    console.log('Productos encontrados:', productos.length);
-    const mensajes = armarMensajes(productos, medidaNorm);
+    const [productos, esRev] = await Promise.all([
+      obtenerPrecios(medidaNorm, marca),
+      esRevendedor(fromNumber),
+    ]);
+    console.log('Productos encontrados:', productos.length, '| Revendedor:', esRev);
+    const mensajes = armarMensajes(productos, medidaNorm, esRev);
     for (const m of mensajes) {
       twiml.message(m);
     }

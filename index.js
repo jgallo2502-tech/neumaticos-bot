@@ -9,7 +9,7 @@ app.use(express.urlencoded({ extended: false }));
 // --- Historial de conversaciones ---
 // Guarda mensajes por número y cierra la sesión tras 30 min de inactividad
 const sesiones = new Map(); // numero -> { mensajes: [], timer, inicio }
-const INACTIVIDAD_MS = 30 * 60 * 1000; // 30 minutos
+const INACTIVIDAD_MS = 2 * 60 * 1000; // 2 minutos (testing)
 
 function registrarMensajeSesion(numero, rol, texto) {
   if (!sesiones.has(numero)) {

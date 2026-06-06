@@ -75,6 +75,31 @@ async function esRevendedor(numero) {
   }
 }
 
+// --- Registrar consulta en Google Sheets ---
+async function registrarConsulta(numero, medida, marca, cantProductos) {
+  try {
+    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    const auth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const ahora = new Date();
+    const fecha = ahora.toLocaleDateString('es-AR');
+    const hora  = ahora.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Consultas!A:F',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [[fecha, hora, numero, medida, marca || '', cantProductos]],
+      },
+    });
+  } catch (err) {
+    console.error('Error al registrar consulta:', err.message);
+  }
+}
+
 // --- Leer Google Sheets ---
 // Columnas: A=Cod.Art | B=Cod.Alt | C=Descripción | D=Marca | E=Modelo | F=Medida
 //           G=Victoria | H=Nordelta | I=Pedido Express 48hs | J=Precio | K=Promoción
@@ -281,6 +306,7 @@ app.post('/webhook', async (req, res) => {
       esRevendedor(fromNumber),
     ]);
     console.log('Productos encontrados:', productos.length, '| Revendedor:', esRev, '| From:', fromNumber);
+    registrarConsulta(fromNumber, medidaNorm, marca, productos.length); // sin await, no bloqueamos
     const mensajes = armarMensajes(productos, medidaNorm, esRev);
     for (const m of mensajes) {
       twiml.message(m);

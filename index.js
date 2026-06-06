@@ -7,13 +7,18 @@ const app = express();
 app.use(express.urlencoded({ extended: false }));
 
 // --- Normalizar medida de neumático ---
-// Acepta: 185/65R15, 185-65-15, 185/65-15, 18565r15, etc.
+// Acepta: 185/65R15, 185-65-15, 185/65-15, 18565r15, 205 55 16, 2055516, etc.
 function normalizarMedida(texto) {
-  // Extraer números del patrón de medida
-  const match = texto.match(/(\d{3})\s*[\/\-]\s*(\d{2})\s*[rR\-\/]\s*(\d{2})/);
-  if (match) {
-    return `${match[1]}/${match[2]}R${match[3]}`;
-  }
+  const t = texto.replace(/\s+/g, ' ').trim();
+
+  // Formato con separadores: 205/55R16, 205-55-16, 205/55 16, 205 55 r16, etc.
+  const m1 = t.match(/(\d{3})\s*[\/\-\s]\s*(\d{2})\s*[rR\/\-\s]\s*(\d{2})\b/);
+  if (m1) return `${m1[1]}/${m1[2]}R${m1[3]}`;
+
+  // Sin separadores: 2055516, 20555r16, 20555R16
+  const m2 = t.match(/(\d{3})(\d{2})[rR]?(\d{2})\b/);
+  if (m2) return `${m2[1]}/${m2[2]}R${m2[3]}`;
+
   return null;
 }
 
@@ -122,7 +127,7 @@ const PIE = `📌 *Precio unitario. Promociones por compra de 2 o más neumátic
 
 🤖 _Soy un bot. Escribí *"hablar con alguien"* para atención humana._`;
 
-// --- Armar lista de mensajes de precios (uno por producto) ---
+// --- Armar lista de mensajes (uno por categoría) ---
 function armarMensajes(productos, medidaOriginal) {
   if (productos.length === 0) {
     return [`No encontré neumáticos *${medidaOriginal}* con stock disponible.\n\nEscribí "hablar con alguien" para consultar disponibilidad. 🙋`];
@@ -130,28 +135,43 @@ function armarMensajes(productos, medidaOriginal) {
 
   const mensajes = [];
   const total = productos.length;
-  const mostrados = Math.min(total, 6);
 
-  mensajes.push(`🔍 *${medidaOriginal}* — ${total} opción${total > 1 ? 'es' : ''} con stock (mostrando ${mostrados}, mayor a menor precio):\n\n⭐ Premium: Michelin, Continental, Dunlop, Yokohama\n✅ Precio-calidad: Nexen, Giti, Hankook\n💰 Económicas: Westlake, Tracmax, Linglong`);
+  // Encabezado
+  mensajes.push(`🔍 *${medidaOriginal}* — ${total} opción${total > 1 ? 'es' : ''} con stock disponible:`);
 
-  for (const p of productos.slice(0, 6)) {
-    const { cat } = categoriaYEmoji(p.marca);
-    const stockLineas = [];
-    if (p.stockVic > 0)  stockLineas.push(`Victoria: ${p.stockVic}`);
-    if (p.stockNor > 0)  stockLineas.push(`Nordelta: ${p.stockNor}`);
-    if (p.stockExpr > 0) stockLineas.push(`Express 48hs: ${p.stockExpr}`);
-    const stockTexto = stockLineas.join(' | ');
-
-    let msg = `${cat}\n*${p.descripcion}*\n\n`;
-    msg += preciosProducto(p.precio);
-    if (p.promocion) {
-      msg += `\n🏷️ _Promo: ${p.promocion} (presencial, 2+ neumáticos)_`;
-    }
-    mensajes.push(msg);
+  // Agrupar por categoría
+  const grupos = { 1: [], 2: [], 3: [], 4: [] };
+  for (const p of productos.slice(0, 8)) {
+    const { orden } = categoriaYEmoji(p.marca);
+    grupos[orden].push(p);
   }
 
-  if (total > 6) {
-    mensajes.push(`_...y ${total - 6} opciones más. Filtrá por marca, ej: "${medidaOriginal} Michelin"_`);
+  const nombresGrupo = {
+    1: '⭐ *PREMIUM*',
+    2: '✅ *PRECIO-CALIDAD*',
+    3: '💰 *ECONÓMICAS*',
+    4: '📦 *OTRAS*',
+  };
+
+  // Un mensaje por categoría
+  for (const orden of [1, 2, 3, 4]) {
+    if (grupos[orden].length === 0) continue;
+    let msg = `${nombresGrupo[orden]}\n`;
+    for (const p of grupos[orden]) {
+      const express = p.stockExpr > 0 ? '\n⚡ _Disponible también vía Pedido Express en 48 hs hábiles_' : '';
+      msg += `\n🔹 *${p.descripcion}*\n`;
+      msg += preciosProducto(p.precio);
+      if (p.promocion) {
+        msg += `\n🏷️ _Promo: ${p.promocion} (presencial, 2+ neumáticos)_`;
+      }
+      msg += express;
+      msg += '\n';
+    }
+    mensajes.push(msg.trim());
+  }
+
+  if (total > 8) {
+    mensajes.push(`_...y ${total - 8} opciones más. Filtrá por marca, ej: "${medidaOriginal} Michelin"_`);
   }
 
   mensajes.push(PIE);

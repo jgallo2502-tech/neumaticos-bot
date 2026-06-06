@@ -2,6 +2,9 @@ require('dotenv').config();
 const express = require('express');
 const twilio = require('twilio');
 const { google } = require('googleapis');
+const Anthropic = require('@anthropic-ai/sdk');
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const app = express();
 app.use(express.urlencoded({ extended: false }));
@@ -351,6 +354,69 @@ function armarMensajes(productos, medidaOriginal, esRev = false) {
   return mensajes;
 }
 
+// --- Sistema de prompt para Claude ---
+const SISTEMA = `Sos el asistente virtual de *Neumáticos Gallo*, una empresa de neumáticos en Argentina con sucursales en Victoria y Nordelta.
+
+PERSONALIDAD: Sos amigable, profesional y conocedor. Ayudás a los clientes a elegir el neumático ideal. Nunca comparás marcas entre sí de forma negativa. Cada marca tiene sus virtudes propias.
+
+CONOCIMIENTO DE MARCAS:
+- Michelin: N°1 del mundo. Líder en frenado y agarre en lluvia. Mayor duración. Modelos: Pilot Sport 4/5 (deportivo), Primacy 4/5 (confort/ruta), Energy XM2+ (compactos), LTX Trail/Force (camionetas mixto), Primacy SUV/SUV+ (SUVs).
+- Continental: Fabricante europeo alemán con más de 150 años. Equipo original de BMW y Mercedes-Benz. Excelente en seguridad y confort.
+- Yokohama: Marca japonesa de alta calidad. Andar suave y excelentes prestaciones. Modelos: BluEarth ES32 (compactos), AE51/AE61 (medianos/SUVs), ADVAN V701 (alto rendimiento), Geolandar G015 (camioneta, 3PMSF), G016 (Rugged Terrain).
+- Dunlop: Marca japonesa. Muy buena duración. Equipo original Toyota. Modelos: Touring R1 (compactos), FM800 (medianos/SUVs), Sportmaxx (alto rendimiento), Grandtrek PT3/PT5 (camioneta ruta), AT5/AT20/AT25 (mixtas, equipo original Hilux y SW4).
+- BFGoodrich: Grupo Michelin. La más reconocida en 4x4 y camionetas. Modelos: Trail Terrain (AT suave), AT KO2 (All Terrain robusta), Mud Terrain (barro), HD Terrain (Heavy Duty).
+- Giti: Sede Singapur, laboratorios en Alemania, fábricas de alta tecnología. Top 10 mundial. Equipo original Ford Territory, Peugeot 2008/3008/5008, VW Polo, BYD, Chery, Jetour, etc.
+- GTRadial: Mismo grupo que Giti. Excelente para camionetas. Modelos: AT/HT (trabajo), AT70 (mixta con buen despeje), AT71/HT71 (equipo original BYD Shark), XT71 (Rugged Terrain), AT200 (próximamente, prestaciones AT de primer nivel).
+- Nexen: Coreana de altísima calidad. Equipo original de BMW, Hyundai y Kia. Prestaciones premium.
+- Hankook: Coreana. Equipo original BMW y Hyundai. Gran reconocimiento mundial.
+- Falken: Marca del grupo Dunlop, enfocada en camionetas, 4x4 y competición. Muy popular en EEUU.
+- Tracmax: Representada por Neumáticos Gallo. Económica de muy buena calidad, planta 4.0 (alta robotización). Excelente balanceo y confiabilidad.
+- Linglong: Empresa china importante. Equipo original VW Polo Track, Chevrolet Spark, VW Tera.
+- Westlake: Opción económica confiable.
+- Kumho: Coreana, muy buena calidad.
+- Wanli/Sunny: Misma empresa, económicas con equipos originales en autos chinos.
+
+GARANTÍA: Todos los neumáticos tienen 5 años de garantía por defecto de fabricación.
+
+CONDICIONES COMERCIALES:
+- Precio de lista: 12 pagos
+- 6 cuotas: -10%
+- 3 cuotas: -15%
+- Contado: -20%
+- Colocación sin cargo en nuestros locales
+- Válvulas, balanceo y alineación se cobran aparte
+- Promociones presenciales, por compra de 2 o más neumáticos
+- Compra online: tienda.neumaticosgallo.com.ar (6 pagos o contado -20%, envíos a todo el país sin cargo superando mínimo)
+- Stock Express: disponible en 48 hs hábiles
+
+SUCURSALES:
+- Victoria: Pres. Perón 3479 | Tel: 11-3773-5246 | WhatsApp: wa.me/541137735246 | Lun-Vie 8-19hs, Sáb 8-16hs
+- Nordelta: Agustín García 6318, Tigre | Tel: 11-5734-7692 | WhatsApp: wa.me/541157347692 | Lun-Vie 8-19hs, Sáb 8-16hs
+
+INSTRUCCIONES:
+- Cuando el cliente consulte una medida de neumático (ej: 185/65R15), respondé EXACTAMENTE con: BUSCAR_MEDIDA:[medida normalizada] y nada más. El sistema buscará los precios.
+- Para cualquier otra consulta, respondé de forma natural y conversacional en español argentino.
+- Nunca hagas referencias negativas entre marcas. Cada marca tiene sus puntos fuertes.
+- Si el cliente muestra interés en comprar, preguntá qué sucursal le queda más cómoda y dales el contacto directo.
+- Sé conciso pero completo. Usá emojis con moderación.
+- Si no sabés algo específico de precios o stock, decile que escriba la medida o que contacte a la sucursal.`;
+
+async function respuestaClaude(historial, mensajeActual) {
+  const messages = historial.map(m => ({
+    role: m.rol === 'cliente' ? 'user' : 'assistant',
+    content: m.texto,
+  }));
+  messages.push({ role: 'user', content: mensajeActual });
+
+  const response = await anthropic.messages.create({
+    model: 'claude-haiku-4-5',
+    max_tokens: 500,
+    system: SISTEMA,
+    messages,
+  });
+  return response.content[0].text;
+}
+
 // --- Webhook principal ---
 // --- Info de marcas ---
 function infoDeMarca(marca) {
@@ -391,91 +457,44 @@ app.post('/webhook', async (req, res) => {
   // Registrar mensaje en sesión
   registrarMensajeSesion(fromNumber, 'cliente', body);
 
-  // Derivar a humano
-  if (lower.includes('hablar') || lower.includes('humano') || lower.includes('persona') || lower.includes('alguien')) {
-    twiml.message('👋 ¡Entendido! Un asesor te atenderá a la brevedad. Gracias por tu paciencia. 🙏\n\n📍 *Suc. Victoria:* wa.me/541137735246\n📍 *Suc. Nordelta:* wa.me/541157347692\n\n🤖 _Bot de neumáticos_');
-    return res.type('text/xml').send(twiml.toString());
-  }
-
-  // Respuesta si menciona sucursal
-  const sucursal = detectarSucursal(body);
-  if (sucursal && !normalizarMedida(body)) {
-    if (sucursal === 'victoria') {
-      twiml.message('📍 *Sucursal Victoria*\nPres. Perón 3479, Victoria\n☎️ 11-3773-5246\n💬 WhatsApp: wa.me/541137735246\n\n🕐 Lun-Vie 8 a 19 hs | Sáb 8 a 16 hs\n\n¡Te esperamos! Podés pasar directamente o coordinar por WhatsApp. 😊');
-    } else {
-      twiml.message('📍 *Sucursal Nordelta*\nAgustín García 6318, Tigre\n☎️ 11-5734-7692\n💬 WhatsApp: wa.me/541157347692\n\n🕐 Lun-Vie 8 a 19 hs | Sáb 8 a 16 hs\n\n¡Te esperamos! Podés pasar directamente o coordinar por WhatsApp. 😊');
-    }
-    return res.type('text/xml').send(twiml.toString());
-  }
-
-  // Info de marca sin medida
-  const marcaInfo = extraerMarca(body);
-  if (marcaInfo && !normalizarMedida(body)) {
-    const info = infoDeMarca(marcaInfo);
-    if (info) {
-      twiml.message(info + '\n\n_Escribime la medida que buscás y te paso precios disponibles. 👇_');
-      return res.type('text/xml').send(twiml.toString());
-    }
-  }
-
-  // Saludo inicial
-  if (lower.match(/^(hola|buenos|buenas|hi|hey|buen dia|buen día)/) && !normalizarMedida(body)) {
-    twiml.message(
-      '👋 ¡Hola! Soy el asistente virtual de *Neumáticos Gallo*. 🤖\n\n' +
-      'Puedo consultarte precios de neumáticos. Escribime la medida que buscás, por ejemplo:\n\n' +
-      '• *185/65R15*\n• *195/55R16 Michelin*\n• *205/55-16*\n\n' +
-      'También podés indicar la marca si tenés preferencia.\n\n' +
-      '_Para atención humana escribí *"hablar con alguien"*_'
-    );
-    return res.type('text/xml').send(twiml.toString());
-  }
-
-  // Preguntas sobre garantía
-  if (lower.includes('garantia') || lower.includes('garantía')) {
-    twiml.message('✅ *Garantía*\nTodos nuestros neumáticos tienen *5 años de garantía* por defecto de fabricación.\n\n¿Hay algo más en lo que te pueda ayudar?');
-    return res.type('text/xml').send(twiml.toString());
-  }
-
-  // Buscar medida en el mensaje
-  const medidaNorm = normalizarMedida(body);
-  if (!medidaNorm) {
-    twiml.message(
-      '🔍 No encontré una medida de neumático en tu mensaje.\n\n' +
-      'Podés consultarme:\n• *Una medida*: ej. 185/65R15\n• *Info de una marca*: ej. "info Michelin"\n• *Garantía*\n• O escribí *"hablar con alguien"* para atención humana'
-    );
-    return res.type('text/xml').send(twiml.toString());
-  }
-
-  const marca = extraerMarca(body);
-  const pidioRunFlat = /runflat|run flat|run-flat|\brft\b|\bzp\b/i.test(lower);
-  console.log('Medida normalizada:', medidaNorm, '| Marca:', marca, '| RunFlat:', pidioRunFlat);
-
   try {
-    console.log('Consultando Google Sheets...');
-    const [productos, esRev] = await Promise.all([
-      obtenerPrecios(medidaNorm, marca, pidioRunFlat),
-      esRevendedor(fromNumber),
-    ]);
-    console.log('Productos encontrados:', productos.length, '| Revendedor:', esRev, '| From:', fromNumber);
-    registrarConsulta(fromNumber, medidaNorm, marca, productos);
-    const mensajes = armarMensajes(productos, medidaNorm, esRev);
-    for (const m of mensajes) {
-      twiml.message(m);
-    }
+    const esRev = await esRevendedor(fromNumber);
+    const sesion = sesiones.get(fromNumber) || { mensajes: [] };
+    const historialPrevio = sesion.mensajes.slice(-10); // últimos 10 mensajes
 
-    // Mensaje de cierre motivador (solo para clientes, no revendedores)
-    if (!esRev && productos.length > 0) {
-      twiml.message(
-        '¿Te puedo ayudar con algo más? 😊\n\n' +
-        '📍 ¿Cuál sucursal te queda más cómoda?\n' +
-        '• *Victoria* — Pres. Perón 3479 | wa.me/541137735246\n' +
-        '• *Nordelta* — Agustín García 6318, Tigre | wa.me/541157347692\n\n' +
-        'Podés coordinar la colocación directamente por WhatsApp con la sucursal. La colocación es *sin cargo*. 🔧'
-      );
+    // Primero preguntamos a Claude qué hacer
+    const respuesta = await respuestaClaude(historialPrevio, body);
+    console.log('Respuesta Claude:', respuesta.substring(0, 80));
+
+    // Si Claude detectó una medida para buscar
+    const matchMedida = respuesta.match(/^BUSCAR_MEDIDA:(\S+)/);
+    if (matchMedida) {
+      const medidaNorm = matchMedida[1];
+      const marca = extraerMarca(body);
+      const pidioRunFlat = /runflat|run flat|run-flat|\brft\b|\bzp\b/i.test(body.toLowerCase());
+
+      const productos = await obtenerPrecios(medidaNorm, marca, pidioRunFlat);
+      console.log('Productos encontrados:', productos.length, '| Revendedor:', esRev);
+      registrarConsulta(fromNumber, medidaNorm, marca, productos);
+
+      const mensajes = armarMensajes(productos, medidaNorm, esRev);
+      for (const m of mensajes) twiml.message(m);
+
+      // Cierre motivador solo para clientes
+      if (!esRev && productos.length > 0) {
+        twiml.message('¿Te puedo ayudar con algo más? 😊\n\n¿Cuál sucursal te queda más cómoda?\n• *Victoria* — wa.me/541137735246\n• *Nordelta* — wa.me/541157347692\n\nColocación *sin cargo* en ambas sucursales. 🔧');
+      }
+
+      // Guardar respuesta del bot en sesión
+      registrarMensajeSesion(fromNumber, 'bot', `Precios para ${medidaNorm}: ${productos.length} opciones`);
+    } else {
+      // Respuesta conversacional de Claude
+      twiml.message(respuesta);
+      registrarMensajeSesion(fromNumber, 'bot', respuesta);
     }
   } catch (err) {
-    console.error('Error al consultar precios:', err.message);
-    twiml.message('❌ Hubo un error al consultar los precios. Por favor intentá de nuevo o escribí *"hablar con alguien"*.');
+    console.error('Error:', err.message);
+    twiml.message('❌ Hubo un error. Por favor intentá de nuevo o escribí *"hablar con alguien"*.');
   }
 
   console.log('Enviando respuesta TwiML...');

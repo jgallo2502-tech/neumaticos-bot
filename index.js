@@ -63,7 +63,7 @@ async function esRevendedor(numero) {
         range: 'Revendedores!A:A',
       });
       const rows = res.data.values || [];
-      revendedoresCache = new Set(rows.flat().map(n => n.toString().replace(/\D/g, '')));
+      revendedoresCache = new Set(rows.slice(1).flat().map(n => n.toString().replace(/\D/g, '')).filter(n => n.length > 5));
       revendedoresCacheTime = ahora;
     }
     const numLimpio = numero.replace(/\D/g, '');

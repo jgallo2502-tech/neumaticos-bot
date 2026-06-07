@@ -463,15 +463,43 @@ app.post('/webhook', async (req, res) => {
 
   try {
     const esRev = await esRevendedor(fromNumber);
-    const sesion = sesiones.get(fromNumber) || { mensajes: [] };
-    const historialPrevio = sesion.mensajes.slice(-10); // últimos 10 mensajes
 
-    // Primero preguntamos a Claude qué hacer
-    const respuesta = await respuestaClaude(historialPrevio, body);
-    console.log('Respuesta Claude:', respuesta.substring(0, 80));
+    // Detección directa de medida ANTES de llamar a Claude
+    const medidaDirecta = normalizarMedida(body);
+    const matchMedida = medidaDirecta ? [null, medidaDirecta] : null;
 
-    // Si Claude detectó una medida para buscar
-    const matchMedida = respuesta.match(/^BUSCAR_MEDIDA:(\S+)/);
+    if (!matchMedida) {
+      // Solo llamamos a Claude si no hay medida detectada
+      const sesion = sesiones.get(fromNumber) || { mensajes: [] };
+      const historialPrevio = sesion.mensajes.slice(-10);
+      const respuesta = await respuestaClaude(historialPrevio, body);
+      console.log('Respuesta Claude:', respuesta.substring(0, 80));
+
+      const matchClaude = respuesta.match(/^BUSCAR_MEDIDA:(\S+)/);
+      if (matchClaude) {
+        // Claude detectó medida (fallback)
+        const medidaNorm = matchClaude[1];
+        const marca = extraerMarca(body);
+        const pidioRunFlat = /runflat|run flat|run-flat|\brft\b|\bzp\b/i.test(body.toLowerCase());
+        const productos = await obtenerPrecios(medidaNorm, marca, pidioRunFlat);
+        registrarConsulta(fromNumber, medidaNorm, marca, productos);
+        const mensajes = armarMensajes(productos, medidaNorm, esRev);
+        for (const m of mensajes) twiml.message(m);
+        if (!esRev && productos.length > 0) {
+          twiml.message('¿Te puedo ayudar con algo más? 😊\n\n¿Cuál sucursal te queda más cómoda?\n• *Victoria* — wa.me/541137735246\n• *Nordelta* — wa.me/541157347692\n\nColocación *sin cargo* en ambas sucursales. 🔧');
+        }
+        registrarMensajeSesion(fromNumber, 'bot', `Precios para ${medidaNorm}`);
+      } else {
+        twiml.message(respuesta);
+        registrarMensajeSesion(fromNumber, 'bot', respuesta);
+      }
+
+      console.log('Enviando respuesta TwiML...');
+      return res.type('text/xml').send(twiml.toString());
+    }
+
+    // Si hay medida detectada directamente, buscar precios sin pasar por Claude
+    const matchMedidaFinal = matchMedida;
     if (matchMedida) {
       const medidaNorm = matchMedida[1];
       const marca = extraerMarca(body);

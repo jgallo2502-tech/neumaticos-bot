@@ -108,8 +108,18 @@ router.post('/enviar-presupuesto', express.json(), authMiddleware, async (req, r
     msg += `📍 Nordelta: Agustín García 6318, Tigre | 11-5734-7692\n`;
     msg += `🌐 tienda.neumaticosgallo.com.ar`;
 
-    const telLimpio = tel.replace(/\D/g, '');
-    const telWA = telLimpio.startsWith('54') ? telLimpio : `54${telLimpio.startsWith('0') ? telLimpio.slice(1) : telLimpio}`;
+    let telLimpio = tel.replace(/\D/g, '');
+    // Normalizar número argentino: agregar 549 para celulares
+    if (telLimpio.startsWith('549')) {
+      // ya está bien
+    } else if (telLimpio.startsWith('54')) {
+      telLimpio = '549' + telLimpio.slice(2);
+    } else if (telLimpio.startsWith('0')) {
+      telLimpio = '549' + telLimpio.slice(1);
+    } else {
+      telLimpio = '549' + telLimpio;
+    }
+    const telWA = telLimpio;
 
     await twilio.messages.create({
       from: process.env.TWILIO_WHATSAPP_NUMBER,

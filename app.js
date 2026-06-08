@@ -140,4 +140,91 @@ router.post('/enviar-presupuesto', express.json(), authMiddleware, async (req, r
   }
 });
 
+// --- Broadcast: listar plantillas aprobadas ---
+router.get('/broadcast/plantillas', authMiddleware, async (req, res) => {
+  try {
+    const twilio = require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+    const templates = await twilio.content.v1.contents.list({ limit: 50 });
+    const aprobadas = templates
+      .filter(t => t.approvalRequests?.status === 'approved' || true) // mostrar todas
+      .map(t => ({
+        sid: t.sid,
+        nombre: t.friendlyName,
+        body: t.types?.['twilio/text']?.body || t.types?.['twilio/quick-reply']?.body || JSON.stringify(t.types)
+      }));
+    res.json(aprobadas);
+  } catch (err) {
+    console.error('Error plantillas:', err.message);
+    res.json([]);
+  }
+});
+
+// --- Broadcast: cantidad de revendedores ---
+router.get('/broadcast/revendedores', authMiddleware, async (req, res) => {
+  try {
+    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const result = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Revendedores!A:A',
+    });
+    const rows = (result.data.values || []).slice(1).flat().filter(n => n && n.length > 5);
+    res.json({ total: rows.length, numeros: rows });
+  } catch (err) {
+    res.json({ total: 0, numeros: [] });
+  }
+});
+
+// --- Broadcast: enviar mensajes con streaming ---
+router.post('/broadcast/enviar', express.json(), authMiddleware, async (req, res) => {
+  const { templateSid, tipo, numeros: numerosManual } = req.body;
+  const twilio = require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+
+  let numeros = [];
+  if (tipo === 'revendedores') {
+    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const result = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Revendedores!A:A',
+    });
+    numeros = (result.data.values || []).slice(1).flat().filter(n => n && n.length > 5);
+  } else {
+    numeros = numerosManual || [];
+  }
+
+  // Streaming response
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.flushHeaders();
+
+  const send = (data) => res.write(`data:${JSON.stringify(data)}\n\n`);
+
+  for (const numero of numeros) {
+    let tel = numero.toString().replace(/\D/g, '');
+    if (!tel.startsWith('549')) {
+      tel = tel.startsWith('54') ? '549' + tel.slice(2) : '549' + tel;
+    }
+
+    try {
+      await twilio.messages.create({
+        from: process.env.TWILIO_WHATSAPP_NUMBER,
+        to: `whatsapp:+${tel}`,
+        contentSid: templateSid,
+        contentVariables: '{}',
+      });
+      send({ tipo: 'ok', numero: tel, total: numeros.length });
+    } catch (err) {
+      send({ tipo: 'error', numero: tel, msg: err.message, total: numeros.length });
+    }
+
+    // Pausa de 2 segundos entre mensajes
+    await new Promise(r => setTimeout(r, 2000));
+  }
+
+  res.end();
+});
+
 module.exports = router;

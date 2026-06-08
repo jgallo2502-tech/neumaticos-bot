@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Broadcast — Neumáticos Gallo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #f5f5f5; color: #222; }
+    header { background: #1a1a2e; color: white; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; }
+    header h1 { font-size: 18px; }
+    .logout { background: none; border: 1px solid rgba(255,255,255,0.3); color: white; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .container { max-width: 800px; margin: 24px auto; padding: 0 16px; }
+    .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    h2 { font-size: 16px; font-weight: 600; color: #1a1a2e; margin-bottom: 16px; }
+    label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
+    select, textarea { width: 100%; padding: 11px 14px; border: 2px solid #e8e8e8; border-radius: 8px; font-size: 14px; }
+    select:focus, textarea:focus { outline: none; border-color: #e63946; }
+    textarea { resize: vertical; min-height: 120px; font-family: inherit; }
+    .btn { width: 100%; padding: 14px; background: #25d366; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 16px; }
+    .btn:hover { background: #1da851; }
+    .btn:disabled { background: #aaa; cursor: not-allowed; }
+    .btn-nav { display: inline-block; margin-bottom: 16px; color: #1a1a2e; text-decoration: none; font-size: 13px; }
+    .info { background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 12px 16px; font-size: 13px; margin-bottom: 16px; }
+    .log { background: #f9f9f9; border-radius: 8px; padding: 16px; margin-top: 16px; max-height: 300px; overflow-y: auto; font-size: 13px; }
+    .log-item { padding: 6px 0; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; }
+    .ok { color: #0f5132; }
+    .err { color: #842029; }
+    .progress { background: #e8e8e8; border-radius: 8px; height: 8px; margin-top: 12px; }
+    .progress-bar { background: #25d366; height: 8px; border-radius: 8px; width: 0%; transition: width 0.3s; }
+    .stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 16px; }
+    .stat { text-align: center; background: #f9f9f9; padding: 12px; border-radius: 8px; }
+    .stat-num { font-size: 24px; font-weight: 700; }
+    .stat-label { font-size: 12px; color: #666; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>📢 Broadcast — Neumáticos Gallo</h1>
+    <button class="logout" onclick="logout()">Salir</button>
+  </header>
+
+  <div class="container">
+    <a class="btn-nav" href="/app/presupuesto.html">← Volver a Presupuestos</a>
+
+    <div class="info">
+      ⚠️ <strong>Importante:</strong> Solo funciona con plantillas aprobadas por Meta. Los mensajes se envían de a uno con 2 segundos de pausa para evitar bloqueos.
+    </div>
+
+    <div class="card">
+      <h2>📋 Configuración del envío</h2>
+
+      <label>Plantilla a usar</label>
+      <select id="template-sid">
+        <option value="">Cargando plantillas...</option>
+      </select>
+
+      <div style="margin-top:16px">
+        <label>Vista previa del mensaje</label>
+        <div id="preview" style="background:#f0f7ff;padding:12px;border-radius:8px;font-size:13px;line-height:1.6;margin-top:4px;white-space:pre-wrap">Seleccioná una plantilla para ver la vista previa</div>
+      </div>
+
+      <div style="margin-top:16px">
+        <label>Destinatarios</label>
+        <select id="dest-tipo" onchange="cambiarDestinatarios()">
+          <option value="revendedores">Todos los revendedores (desde Google Sheets)</option>
+          <option value="manual">Números manuales</option>
+        </select>
+      </div>
+
+      <div id="dest-manual" style="display:none;margin-top:12px">
+        <label>Números (uno por línea, formato: 5491112345678)</label>
+        <textarea id="numeros-manual" placeholder="5491112345678&#10;5491187654321"></textarea>
+      </div>
+
+      <div id="dest-info" style="margin-top:12px;font-size:13px;color:#555"></div>
+
+      <button class="btn" id="btn-enviar" onclick="enviar()">💬 Enviar a todos</button>
+    </div>
+
+    <div class="card" id="resultado-card" style="display:none">
+      <h2>📊 Resultado del envío</h2>
+      <div class="stats">
+        <div class="stat"><div class="stat-num" id="stat-total">0</div><div class="stat-label">Total</div></div>
+        <div class="stat"><div class="stat-num ok" id="stat-ok">0</div><div class="stat-label">Enviados</div></div>
+        <div class="stat"><div class="stat-num err" id="stat-err">0</div><div class="stat-label">Errores</div></div>
+      </div>
+      <div class="progress"><div class="progress-bar" id="progress-bar"></div></div>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <script>
+    const token = localStorage.getItem('token');
+    if (!token) window.location.href = '/app/login.html';
+
+    let plantillas = [];
+
+    async function cargarPlantillas() {
+      const res = await fetch('/app/broadcast/plantillas', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if (res.status === 401) { window.location.href = '/app/login.html'; return; }
+      plantillas = await res.json();
+      const sel = document.getElementById('template-sid');
+      if (plantillas.length === 0) {
+        sel.innerHTML = '<option value="">No hay plantillas aprobadas aún</option>';
+        return;
+      }
+      sel.innerHTML = plantillas.map(p => `<option value="${p.sid}">${p.nombre}</option>`).join('');
+      sel.onchange = mostrarPreview;
+      mostrarPreview();
+    }
+
+    function mostrarPreview() {
+      const sid = document.getElementById('template-sid').value;
+      const p = plantillas.find(x => x.sid === sid);
+      document.getElementById('preview').textContent = p ? p.body : '';
+    }
+
+    async function cambiarDestinatarios() {
+      const tipo = document.getElementById('dest-tipo').value;
+      document.getElementById('dest-manual').style.display = tipo === 'manual' ? 'block' : 'none';
+      if (tipo === 'revendedores') await cargarCantidadRevendedores();
+    }
+
+    async function cargarCantidadRevendedores() {
+      const res = await fetch('/app/broadcast/revendedores', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      const data = await res.json();
+      document.getElementById('dest-info').textContent = `📋 Se encontraron ${data.total} revendedores en la planilla.`;
+    }
+
+    async function enviar() {
+      const sid = document.getElementById('template-sid').value;
+      if (!sid) { alert('Seleccioná una plantilla'); return; }
+
+      const tipo = document.getElementById('dest-tipo').value;
+      let numeros = [];
+
+      if (tipo === 'manual') {
+        numeros = document.getElementById('numeros-manual').value
+          .split('\n').map(n => n.trim()).filter(n => n.length > 5);
+        if (numeros.length === 0) { alert('Ingresá al menos un número'); return; }
+      }
+
+      if (!confirm(`¿Confirmás el envío${tipo === 'revendedores' ? ' a todos los revendedores' : ' a ' + numeros.length + ' números'}?`)) return;
+
+      const btn = document.getElementById('btn-enviar');
+      btn.disabled = true;
+      btn.textContent = '⏳ Enviando...';
+
+      document.getElementById('resultado-card').style.display = 'block';
+      document.getElementById('log').innerHTML = '';
+      document.getElementById('resultado-card').scrollIntoView({ behavior: 'smooth' });
+
+      const res = await fetch('/app/broadcast/enviar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ templateSid: sid, tipo, numeros })
+      });
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let ok = 0, err = 0, total = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const lines = decoder.decode(value).split('\n').filter(l => l.startsWith('data:'));
+        for (const line of lines) {
+          const data = JSON.parse(line.replace('data:', ''));
+          total = data.total || total;
+          document.getElementById('stat-total').textContent = total;
+
+          if (data.tipo === 'ok') {
+            ok++;
+            document.getElementById('stat-ok').textContent = ok;
+            document.getElementById('log').innerHTML += `<div class="log-item"><span class="ok">✅ ${data.numero}</span><span>Enviado</span></div>`;
+          } else if (data.tipo === 'error') {
+            err++;
+            document.getElementById('stat-err').textContent = err;
+            document.getElementById('log').innerHTML += `<div class="log-item"><span class="err">❌ ${data.numero}</span><span>${data.msg}</span></div>`;
+          }
+
+          const pct = total > 0 ? Math.round(((ok + err) / total) * 100) : 0;
+          document.getElementById('progress-bar').style.width = pct + '%';
+        }
+      }
+
+      btn.disabled = false;
+      btn.textContent = '💬 Enviar a todos';
+    }
+
+    function logout() { localStorage.clear(); window.location.href = '/app/login.html'; }
+
+    cargarPlantillas();
+    cargarCantidadRevendedores();
+  </script>
+</body>
+</html>

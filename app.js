@@ -28,8 +28,14 @@ function authMiddleware(req, res, next) {
   }
 }
 
-// --- Servir archivos estáticos ---
-router.use(express.static(path.join(__dirname, 'public')));
+// --- Servir archivos estáticos sin caché ---
+router.use(express.static(path.join(__dirname, 'public'), {
+  etag: false,
+  lastModified: false,
+  setHeaders: (res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  }
+}));
 
 // --- Login ---
 router.post('/login', express.json(), (req, res) => {

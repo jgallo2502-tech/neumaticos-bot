@@ -417,40 +417,43 @@
       document.getElementById('tabla-unitarios').innerHTML =
         '<table><thead><tr>' + colHeaders + '</tr></thead><tbody>' + rows1 + '</tbody></table>';
 
-      // --- HOJA 2: Totales por cantidad y forma de pago ---
-      let colHeaders2 = '<th>Producto</th><th>Cant.</th>';
-      if (fp12) colHeaders2 += '<th>12 pagos (lista)<br><small>total</small></th>';
+      // --- HOJA 2: Una tabla por producto (el cliente elige una opción) ---
+      let colHeaders2 = '<th>Cant.</th>';
+      if (fp12) colHeaders2 += '<th>12 pagos (lista)<br><small>total / c/cuota</small></th>';
       if (fp6)  colHeaders2 += '<th>6 cuotas (-10%)<br><small>total / c/cuota</small></th>';
       if (fp3)  colHeaders2 += '<th>3 cuotas (-15%)<br><small>total / c/cuota</small></th>';
       if (fp1)  colHeaders2 += '<th>Contado (-20%)<br><small>total</small></th>';
 
-      let rows2 = '';
-      let tot12 = 0, tot6t = 0, tot3t = 0, tot1 = 0;
+      let html2 = '';
       for (const p of items) {
-        const c12 = p.precio * cant;
-        const c6t = Math.round(p.precio * 0.90) * cant;
-        const c6c = Math.round(c6t / 6);
-        const c3t = Math.round(p.precio * 0.85) * cant;
-        const c3c = Math.round(c3t / 3);
-        const c1  = Math.round(p.precio * 0.80) * cant;
-        tot12 += c12; tot6t += c6t; tot3t += c3t; tot1 += c1;
-        rows2 += '<tr><td>' + p.descripcion + '</td><td>' + cant + '</td>';
-        if (fp12) rows2 += '<td>' + fmt(c12) + '</td>';
-        if (fp6)  rows2 += '<td>' + fmt(c6t) + '<br><small>' + fmt(c6c) + '/cuota</small></td>';
-        if (fp3)  rows2 += '<td>' + fmt(c3t) + '<br><small>' + fmt(c3c) + '/cuota</small></td>';
-        if (fp1)  rows2 += '<td>' + fmt(c1) + '</td>';
-        rows2 += '</tr>';
-      }
-      // Fila de totales
-      rows2 += '<tr class="total-row"><td colspan="2"><strong>TOTAL</strong></td>';
-      if (fp12) rows2 += '<td>' + fmt(tot12) + '</td>';
-      if (fp6)  rows2 += '<td>' + fmt(tot6t) + '<br><small>' + fmt(Math.round(tot6t/6)) + '/cuota</small></td>';
-      if (fp3)  rows2 += '<td>' + fmt(tot3t) + '<br><small>' + fmt(Math.round(tot3t/3)) + '/cuota</small></td>';
-      if (fp1)  rows2 += '<td>' + fmt(tot1) + '</td>';
-      rows2 += '</tr>';
+        const c12u = p.precio;
+        const c6u  = Math.round(p.precio * 0.90);
+        const c3u  = Math.round(p.precio * 0.85);
+        const c1u  = Math.round(p.precio * 0.80);
 
-      document.getElementById('tabla-totales').innerHTML =
-        '<table><thead><tr>' + colHeaders2 + '</tr></thead><tbody>' + rows2 + '</tbody></table>';
+        let rows2 = '';
+        for (const q of [1, 2, 3, 4]) {
+          if (q > cant) continue; // solo hasta la cantidad seleccionada
+          const r12 = c12u * q;
+          const r6t = c6u * q; const r6c = Math.round(r6t / 6);
+          const r3t = c3u * q; const r3c = Math.round(r3t / 3);
+          const r1  = c1u * q;
+          rows2 += '<tr' + (q === cant ? ' class="total-row"' : '') + '>';
+          rows2 += '<td>' + q + ' unid.</td>';
+          if (fp12) rows2 += '<td>' + fmt(r12) + '<br><small>' + fmt(Math.round(r12/12)) + '/cuota</small></td>';
+          if (fp6)  rows2 += '<td>' + fmt(r6t) + '<br><small>' + fmt(r6c) + '/cuota</small></td>';
+          if (fp3)  rows2 += '<td>' + fmt(r3t) + '<br><small>' + fmt(r3c) + '/cuota</small></td>';
+          if (fp1)  rows2 += '<td>' + fmt(r1) + '</td>';
+          rows2 += '</tr>';
+        }
+
+        html2 += '<div style="margin-bottom:20px">';
+        html2 += '<p style="font-weight:700;font-size:14px;margin-bottom:8px">🔹 ' + p.descripcion + '</p>';
+        html2 += '<table><thead><tr>' + colHeaders2 + '</tr></thead><tbody>' + rows2 + '</tbody></table>';
+        html2 += '</div>';
+      }
+
+      document.getElementById('tabla-totales').innerHTML = html2;
     }
 
     function imprimir() {

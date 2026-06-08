@@ -128,13 +128,14 @@ router.post('/enviar-presupuesto', express.json(), authMiddleware, async (req, r
     }
     const telWA = telLimpio;
 
-    await twilio.messages.create({
+    console.log('Enviando WA a:', telWA, '| From:', process.env.TWILIO_WHATSAPP_NUMBER);
+    const result = await twilio.messages.create({
       from: process.env.TWILIO_WHATSAPP_NUMBER,
       to: `whatsapp:+${telWA}`,
       body: msg,
     });
-
-    res.json({ ok: true });
+    console.log('WA enviado OK. SID:', result.sid, '| Status:', result.status);
+    res.json({ ok: true, sid: result.sid, status: result.status });
   } catch (err) {
     console.error('Error enviar WA:', err.message);
     res.status(500).json({ error: err.message });

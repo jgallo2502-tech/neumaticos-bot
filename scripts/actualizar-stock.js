@@ -6,6 +6,7 @@ const FOLDER_ID   = '1anE-HOp-5V7oqql5raZp101dZw9xIAxD';
 const SHEET_ID    = '160e1dKlTch9gzOOxjhz7hKJKfbrMifAyTXE10aZRbgw';
 const INV_ID      = '1nVtzTANXHQP2rZP6baCRd89OV1_dGaTjdPn0F8DltIs';
 const EXPRESS_ID  = '1pxGZgDxKP1Ha2sKKMYO8Uz1bgwTHbIvZb3m5FAL_xQY';
+const LISTA_REF_ID = '1wqPJsfb3s8UX-dTy_sREcmce8Ubv6kde04Ntsr7n1Fc';
 
 async function getAuth() {
   return new google.auth.GoogleAuth({
@@ -88,6 +89,25 @@ async function main() {
 
   console.log(`   Artículos Express: ${Object.keys(expressMap).length}`);
 
+  // --- Leer lista de precios de referencia Michelin (precio con IVA / 0.8) ---
+  console.log('📊 Leyendo lista de precios de referencia...');
+  const listRes = await sheets.spreadsheets.values.get({ spreadsheetId: LISTA_REF_ID, range: 'A:L' });
+  const listRows = listRes.data.values || [];
+  // Fila 4 es el encabezado: Sección | Serie | Llanta | CAI | Dimensión | Gama | ... | Precio con IVA
+  const listHeader = listRows[3]; // índice 3 = fila 4
+  const iCAIList = listHeader ? listHeader.indexOf('CAI') : 3;
+  const iPrecioIVA = listHeader ? listHeader.indexOf('Precio Referencia con IVA') : 10;
+
+  const listaPreciosCAI = {}; // CAI -> precio lista (con IVA / 0.8, sin decimales)
+  for (const row of listRows.slice(4)) {
+    const cai   = (row[iCAIList] || '').toString().trim();
+    const pIVA  = parseNum((row[iPrecioIVA] || '').toString().replace(/[^\d,\.]/g, ''));
+    if (cai && pIVA > 0) {
+      listaPreciosCAI[cai] = Math.round(pIVA / 0.8);
+    }
+  }
+  console.log(`   Artículos con precio referencia: ${Object.keys(listaPreciosCAI).length}`);
+
   // --- Leer hoja principal Bot WhatsApp ---
   console.log('📊 Leyendo hoja Bot WhatsApp...');
   const botRes = await sheets.spreadsheets.values.get({
@@ -129,9 +149,14 @@ async function main() {
     // Solo actualizar Michelin y BFGoodrich en express
     if (!['michelin', 'bfgoodrich'].includes(marca)) express = 0;
 
+    // Si el precio del inventario es 0 y hay stock express, usar lista de referencia por CAI
+    if (precio === 0 && express > 0 && codAlt && listaPreciosCAI[codAlt]) {
+      precio = listaPreciosCAI[codAlt];
+    }
+
     // Guardar la fila con índice para batch update
     updates.push({
-      fila: i + 1, // 1-indexed en Sheets
+      fila: i + 1,
       vic, nor, express, precio
     });
     actualizados++;

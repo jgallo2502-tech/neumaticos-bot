@@ -354,7 +354,7 @@ function armarMensajes(productos, medidaOriginal, esRev = false) {
     mensajes.push(`_...y ${total - 8} opciones más. Filtrá por marca, ej: "${medidaOriginal} Michelin"_`);
   }
 
-  mensajes.push(PIE);
+  if (!esRev) mensajes.push(PIE);
   return mensajes;
 }
 

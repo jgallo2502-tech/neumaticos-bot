@@ -613,13 +613,32 @@
       msg += `📍 Nordelta: Agustín García 6318, Tigre | 11-5734-7692\n`;
       msg += `🌐 tienda.neumaticosgallo.com.ar`;
 
-      navigator.clipboard.writeText(msg).then(() => {
-        const btn = event.target;
+      // Método compatible con todos los navegadores
+      const btn = event.target;
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = msg;
+        textarea.style.position = 'fixed';
+        textarea.style.top = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
         btn.textContent = '✅ Copiado!';
         setTimeout(() => btn.textContent = '📋 Copiar mensaje', 2500);
-      }).catch(() => {
-        alert('No se pudo copiar automáticamente. Seleccioná el texto manualmente.');
-      });
+      } catch (e) {
+        // Fallback: mostrar en un modal para copiar manualmente
+        const modal = document.createElement('div');
+        modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+        modal.innerHTML = '<div style="background:white;border-radius:12px;padding:20px;max-width:500px;width:100%">' +
+          '<p style="font-weight:700;margin-bottom:10px">Seleccioná y copiá el texto:</p>' +
+          '<textarea readonly style="width:100%;height:200px;font-size:12px;padding:8px">' + msg + '</textarea>' +
+          '<button onclick="this.closest(\'div[style]\').remove()" style="margin-top:10px;padding:10px 20px;background:#e63946;color:white;border:none;border-radius:8px;cursor:pointer;width:100%">Cerrar</button>' +
+          '</div>';
+        document.body.appendChild(modal);
+        modal.querySelector('textarea').select();
+      }
     }
 
     async function enviarWhatsApp() {

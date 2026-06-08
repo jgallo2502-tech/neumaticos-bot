@@ -229,4 +229,45 @@ router.post('/broadcast/enviar', express.json(), authMiddleware, async (req, res
   res.end();
 });
 
+// --- Tiendanube OAuth callback ---
+router.get('/tiendanube/callback', async (req, res) => {
+  const { code } = req.query;
+  if (!code) return res.send('Error: no se recibió el código de autorización');
+
+  try {
+    const fetch = (...args) => import('node-fetch').then(({default: f}) => f(...args));
+    const response = await fetch('https://www.tiendanube.com/apps/authorize/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: '33802',
+        client_secret: '6b1a1bf6e7266e6879d303966852d',
+        grant_type: 'authorization_code',
+        code,
+      }),
+    });
+    const data = await response.json();
+    console.log('Tiendanube token response:', JSON.stringify(data));
+
+    if (data.access_token) {
+      res.send(`
+        <h2>✅ Tiendanube conectado!</h2>
+        <p><strong>Access Token:</strong> ${data.access_token}</p>
+        <p><strong>User ID (Store ID):</strong> ${data.user_id}</p>
+        <p>Copiá estos datos y pasáselos a Claude para configurar la integración.</p>
+      `);
+    } else {
+      res.send(`<h2>❌ Error</h2><pre>${JSON.stringify(data, null, 2)}</pre>`);
+    }
+  } catch (err) {
+    res.send(`<h2>❌ Error</h2><p>${err.message}</p>`);
+  }
+});
+
+// --- Tiendanube: iniciar OAuth ---
+router.get('/tiendanube/auth', (req, res) => {
+  const url = `https://www.tiendanube.com/apps/${33802}/authorize`;
+  res.redirect(url);
+});
+
 module.exports = router;

@@ -190,6 +190,94 @@
         </div>
       </div>
 
+      <!-- Panel de servicios (NO se imprime) -->
+      <div class="card no-print">
+        <h2>🔧 Servicios adicionales <small style="font-weight:400;font-size:13px;color:#888">(opcional)</small></h2>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
+
+          <!-- Válvulas -->
+          <div>
+            <label>Válvulas — Cantidad</label>
+            <select id="sv-cant" onchange="recalcular()">
+              <option value="0">No incluir</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+            </select>
+            <label style="margin-top:8px">Precio unitario</label>
+            <select id="sv-precio" onchange="recalcular()">
+              <option value="0">-</option>
+              <option value="3000">$3.000</option>
+              <option value="4000">$4.000</option>
+              <option value="5000">$5.000</option>
+              <option value="6000">$6.000</option>
+              <option value="7000">$7.000</option>
+              <option value="8000">$8.000</option>
+              <option value="10000">$10.000</option>
+              <option value="12000">$12.000</option>
+              <option value="15000">$15.000</option>
+            </select>
+          </div>
+
+          <!-- Balanceos -->
+          <div>
+            <label>Balanceos — Cantidad</label>
+            <select id="sb-cant" onchange="recalcular()">
+              <option value="0">No incluir</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+            </select>
+            <label style="margin-top:8px">Precio unitario</label>
+            <select id="sb-precio" onchange="recalcular()">
+              <option value="0">-</option>
+              <option value="5000">$5.000</option>
+              <option value="6000">$6.000</option>
+              <option value="7000">$7.000</option>
+              <option value="8000">$8.000</option>
+              <option value="10000">$10.000</option>
+              <option value="12000">$12.000</option>
+              <option value="15000">$15.000</option>
+              <option value="18000">$18.000</option>
+              <option value="20000">$20.000</option>
+            </select>
+          </div>
+
+          <!-- Alineación -->
+          <div>
+            <label>Alineación</label>
+            <select id="sa-tipo" onchange="recalcular()">
+              <option value="">No incluir</option>
+              <option value="Alineación">Alineación</option>
+              <option value="Alineación Integral">Alineación Integral</option>
+            </select>
+            <label style="margin-top:8px">Precio (aprox.)</label>
+            <select id="sa-precio" onchange="recalcular()">
+              <option value="0">-</option>
+              <option value="80000">$80.000</option>
+              <option value="90000">$90.000</option>
+              <option value="100000">$100.000</option>
+              <option value="110000">$110.000</option>
+              <option value="120000">$120.000</option>
+              <option value="130000">$130.000</option>
+              <option value="140000">$140.000</option>
+              <option value="150000">$150.000</option>
+              <option value="160000">$160.000</option>
+              <option value="170000">$170.000</option>
+              <option value="180000">$180.000</option>
+            </select>
+            <label style="margin-top:8px">Forma de pago</label>
+            <select id="sa-pago" onchange="recalcular()">
+              <option value="Contado">Contado</option>
+              <option value="3 pagos sin interés">3 pagos sin interés</option>
+              <option value="Contado o 3 pagos sin interés">Contado o 3 pagos sin interés</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       <!-- HOJA 1: Precios unitarios -->
       <div class="card" id="hoja1">
         <div class="presup-header">
@@ -205,6 +293,7 @@
         <p><strong>Cliente:</strong> <span id="presup-cliente"></span> &nbsp;|&nbsp; <strong>WhatsApp:</strong> <span id="presup-tel"></span></p>
         <p style="margin-top:8px;font-size:13px;color:#666">Precios por unidad</p>
         <div id="tabla-unitarios"></div>
+        <div id="servicios-hoja1"></div>
         <p class="nota" style="margin-top:12px">
           ✅ Garantía 5 años por defecto de fabricación &nbsp;|&nbsp; 🔧 Colocación sin cargo &nbsp;|&nbsp; ⚠️ Promos presenciales por compra de 2+
         </p>
@@ -224,8 +313,8 @@
         </div>
         <p><strong>Cliente:</strong> <span id="presup-cliente2"></span></p>
         <div id="tabla-totales" style="margin-top:12px"></div>
+        <div id="servicios-hoja2"></div>
         <p class="nota" style="margin-top:12px">
-          🔧 Válvulas, balanceo y alineación se cobran aparte.<br>
           🌐 Compra online: tienda.neumaticosgallo.com.ar — envíos sin cargo superando mínimo de compra.
         </p>
       </div>
@@ -450,6 +539,36 @@
       }
 
       document.getElementById('tabla-totales').innerHTML = html2;
+      calcularServicios();
+    }
+
+    function calcularServicios() {
+      const svCant  = parseInt(document.getElementById('sv-cant')?.value || 0);
+      const svPrecio = parseInt(document.getElementById('sv-precio')?.value || 0);
+      const sbCant  = parseInt(document.getElementById('sb-cant')?.value || 0);
+      const sbPrecio = parseInt(document.getElementById('sb-precio')?.value || 0);
+      const saTipo  = document.getElementById('sa-tipo')?.value || '';
+      const saPrecio = parseInt(document.getElementById('sa-precio')?.value || 0);
+      const saPago  = document.getElementById('sa-pago')?.value || 'Contado';
+
+      const partes = [];
+      if (svCant > 0 && svPrecio > 0) partes.push(svCant + ' válvula' + (svCant > 1 ? 's' : '') + ' — ' + fmt(svPrecio) + ' c/u → Total: ' + fmt(svCant * svPrecio));
+      if (sbCant > 0 && sbPrecio > 0) partes.push(sbCant + ' balanceo' + (sbCant > 1 ? 's' : '') + ' — ' + fmt(sbPrecio) + ' c/u → Total: ' + fmt(sbCant * sbPrecio));
+      if (saTipo && saPrecio > 0) partes.push(saTipo + ' — $' + fmt(saPrecio) + ' aprox. (' + saPago + ')');
+
+      if (partes.length === 0) {
+        document.getElementById('servicios-hoja1').innerHTML = '';
+        document.getElementById('servicios-hoja2').innerHTML = '';
+        return;
+      }
+
+      const html = '<div style="margin-top:16px;padding:12px 16px;background:#f0f7ff;border-radius:8px;border-left:4px solid #1a1a2e">' +
+        '<p style="font-weight:700;margin-bottom:8px">🔧 Servicios adicionales</p>' +
+        partes.map(p => '<p style="font-size:13px;margin-bottom:4px">• ' + p + '</p>').join('') +
+        '</div>';
+
+      document.getElementById('servicios-hoja1').innerHTML = html;
+      document.getElementById('servicios-hoja2').innerHTML = html;
     }
 
     function imprimir() {

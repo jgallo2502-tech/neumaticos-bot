@@ -183,7 +183,7 @@
             <div style="margin-top:6px">
               <label style="text-transform:none;font-weight:400;display:flex;align-items:center;gap:8px;margin-bottom:6px"><input type="checkbox" id="fp12" checked onchange="recalcular()"> 12 pagos (precio lista)</label>
               <label style="text-transform:none;font-weight:400;display:flex;align-items:center;gap:8px;margin-bottom:6px"><input type="checkbox" id="fp6" checked onchange="recalcular()"> 6 cuotas (-10%)</label>
-              <label style="text-transform:none;font-weight:400;display:flex;align-items:center;gap:8px;margin-bottom:6px"><input type="checkbox" id="fp3" onchange="recalcular()"> 3 cuotas (-15%)</label>
+              <label style="text-transform:none;font-weight:400;display:flex;align-items:center;gap:8px;margin-bottom:6px"><input type="checkbox" id="fp3" checked onchange="recalcular()"> 3 cuotas (-15%)</label>
               <label style="text-transform:none;font-weight:400;display:flex;align-items:center;gap:8px"><input type="checkbox" id="fp1" checked onchange="recalcular()"> Contado (-20%)</label>
             </div>
           </div>
@@ -431,21 +431,17 @@
         const c3u  = Math.round(p.precio * 0.85);
         const c1u  = Math.round(p.precio * 0.80);
 
-        let rows2 = '';
-        for (const q of [1, 2, 3, 4]) {
-          if (q > cant) continue; // solo hasta la cantidad seleccionada
-          const r12 = c12u * q;
-          const r6t = c6u * q; const r6c = Math.round(r6t / 6);
-          const r3t = c3u * q; const r3c = Math.round(r3t / 3);
-          const r1  = c1u * q;
-          rows2 += '<tr' + (q === cant ? ' class="total-row"' : '') + '>';
-          rows2 += '<td>' + q + ' unid.</td>';
-          if (fp12) rows2 += '<td>' + fmt(r12) + '<br><small>' + fmt(Math.round(r12/12)) + '/cuota</small></td>';
-          if (fp6)  rows2 += '<td>' + fmt(r6t) + '<br><small>' + fmt(r6c) + '/cuota</small></td>';
-          if (fp3)  rows2 += '<td>' + fmt(r3t) + '<br><small>' + fmt(r3c) + '/cuota</small></td>';
-          if (fp1)  rows2 += '<td>' + fmt(r1) + '</td>';
-          rows2 += '</tr>';
-        }
+        const r12 = c12u * cant;
+        const r6t = c6u * cant; const r6c = Math.round(r6t / 6);
+        const r3t = c3u * cant; const r3c = Math.round(r3t / 3);
+        const r1  = c1u * cant;
+        let rows2 = '<tr class="total-row">';
+        rows2 += '<td>' + cant + ' unid.</td>';
+        if (fp12) rows2 += '<td>' + fmt(r12) + '<br><small>' + fmt(Math.round(r12/12)) + '/cuota</small></td>';
+        if (fp6)  rows2 += '<td>' + fmt(r6t) + '<br><small>' + fmt(r6c) + '/cuota</small></td>';
+        if (fp3)  rows2 += '<td>' + fmt(r3t) + '<br><small>' + fmt(r3c) + '/cuota</small></td>';
+        if (fp1)  rows2 += '<td>' + fmt(r1) + '</td>';
+        rows2 += '</tr>';
 
         html2 += '<div style="margin-bottom:20px">';
         html2 += '<p style="font-weight:700;font-size:14px;margin-bottom:8px">🔹 ' + p.descripcion + '</p>';

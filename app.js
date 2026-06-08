@@ -8,13 +8,14 @@ const JWT_SECRET = process.env.JWT_SECRET || 'neumaticos-gallo-2026';
 
 // --- Usuarios (en producción esto podría ir en Google Sheets) ---
 const USUARIOS = [
-  { usuario: 'admin',    password: 'gallo2026',  nombre: 'Administrador', rol: 'admin' },
-  { usuario: 'vendedor1', password: 'vend001',   nombre: 'Vendedor 1',    rol: 'vendedor' },
-  { usuario: 'vendedor2', password: 'vend002',   nombre: 'Vendedor 2',    rol: 'vendedor' },
-  { usuario: 'vendedor3', password: 'vend003',   nombre: 'Vendedor 3',    rol: 'vendedor' },
-  { usuario: 'vendedor4', password: 'vend004',   nombre: 'Vendedor 4',    rol: 'vendedor' },
-  { usuario: 'vendedor5', password: 'vend005',   nombre: 'Vendedor 5',    rol: 'vendedor' },
-  { usuario: 'vendedor6', password: 'vend006',   nombre: 'Vendedor 6',    rol: 'vendedor' },
+  { usuario: 'admin',      password: 'gallo2026', nombre: 'Administrador', rol: 'admin' },
+  { usuario: 'rgallo',     password: '12345',     nombre: 'R. Gallo',      rol: 'vendedor' },
+  { usuario: 'lmoreno',    password: '12345',     nombre: 'L. Moreno',     rol: 'vendedor' },
+  { usuario: 'ifukushima', password: '12345',     nombre: 'I. Fukushima',  rol: 'vendedor' },
+  { usuario: 'rgonzalez',  password: '12345',     nombre: 'R. Gonzalez',   rol: 'vendedor' },
+  { usuario: 'nruiz',      password: '12345',     nombre: 'N. Ruiz',       rol: 'vendedor' },
+  { usuario: 'hvillalobos',password: '12345',     nombre: 'H. Villalobos', rol: 'vendedor' },
+  { usuario: 'prueba',     password: '12345',     nombre: 'Prueba',        rol: 'vendedor' },
 ];
 
 // --- Middleware de auth ---

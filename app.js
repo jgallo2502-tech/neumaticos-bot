@@ -241,7 +241,7 @@ router.get('/tiendanube/callback', async (req, res) => {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         client_id: '33802',
-        client_secret: '6b1a1bf6e7266e6879d303966852d',
+        client_secret: '6b1a1bf6e7266e6879d303966852d1a0014173e1835ab796',
         grant_type: 'authorization_code',
         code,
       }),
@@ -266,7 +266,7 @@ router.get('/tiendanube/callback', async (req, res) => {
 
 // --- Tiendanube: iniciar OAuth ---
 router.get('/tiendanube/auth', (req, res) => {
-  const url = `https://www.tiendanube.com/apps/${33802}/authorize`;
+  const url = `https://www.tiendanube.com/apps/33802/authorize`;
   res.redirect(url);
 });
 

@@ -163,38 +163,74 @@
     </div>
 
     <!-- Presupuesto generado -->
-    <div class="card" id="presupuesto-generado">
-      <div class="presup-header">
-        <div class="presup-empresa">
-          <h3>🔴 Neumáticos Gallo</h3>
-          <p>Suc. Victoria: Pres. Perón 3479 | 11-3773-5246<br>Suc. Nordelta: Agustín García 6318, Tigre | 11-5734-7692<br>tienda.neumaticosgallo.com.ar</p>
-        </div>
-        <div class="presup-numero">
-          <strong id="presup-num">#0001</strong>
-          <span id="presup-fecha"></span>
+    <div id="presupuesto-generado" style="display:none">
+
+      <!-- Selector de cantidad y formas de pago (NO se imprime) -->
+      <div class="card no-print">
+        <h2>⚙️ Opciones de presupuesto</h2>
+        <div class="row">
+          <div>
+            <label>Cantidad de neumáticos</label>
+            <select id="select-cantidad" onchange="recalcular()">
+              <option value="4">4 neumáticos</option>
+              <option value="3">3 neumáticos</option>
+              <option value="2">2 neumáticos</option>
+              <option value="1">1 neumático</option>
+            </select>
+          </div>
+          <div>
+            <label>Formas de pago a mostrar</label>
+            <div style="margin-top:6px">
+              <label style="text-transform:none;font-weight:400;display:flex;align-items:center;gap:8px;margin-bottom:6px"><input type="checkbox" id="fp12" checked onchange="recalcular()"> 12 pagos (precio lista)</label>
+              <label style="text-transform:none;font-weight:400;display:flex;align-items:center;gap:8px;margin-bottom:6px"><input type="checkbox" id="fp6" checked onchange="recalcular()"> 6 cuotas (-10%)</label>
+              <label style="text-transform:none;font-weight:400;display:flex;align-items:center;gap:8px;margin-bottom:6px"><input type="checkbox" id="fp3" onchange="recalcular()"> 3 cuotas (-15%)</label>
+              <label style="text-transform:none;font-weight:400;display:flex;align-items:center;gap:8px"><input type="checkbox" id="fp1" checked onchange="recalcular()"> Contado (-20%)</label>
+            </div>
+          </div>
         </div>
       </div>
-      <p><strong>Cliente:</strong> <span id="presup-cliente"></span></p>
-      <p style="margin-top:4px"><strong>WhatsApp:</strong> <span id="presup-tel"></span></p>
-      <table id="presup-tabla" style="margin-top:16px">
-        <thead>
-          <tr>
-            <th>Producto</th>
-            <th>Cant.</th>
-            <th>Precio unit. (12 pagos)</th>
-            <th>Contado (-20%)</th>
-            <th>Subtotal contado</th>
-          </tr>
-        </thead>
-        <tbody id="presup-body"></tbody>
-      </table>
-      <p class="nota">
-        ✅ Garantía: 5 años por defecto de fabricación.<br>
-        🔧 Colocación sin cargo en nuestros locales. Válvulas, balanceo y alineación se cobran aparte.<br>
-        💳 Precio de lista en 12 pagos | 6 cuotas -10% | 3 cuotas -15% | Contado -20%<br>
-        ⚠️ Promociones válidas presencialmente por compra de 2 o más neumáticos.
-      </p>
-      <div class="acciones">
+
+      <!-- HOJA 1: Precios unitarios -->
+      <div class="card" id="hoja1">
+        <div class="presup-header">
+          <div class="presup-empresa">
+            <h3>🔴 Neumáticos Gallo</h3>
+            <p>Suc. Victoria: Pres. Perón 3479 | 11-3773-5246<br>Suc. Nordelta: Agustín García 6318, Tigre | 11-5734-7692<br>tienda.neumaticosgallo.com.ar</p>
+          </div>
+          <div class="presup-numero">
+            <strong id="presup-num">#0001</strong>
+            <span id="presup-fecha"></span>
+          </div>
+        </div>
+        <p><strong>Cliente:</strong> <span id="presup-cliente"></span> &nbsp;|&nbsp; <strong>WhatsApp:</strong> <span id="presup-tel"></span></p>
+        <p style="margin-top:8px;font-size:13px;color:#666">Precios por unidad</p>
+        <div id="tabla-unitarios"></div>
+        <p class="nota" style="margin-top:12px">
+          ✅ Garantía 5 años por defecto de fabricación &nbsp;|&nbsp; 🔧 Colocación sin cargo &nbsp;|&nbsp; ⚠️ Promos presenciales por compra de 2+
+        </p>
+      </div>
+
+      <!-- HOJA 2: Resumen de compra -->
+      <div class="card" id="hoja2" style="margin-top:0;page-break-before:always">
+        <div class="presup-header">
+          <div class="presup-empresa">
+            <h3>🔴 Neumáticos Gallo — Resumen de compra</h3>
+            <p>Suc. Victoria: Pres. Perón 3479 | 11-3773-5246<br>Suc. Nordelta: Agustín García 6318, Tigre | 11-5734-7692</p>
+          </div>
+          <div class="presup-numero">
+            <strong id="presup-num2"></strong>
+            <span id="presup-fecha2"></span>
+          </div>
+        </div>
+        <p><strong>Cliente:</strong> <span id="presup-cliente2"></span></p>
+        <div id="tabla-totales" style="margin-top:12px"></div>
+        <p class="nota" style="margin-top:12px">
+          🔧 Válvulas, balanceo y alineación se cobran aparte.<br>
+          🌐 Compra online: tienda.neumaticosgallo.com.ar — envíos sin cargo superando mínimo de compra.
+        </p>
+      </div>
+
+      <div class="acciones no-print">
         <button class="btn-accion btn-imprimir" onclick="imprimir()">🖨️ Imprimir</button>
         <button class="btn-accion btn-whatsapp" onclick="enviarWhatsApp()">💬 Enviar por WhatsApp</button>
         <button class="btn-accion btn-nuevo" onclick="nuevoPresupuesto()">+ Nuevo</button>
@@ -324,34 +360,18 @@
       const fecha = new Date().toLocaleDateString('es-AR');
       const num = '#' + String(Date.now()).slice(-6);
 
-      document.getElementById('presup-num').textContent = num;
-      document.getElementById('presup-fecha').textContent = fecha;
-      document.getElementById('presup-cliente').textContent = cliente;
+      // Poblar datos fijos
+      ['presup-num','presup-num2'].forEach(id => document.getElementById(id).textContent = num);
+      ['presup-fecha','presup-fecha2'].forEach(id => document.getElementById(id).textContent = fecha);
+      ['presup-cliente','presup-cliente2'].forEach(id => document.getElementById(id).textContent = cliente);
       document.getElementById('presup-tel').textContent = tel;
 
-      let tbody = '';
-      let totalLista = 0;
-      let totalContado = 0;
-      const items = Object.values(seleccionados);
+      presupuestoActual = { cliente, tel, num, fecha, items: Object.values(seleccionados) };
 
-      for (const p of items) {
-        const cant = p.cantidad || 4;
-        const contado = Math.round(p.precio * 0.80);
-        totalLista += p.precio * cant;
-        totalContado += contado * cant;
-        tbody += '<tr><td>' + p.descripcion + '</td><td>' + cant + '</td><td>' + fmt(p.precio) + '</td><td>' + fmt(contado) + '</td><td>' + fmt(contado * cant) + '</td></tr>';
-      }
-      tbody += `<tr class="total-row">
-        <td colspan="3"><strong>TOTAL</strong></td>
-        <td>${fmt(totalLista / 4)} lista / und.</td>
-        <td>${fmt(totalContado)}</td>
-      </tr>`;
+      recalcular();
 
-      document.getElementById('presup-body').innerHTML = tbody;
       document.getElementById('presupuesto-generado').style.display = 'block';
       document.getElementById('presupuesto-generado').scrollIntoView({ behavior: 'smooth' });
-
-      presupuestoActual = { cliente, tel, num, fecha, items };
 
       // Guardar en servidor
       fetch('/app/guardar-presupuesto', {
@@ -359,6 +379,78 @@
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
         body: JSON.stringify(presupuestoActual)
       });
+    }
+
+    function recalcular() {
+      const items = Object.values(seleccionados);
+      if (items.length === 0) return;
+
+      const cant = parseInt(document.getElementById('select-cantidad')?.value || 4);
+      const fp12 = document.getElementById('fp12')?.checked;
+      const fp6  = document.getElementById('fp6')?.checked;
+      const fp3  = document.getElementById('fp3')?.checked;
+      const fp1  = document.getElementById('fp1')?.checked;
+
+      // --- HOJA 1: Precios unitarios ---
+      let colHeaders = '<th>Producto</th>';
+      if (fp12) colHeaders += '<th>12 pagos (lista)</th>';
+      if (fp6)  colHeaders += '<th>6 cuotas (-10%)<br><small>c/cuota</small></th>';
+      if (fp3)  colHeaders += '<th>3 cuotas (-15%)<br><small>c/cuota</small></th>';
+      if (fp1)  colHeaders += '<th>Contado (-20%)</th>';
+
+      let rows1 = '';
+      for (const p of items) {
+        const c12 = p.precio;
+        const c6t = Math.round(p.precio * 0.90);
+        const c6c = Math.round(c6t / 6);
+        const c3t = Math.round(p.precio * 0.85);
+        const c3c = Math.round(c3t / 3);
+        const c1  = Math.round(p.precio * 0.80);
+        rows1 += '<tr><td>' + p.descripcion + '</td>';
+        if (fp12) rows1 += '<td>' + fmt(c12) + '</td>';
+        if (fp6)  rows1 += '<td>' + fmt(c6t) + '<br><small>' + fmt(c6c) + '/cuota</small></td>';
+        if (fp3)  rows1 += '<td>' + fmt(c3t) + '<br><small>' + fmt(c3c) + '/cuota</small></td>';
+        if (fp1)  rows1 += '<td>' + fmt(c1) + '</td>';
+        rows1 += '</tr>';
+      }
+
+      document.getElementById('tabla-unitarios').innerHTML =
+        '<table><thead><tr>' + colHeaders + '</tr></thead><tbody>' + rows1 + '</tbody></table>';
+
+      // --- HOJA 2: Totales por cantidad y forma de pago ---
+      let colHeaders2 = '<th>Producto</th><th>Cant.</th>';
+      if (fp12) colHeaders2 += '<th>12 pagos (lista)<br><small>total</small></th>';
+      if (fp6)  colHeaders2 += '<th>6 cuotas (-10%)<br><small>total / c/cuota</small></th>';
+      if (fp3)  colHeaders2 += '<th>3 cuotas (-15%)<br><small>total / c/cuota</small></th>';
+      if (fp1)  colHeaders2 += '<th>Contado (-20%)<br><small>total</small></th>';
+
+      let rows2 = '';
+      let tot12 = 0, tot6t = 0, tot3t = 0, tot1 = 0;
+      for (const p of items) {
+        const c12 = p.precio * cant;
+        const c6t = Math.round(p.precio * 0.90) * cant;
+        const c6c = Math.round(c6t / 6);
+        const c3t = Math.round(p.precio * 0.85) * cant;
+        const c3c = Math.round(c3t / 3);
+        const c1  = Math.round(p.precio * 0.80) * cant;
+        tot12 += c12; tot6t += c6t; tot3t += c3t; tot1 += c1;
+        rows2 += '<tr><td>' + p.descripcion + '</td><td>' + cant + '</td>';
+        if (fp12) rows2 += '<td>' + fmt(c12) + '</td>';
+        if (fp6)  rows2 += '<td>' + fmt(c6t) + '<br><small>' + fmt(c6c) + '/cuota</small></td>';
+        if (fp3)  rows2 += '<td>' + fmt(c3t) + '<br><small>' + fmt(c3c) + '/cuota</small></td>';
+        if (fp1)  rows2 += '<td>' + fmt(c1) + '</td>';
+        rows2 += '</tr>';
+      }
+      // Fila de totales
+      rows2 += '<tr class="total-row"><td colspan="2"><strong>TOTAL</strong></td>';
+      if (fp12) rows2 += '<td>' + fmt(tot12) + '</td>';
+      if (fp6)  rows2 += '<td>' + fmt(tot6t) + '<br><small>' + fmt(Math.round(tot6t/6)) + '/cuota</small></td>';
+      if (fp3)  rows2 += '<td>' + fmt(tot3t) + '<br><small>' + fmt(Math.round(tot3t/3)) + '/cuota</small></td>';
+      if (fp1)  rows2 += '<td>' + fmt(tot1) + '</td>';
+      rows2 += '</tr>';
+
+      document.getElementById('tabla-totales').innerHTML =
+        '<table><thead><tr>' + colHeaders2 + '</tr></thead><tbody>' + rows2 + '</tbody></table>';
     }
 
     function imprimir() {

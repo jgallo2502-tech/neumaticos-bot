@@ -6,7 +6,8 @@ const FOLDER_ID   = '1anE-HOp-5V7oqql5raZp101dZw9xIAxD';
 const SHEET_ID    = '160e1dKlTch9gzOOxjhz7hKJKfbrMifAyTXE10aZRbgw';
 const INV_ID      = '1nVtzTANXHQP2rZP6baCRd89OV1_dGaTjdPn0F8DltIs';
 const EXPRESS_ID  = '1pxGZgDxKP1Ha2sKKMYO8Uz1bgwTHbIvZb3m5FAL_xQY';
-const LISTA_REF_ID = '1wqPJsfb3s8UX-dTy_sREcmce8Ubv6kde04Ntsr7n1Fc';
+const LISTA_REF_ID  = '1wqPJsfb3s8UX-dTy_sREcmce8Ubv6kde04Ntsr7n1Fc';
+const YOKO_ID       = '1bkCf1NkweIDT34oJHoEfk0GCxOV2oc_Pcih7u9MPcwM';
 
 async function getAuth() {
   return new google.auth.GoogleAuth({
@@ -234,6 +235,57 @@ async function main() {
       },
     });
     process.stdout.write(`   ${Math.min(i + BLOQUE, data.length)}/${data.length} rangos actualizados\r`);
+  }
+
+  // --- Yokohama Fortalein: stock Express + precio (PL x 1.80) ---
+  console.log('\n📊 Leyendo lista Yokohama Fortalein...');
+  const yokoRes = await sheets.spreadsheets.values.get({ spreadsheetId: YOKO_ID, range: 'A:L' });
+  const yokoRows = yokoRes.data.values || [];
+  // Fila 3 es encabezado: Diseño | Linea | Llanta | Medida | Descripción | ... | CODIGO | PL | Cat20% | PROMO | STOCK
+  const yokoHeader = yokoRows[2];
+  const iCodigo  = yokoHeader ? yokoHeader.findIndex(c => c.includes('CODIGO')) : 7;
+  const iPL      = yokoHeader ? yokoHeader.findIndex(c => c.trim() === 'PL') : 8;
+  const iStockYo = yokoHeader ? yokoHeader.findIndex(c => c.includes('STOCK')) : 11;
+
+  // Mapa: YO+CODIGO -> { stock, precio }
+  const yokoMap = {};
+  for (const row of yokoRows.slice(3)) {
+    const codigo = (row[iCodigo] || '').toString().trim();
+    const plStr  = (row[iPL] || '').toString().replace(/[^\d,\.]/g, '');
+    const stockStr = (row[iStockYo] || '').toString().trim().toUpperCase();
+    if (!codigo) continue;
+    const pl    = parseNum(plStr);
+    const stock = stockStr === 'OK' || parseInt(stockStr) > 0 ? (parseInt(stockStr) || 99) : 0;
+    if (pl > 0) {
+      yokoMap['YO' + codigo] = { stock, precio: Math.round(pl * 1.80) };
+    }
+  }
+  console.log(`   Yokohama con precio: ${Object.keys(yokoMap).length}`);
+
+  // Actualizar en la hoja los productos Yokohama que matchean por CodAlt
+  const updatesYoko = [];
+  for (let i = 1; i < botRows.length; i++) {
+    const row = botRows[i];
+    const codAlt = (row[1] || '').toString().trim();
+    if (!codAlt.startsWith('YO')) continue;
+    const yoko = yokoMap[codAlt];
+    if (!yoko) continue;
+    updatesYoko.push(
+      { range: `Bot WhatsApp!I${i + 1}`, values: [[yoko.stock]] },
+      { range: `Bot WhatsApp!J${i + 1}`, values: [[yoko.precio]] }
+    );
+  }
+
+  if (updatesYoko.length > 0) {
+    for (let i = 0; i < updatesYoko.length; i += 500) {
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: SHEET_ID,
+        requestBody: { valueInputOption: 'RAW', data: updatesYoko.slice(i, i + 500) },
+      });
+    }
+    console.log(`   ✅ ${updatesYoko.length / 2} productos Yokohama actualizados (stock Express + precio)`);
+  } else {
+    console.log('   Sin matches Yokohama');
   }
 
   console.log('\n✅ ¡Actualización completada!');

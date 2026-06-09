@@ -20,7 +20,21 @@ async function getAuth() {
 
 function parseNum(val) {
   if (!val) return 0;
-  return parseFloat(val.toString().replace(',', '.')) || 0;
+  const str = val.toString().trim();
+  // Formato argentino: punto = miles, coma = decimal (ej: 1.234.567,89)
+  // Detectar si tiene coma decimal
+  if (str.includes(',')) {
+    // Sacar puntos de miles, cambiar coma a punto decimal
+    return parseFloat(str.replace(/\./g, '').replace(',', '.')) || 0;
+  }
+  // Sin coma: puede ser entero con puntos de miles (ej: 870.619)
+  // Si tiene un solo punto y más de 3 dígitos después → es decimal
+  const parts = str.split('.');
+  if (parts.length === 2 && parts[1].length <= 2) {
+    return parseFloat(str) || 0; // decimal real
+  }
+  // Si tiene puntos de miles, sacarlos
+  return parseFloat(str.replace(/\./g, '')) || 0;
 }
 
 async function main() {

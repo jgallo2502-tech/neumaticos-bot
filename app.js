@@ -154,6 +154,7 @@ router.get('/ver/:token', async (req, res) => {
     // Generar tabla hoja 1 (precios unitarios)
     let tablaUnitarios = '';
     let tablaResumen = '';
+    console.log('VER TOKEN - datos:', datos ? 'OK' : 'NULL', '| items:', datos?.items?.length, '| cant:', datos?.cant, '| fp12:', datos?.fp12);
     if (datos && datos.items) {
       const cant = datos.cant || 4;
       const fp12 = datos.fp12 !== false;

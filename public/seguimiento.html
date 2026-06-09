@@ -174,13 +174,16 @@
 
       for (const p of lista) {
         const tel = (p.tel || '').replace(/\D/g,'');
-        const telWA = tel ? ('5549' + tel).slice(0,13) : '';
+        let telWA = '';
+        if (tel) {
+          telWA = tel.startsWith('549') ? tel : tel.startsWith('54') ? '549'+tel.slice(2) : '549'+tel;
+        }
         html += '<tr>' +
           `<td>${p.fecha}</td>` +
           `<td style="font-weight:600">${p.numero}</td>` +
           (esAdmin ? `<td>${p.vendedor || '-'}</td>` : '') +
           `<td>${p.cliente}</td>` +
-          `<td>${tel ? `<a class="tel-link" href="https://wa.me/${telWA}" target="_blank">📱 ${p.tel}</a>` : '-'}</td>` +
+          `<td>${telWA ? `<a class="tel-link" href="https://wa.me/${telWA}" target="_blank">📱 ${p.tel}</a>` : (p.tel || '-')}</td>` +
           `<td style="max-width:250px;font-size:12px">${p.productos}</td>` +
           `<td style="font-weight:600">${p.total ? '$' + parseInt(p.total).toLocaleString('es-AR') : '-'}</td>` +
           `<td><select class="estado-select ${badgeClass(p.estado)}" onchange="cambiarEstado(${p.fila}, this)">

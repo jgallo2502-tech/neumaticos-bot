@@ -448,6 +448,25 @@
 
       recalcular();
 
+      // Enriquecer con datos de formas de pago y servicios para el link público
+      setTimeout(() => {
+        const svCant   = parseInt(document.getElementById('sv-cant')?.value || 0);
+        const sbCant   = parseInt(document.getElementById('sb-cant')?.value || 0);
+        const saTipo   = document.getElementById('sa-tipo')?.value || '';
+        const ssPrecio = parseInt(document.getElementById('ss-precio')?.value || 0);
+        const ssPago   = document.getElementById('ss-pago')?.value || '';
+        const sPartes  = [];
+        if (svCant > 0) sPartes.push(svCant + ' válvula' + (svCant > 1 ? 's' : ''));
+        if (sbCant > 0) sPartes.push(sbCant + ' balanceo' + (sbCant > 1 ? 's' : ''));
+        if (saTipo) sPartes.push(saTipo);
+        presupuestoActual.cant  = parseInt(document.getElementById('select-cantidad')?.value || 4);
+        presupuestoActual.fp12  = document.getElementById('fp12')?.checked;
+        presupuestoActual.fp6   = document.getElementById('fp6')?.checked;
+        presupuestoActual.fp3   = document.getElementById('fp3')?.checked;
+        presupuestoActual.fp1   = document.getElementById('fp1')?.checked;
+        presupuestoActual.servicios = (sPartes.length > 0 && ssPrecio > 0) ? { resumen: sPartes.join(', ') + ' — ' + fmt(ssPrecio) + ' aprox. (' + ssPago + ')' } : null;
+      }, 100);
+
       document.getElementById('presupuesto-generado').style.display = 'block';
       document.getElementById('presupuesto-generado').scrollIntoView({ behavior: 'smooth' });
 

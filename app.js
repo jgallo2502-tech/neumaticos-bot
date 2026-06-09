@@ -74,13 +74,14 @@ router.post('/guardar-presupuesto', express.json(), authMiddleware, async (req, 
 
     // Generar token único para URL pública
     const token = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
+    const datos = JSON.stringify(req.body); // guardar datos completos
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: process.env.GOOGLE_SHEET_ID,
-      range: 'Presupuestos!A:I',
+      range: 'Presupuestos!A:J',
       valueInputOption: 'USER_ENTERED',
       requestBody: {
-        values: [[fecha, num, vendedor, cliente, tel, productos, total, 'Enviado', token]],
+        values: [[fecha, num, vendedor, cliente, tel, productos, total, 'Enviado', token, datos]],
       },
     });
     res.json({ ok: true, token });
@@ -105,8 +106,50 @@ router.get('/ver/:token', async (req, res) => {
     const row = rows.find(r => r[8] === token);
     if (!row) return res.status(404).send('<h2>Presupuesto no encontrado</h2>');
 
-    const [fecha, num, vendedor, cliente, tel, productos, total, estado] = row;
-    const productosHtml = productos.split(' | ').map(p => `<li>${p}</li>`).join('');
+    const [fecha, num, vendedor, cliente, tel, productos, total, estado, , datosJSON] = row;
+    let datos = null;
+    try { datos = datosJSON ? JSON.parse(datosJSON) : null; } catch(e) {}
+
+    function fmt(n) { return '$' + Math.round(n).toLocaleString('es-AR'); }
+
+    let productosHtml = '';
+    if (datos && datos.items && datos.items.length > 0) {
+      const cant = datos.cant || 4;
+      const fp12 = datos.fp12 !== false;
+      const fp6  = datos.fp6  !== false;
+      const fp3  = datos.fp3  !== false;
+      const fp1  = datos.fp1  !== false;
+
+      for (const p of datos.items) {
+        const precio = p.precio || 0;
+        const c12 = precio * cant;
+        const c6t = Math.round(precio * 0.90) * cant;
+        const c6c = Math.round(c6t / 6);
+        const c3t = Math.round(precio * 0.85) * cant;
+        const c3c = Math.round(c3t / 3);
+        const c1  = Math.round(precio * 0.80) * cant;
+
+        productosHtml += `<div style="border:1px solid #e8e8e8;border-radius:8px;padding:14px;margin-bottom:12px">
+          <div style="font-weight:700;font-size:15px;margin-bottom:10px">${p.descripcion}</div>
+          <div style="font-size:13px;color:#444;line-height:1.9">
+            <div>Cantidad: <strong>${cant} unidades</strong></div>
+            ${fp12 ? `<div>💳 12 pagos (lista): <strong>${fmt(c12)}</strong></div>` : ''}
+            ${fp6  ? `<div>💳 6 cuotas (-10%): <strong>${fmt(c6t)}</strong> &nbsp;·&nbsp; ${fmt(c6c)}/cuota</div>` : ''}
+            ${fp3  ? `<div>💳 3 cuotas (-15%): <strong>${fmt(c3t)}</strong> &nbsp;·&nbsp; ${fmt(c3c)}/cuota</div>` : ''}
+            ${fp1  ? `<div>💵 Contado (-20%): <strong>${fmt(c1)}</strong></div>` : ''}
+          </div>
+        </div>`;
+      }
+
+      // Servicios
+      if (datos.servicios && datos.servicios.resumen) {
+        productosHtml += `<div style="background:#f0f7ff;padding:12px;border-radius:8px;font-size:13px;margin-bottom:12px">
+          🔧 <strong>Servicios:</strong> ${datos.servicios.resumen}
+        </div>`;
+      }
+    } else {
+      productosHtml = productos.split(' | ').map(p => `<div style="padding:8px 0;border-bottom:1px solid #eee">${p}</div>`).join('');
+    }
 
     res.send(`<!DOCTYPE html>
 <html lang="es">

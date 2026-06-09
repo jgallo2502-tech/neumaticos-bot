@@ -444,18 +444,22 @@
       ['presup-cliente','presup-cliente2'].forEach(id => document.getElementById(id).textContent = cliente);
       document.getElementById('presup-tel').textContent = tel;
 
-      presupuestoActual = { cliente, tel, num, fecha, items: Object.values(seleccionados) };
+      presupuestoActual = { cliente, tel, num, fecha, items: Object.values(seleccionados), linkPublico: null };
 
       recalcular();
 
       document.getElementById('presupuesto-generado').style.display = 'block';
       document.getElementById('presupuesto-generado').scrollIntoView({ behavior: 'smooth' });
 
-      // Guardar en servidor
+      // Guardar en servidor y obtener token para link público
       fetch('/app/guardar-presupuesto', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
         body: JSON.stringify(presupuestoActual)
+      }).then(r => r.json()).then(data => {
+        if (data.token) {
+          presupuestoActual.linkPublico = 'https://neumaticos-bot-production.up.railway.app/app/ver/' + data.token;
+        }
       });
     }
 
@@ -647,7 +651,7 @@
 
     function armarMensajeWA() {
       if (!presupuestoActual) return '';
-      const { cliente, tel, num, items } = presupuestoActual;
+      const { cliente, tel, num, items, linkPublico } = presupuestoActual;
       const cant = parseInt(document.getElementById('select-cantidad')?.value || 4);
       const fp12 = document.getElementById('fp12')?.checked;
       const fp6  = document.getElementById('fp6')?.checked;
@@ -659,10 +663,10 @@
       const ssPrecio = parseInt(document.getElementById('ss-precio')?.value || 0);
       const ssPago  = document.getElementById('ss-pago')?.value || '';
 
-      let msg = `🔴 *Neumáticos Gallo* — Presupuesto ${num}\n`;
-      msg += `👤 ${cliente}`;
-      if (tel && tel !== '-') msg += ` | 📱 ${tel}`;
-      msg += `\n📅 ${new Date().toLocaleDateString('es-AR')}\n\n`;
+      let msg = 'Hola ' + cliente + '! Te enviamos el presupuesto ' + num + ' de Neumaticos Gallo.\n\n';
+
+
+
 
       for (const p of items) {
         const c12 = p.precio * cant;
@@ -671,12 +675,12 @@
         const c3t = Math.round(p.precio * 0.85) * cant;
         const c3c = Math.round(c3t / 3);
         const c1  = Math.round(p.precio * 0.80) * cant;
-        msg += `🔹 *${p.descripcion}*\n`;
-        msg += `   Cantidad: ${cant} unidades\n`;
-        if (fp12) msg += `   💳 12 pagos (lista): ${fmt(c12)}\n`;
-        if (fp6)  msg += `   💳 6 cuotas (-10%): ${fmt(c6t)} (${fmt(c6c)}/cuota)\n`;
-        if (fp3)  msg += `   💳 3 cuotas (-15%): ${fmt(c3t)} (${fmt(c3c)}/cuota)\n`;
-        if (fp1)  msg += `   💵 Contado (-20%): ${fmt(c1)}\n`;
+        msg += p.descripcion + ' x' + cant + '\n';
+
+        if (fp12) msg += '  12 pagos: ' + fmt(c12) + '\n';
+        if (fp6)  msg += '  6 cuotas (-10%): ' + fmt(c6t) + ' (' + fmt(c6c) + '/cuota)\n';
+        if (fp3)  msg += '  3 cuotas (-15%): ' + fmt(c3t) + ' (' + fmt(c3c) + '/cuota)\n';
+        if (fp1)  msg += '  Contado (-20%): ' + fmt(c1) + '\n';
         msg += '\n';
       }
       const sPartes = [];
@@ -684,13 +688,13 @@
       if (sbCant > 0) sPartes.push(sbCant + ' balanceo' + (sbCant > 1 ? 's' : ''));
       if (saTipo) sPartes.push(saTipo);
       if (sPartes.length > 0 && ssPrecio > 0) {
-        msg += `🔧 *Servicios:* ${sPartes.join(', ')} — ${fmt(ssPrecio)} aprox. (${ssPago})\n\n`;
+        msg += 'Servicios: ' + sPartes.join(', ') + ' aprox. ' + fmt(ssPrecio) + ' (' + ssPago + ')\n\n';
       }
-      msg += `✅ Garantía 5 años por defecto de fabricación\n`;
-      msg += `🔧 Colocación sin cargo en nuestros locales\n`;
-      msg += `📍 Victoria: Pres. Perón 3479 | 11-3773-5246\n`;
-      msg += `📍 Nordelta: Agustín García 6318, Tigre | 11-5734-7692\n`;
-      msg += `🌐 tienda.neumaticosgallo.com.ar`;
+      if (linkPublico) { msg += 'Ver presupuesto completo: ' + linkPublico + '\n\n'; }
+      msg += 'Garantia 5 anos. Colocacion sin cargo.\n';
+      msg += 'Victoria: 11-3773-5246 | Nordelta: 11-5734-7692\n';
+      msg += 'tienda.neumaticosgallo.com.ar';
+
       return msg;
     }
 
@@ -732,6 +736,7 @@
   </script>
 </body>
 </html>
+
 
 
 

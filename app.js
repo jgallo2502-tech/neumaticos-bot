@@ -72,18 +72,94 @@ router.post('/guardar-presupuesto', express.json(), authMiddleware, async (req, 
     const productos = items.map(i => i.descripcion).join(' | ');
     const total = items.reduce((s, i) => s + Math.round(i.precio * 0.80) * 4, 0);
 
+    // Generar token único para URL pública
+    const token = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
+
     await sheets.spreadsheets.values.append({
       spreadsheetId: process.env.GOOGLE_SHEET_ID,
-      range: 'Presupuestos!A:H',
+      range: 'Presupuestos!A:I',
       valueInputOption: 'USER_ENTERED',
       requestBody: {
-        values: [[fecha, num, vendedor, cliente, tel, productos, total, 'Enviado']],
+        values: [[fecha, num, vendedor, cliente, tel, productos, total, 'Enviado', token]],
       },
     });
-    res.json({ ok: true });
+    res.json({ ok: true, token });
   } catch (err) {
     console.error('Error guardar presupuesto:', err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Ver presupuesto público (link para cliente) ---
+router.get('/ver/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const result = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Presupuestos!A:I',
+    });
+    const rows = result.data.values || [];
+    const row = rows.find(r => r[8] === token);
+    if (!row) return res.status(404).send('<h2>Presupuesto no encontrado</h2>');
+
+    const [fecha, num, vendedor, cliente, tel, productos, total, estado] = row;
+    const productosHtml = productos.split(' | ').map(p => `<li>${p}</li>`).join('');
+
+    res.send(`<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Presupuesto ${num} — Neumáticos Gallo</title>
+  <style>
+    body { font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #222; }
+    .header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 20px; border-bottom: 3px solid #e63946; padding-bottom: 16px; }
+    .logo { font-size: 22px; font-weight: 700; color: #1a1a2e; }
+    .logo span { color: #e63946; }
+    .num { text-align: right; font-size: 13px; color: #666; }
+    .num strong { font-size: 20px; color: #1a1a2e; display: block; }
+    .cliente { background: #f9f9f9; padding: 14px; border-radius: 8px; margin-bottom: 20px; }
+    .productos { margin-bottom: 20px; }
+    .productos li { padding: 8px 0; border-bottom: 1px solid #eee; font-size: 14px; }
+    .nota { font-size: 12px; color: #666; line-height: 1.6; background: #f0f7ff; padding: 12px; border-radius: 8px; }
+    .sucursales { margin-top: 16px; font-size: 13px; }
+    .sucursales a { color: #e63946; }
+    .btn-print { display: block; width: 100%; padding: 14px; background: #e63946; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 20px; text-align: center; }
+    @media print { .btn-print { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">🔴 Neumáticos <span>Gallo</span></div>
+    <div class="num"><strong>${num}</strong>${fecha}</div>
+  </div>
+  <div class="cliente">
+    <strong>Cliente:</strong> ${cliente}<br>
+    ${tel ? `<strong>WhatsApp:</strong> ${tel}` : ''}
+  </div>
+  <div class="productos">
+    <p style="font-weight:600;margin-bottom:10px">Productos cotizados:</p>
+    <ul style="padding-left:20px">${productosHtml}</ul>
+  </div>
+  <div class="nota">
+    ✅ Garantía 5 años por defecto de fabricación<br>
+    🔧 Colocación sin cargo en nuestros locales. Válvulas, balanceo y alineación se cobran aparte.<br>
+    💳 Precio de lista en 12 pagos | 6 cuotas -10% | 3 cuotas -15% | Contado -20%<br>
+    🌐 Compra online: <a href="https://tienda.neumaticosgallo.com.ar">tienda.neumaticosgallo.com.ar</a>
+  </div>
+  <div class="sucursales">
+    📍 <strong>Victoria:</strong> Pres. Perón 3479 — <a href="https://wa.me/541137735246">11-3773-5246</a><br>
+    📍 <strong>Nordelta:</strong> Agustín García 6318, Tigre — <a href="https://wa.me/541157347692">11-5734-7692</a><br>
+    🕐 Lun-Vie 8 a 19 hs | Sáb 8 a 16 hs
+  </div>
+  <button class="btn-print" onclick="window.print()">🖨️ Guardar / Imprimir PDF</button>
+</body>
+</html>`);
+  } catch (err) {
+    res.status(500).send('<h2>Error al cargar el presupuesto</h2>');
   }
 });
 

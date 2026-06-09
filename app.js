@@ -151,6 +151,70 @@ router.get('/ver/:token', async (req, res) => {
       productosHtml = productos.split(' | ').map(p => `<div style="padding:8px 0;border-bottom:1px solid #eee">${p}</div>`).join('');
     }
 
+    // Generar tabla hoja 1 (precios unitarios)
+    let tablaUnitarios = '';
+    let tablaResumen = '';
+    if (datos && datos.items) {
+      const cant = datos.cant || 4;
+      const fp12 = datos.fp12 !== false;
+      const fp6  = datos.fp6  !== false;
+      const fp3  = datos.fp3  !== false;
+      const fp1  = datos.fp1  !== false;
+
+      // Headers hoja 1
+      let headers1 = '<th style="text-align:left;padding:10px 12px;background:#1a1a2e;color:white;font-size:12px">Producto</th>';
+      if (fp12) headers1 += '<th style="padding:10px 12px;background:#1a1a2e;color:white;font-size:12px">12 pagos<br>(lista)</th>';
+      if (fp6)  headers1 += '<th style="padding:10px 12px;background:#1a1a2e;color:white;font-size:12px">6 cuotas<br>(-10%)<br><small>c/cuota</small></th>';
+      if (fp3)  headers1 += '<th style="padding:10px 12px;background:#1a1a2e;color:white;font-size:12px">3 cuotas<br>(-15%)<br><small>c/cuota</small></th>';
+      if (fp1)  headers1 += '<th style="padding:10px 12px;background:#1a1a2e;color:white;font-size:12px">Contado<br>(-20%)</th>';
+
+      let rows1 = '';
+      for (const p of datos.items) {
+        const precio = p.precio || 0;
+        const c6t = Math.round(precio * 0.90); const c6c = Math.round(c6t / 6);
+        const c3t = Math.round(precio * 0.85); const c3c = Math.round(c3t / 3);
+        const c1  = Math.round(precio * 0.80);
+        rows1 += `<tr>
+          <td style="padding:12px;border-bottom:1px solid #eee;font-size:13px">${p.descripcion}</td>
+          ${fp12 ? `<td style="padding:12px;border-bottom:1px solid #eee;font-size:13px;text-align:right">${fmt(precio)}</td>` : ''}
+          ${fp6  ? `<td style="padding:12px;border-bottom:1px solid #eee;font-size:13px;text-align:right">${fmt(c6t)}<br><small style="color:#666">${fmt(c6c)}/cuota</small></td>` : ''}
+          ${fp3  ? `<td style="padding:12px;border-bottom:1px solid #eee;font-size:13px;text-align:right">${fmt(c3t)}<br><small style="color:#666">${fmt(c3c)}/cuota</small></td>` : ''}
+          ${fp1  ? `<td style="padding:12px;border-bottom:1px solid #eee;font-size:13px;text-align:right;font-weight:700;color:#e63946">${fmt(c1)}</td>` : ''}
+        </tr>`;
+      }
+      tablaUnitarios = `<table style="width:100%;border-collapse:collapse"><thead><tr>${headers1}</tr></thead><tbody>${rows1}</tbody></table>`;
+
+      // Hoja 2 - resumen por producto
+      let headers2 = '<th style="padding:10px 12px;background:#1a1a2e;color:white;font-size:12px">Cant.</th>';
+      if (fp12) headers2 += '<th style="padding:10px 12px;background:#1a1a2e;color:white;font-size:12px">12 pagos (lista)<br><small>total / c/cuota</small></th>';
+      if (fp6)  headers2 += '<th style="padding:10px 12px;background:#1a1a2e;color:white;font-size:12px">6 cuotas (-10%)<br><small>total / c/cuota</small></th>';
+      if (fp3)  headers2 += '<th style="padding:10px 12px;background:#1a1a2e;color:white;font-size:12px">3 cuotas (-15%)<br><small>total / c/cuota</small></th>';
+      if (fp1)  headers2 += '<th style="padding:10px 12px;background:#1a1a2e;color:white;font-size:12px">Contado (-20%)<br><small>total</small></th>';
+
+      for (const p of datos.items) {
+        const precio = p.precio || 0;
+        const r12 = precio * cant;
+        const r6t = Math.round(precio * 0.90) * cant; const r6c = Math.round(r6t / 6);
+        const r3t = Math.round(precio * 0.85) * cant; const r3c = Math.round(r3t / 3);
+        const r1  = Math.round(precio * 0.80) * cant;
+        const row2 = `<tr style="background:#f9f9f9">
+          <td style="padding:12px;font-weight:700;font-size:14px">${cant} unid.</td>
+          ${fp12 ? `<td style="padding:12px;text-align:right;font-size:13px"><strong>${fmt(r12)}</strong><br><small style="color:#666">${fmt(Math.round(r12/12))}/cuota</small></td>` : ''}
+          ${fp6  ? `<td style="padding:12px;text-align:right;font-size:13px"><strong>${fmt(r6t)}</strong><br><small style="color:#666">${fmt(r6c)}/cuota</small></td>` : ''}
+          ${fp3  ? `<td style="padding:12px;text-align:right;font-size:13px"><strong>${fmt(r3t)}</strong><br><small style="color:#666">${fmt(r3c)}/cuota</small></td>` : ''}
+          ${fp1  ? `<td style="padding:12px;text-align:right;font-size:13px;font-weight:700;color:#e63946"><strong>${fmt(r1)}</strong></td>` : ''}
+        </tr>`;
+        tablaResumen += `<div style="margin-bottom:20px">
+          <div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#1a1a2e">◆ ${p.descripcion}</div>
+          <table style="width:100%;border-collapse:collapse"><thead><tr>${headers2}</tr></thead><tbody>${row2}</tbody></table>
+        </div>`;
+      }
+
+      if (datos.servicios && datos.servicios.resumen) {
+        tablaResumen += `<div style="background:#f0f7ff;padding:12px;border-radius:8px;font-size:13px;margin-top:8px">🔧 <strong>Servicios:</strong> ${datos.servicios.resumen}</div>`;
+      }
+    }
+
     res.send(`<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -158,46 +222,58 @@ router.get('/ver/:token', async (req, res) => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Presupuesto ${num} — Neumáticos Gallo</title>
   <style>
-    body { font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #222; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; color: #222; background: #f5f5f5; }
+    .hoja { background: white; max-width: 750px; margin: 20px auto; padding: 28px; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
     .header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 20px; border-bottom: 3px solid #e63946; padding-bottom: 16px; }
-    .logo { font-size: 22px; font-weight: 700; color: #1a1a2e; }
+    .logo { font-size: 20px; font-weight: 700; color: #1a1a2e; }
     .logo span { color: #e63946; }
+    .logo-sub { font-size: 12px; color: #666; margin-top: 4px; line-height: 1.5; }
     .num { text-align: right; font-size: 13px; color: #666; }
-    .num strong { font-size: 20px; color: #1a1a2e; display: block; }
-    .cliente { background: #f9f9f9; padding: 14px; border-radius: 8px; margin-bottom: 20px; }
-    .productos { margin-bottom: 20px; }
-    .productos li { padding: 8px 0; border-bottom: 1px solid #eee; font-size: 14px; }
-    .nota { font-size: 12px; color: #666; line-height: 1.6; background: #f0f7ff; padding: 12px; border-radius: 8px; }
-    .sucursales { margin-top: 16px; font-size: 13px; }
-    .sucursales a { color: #e63946; }
-    .btn-print { display: block; width: 100%; padding: 14px; background: #e63946; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 20px; text-align: center; }
-    @media print { .btn-print { display: none; } }
+    .num strong { font-size: 22px; color: #1a1a2e; display: block; }
+    .cliente { margin-bottom: 16px; font-size: 14px; }
+    .nota { font-size: 12px; color: #555; margin-top: 16px; padding: 10px 14px; background: #f9f9f9; border-radius: 6px; line-height: 1.7; }
+    .btn-print { display: block; width: 100%; padding: 14px; background: #e63946; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; margin: 20px auto; max-width: 750px; }
+    @media print { .btn-print { display: none !important; } body { background: white; } .hoja { box-shadow: none; margin: 0; border-radius: 0; } }
   </style>
 </head>
 <body>
-  <div class="header">
-    <div class="logo">🔴 Neumáticos <span>Gallo</span></div>
-    <div class="num"><strong>${num}</strong>${fecha}</div>
+
+  <!-- HOJA 1: Precios unitarios -->
+  <div class="hoja">
+    <div class="header">
+      <div>
+        <div class="logo">🔴 Neumáticos <span>Gallo</span></div>
+        <div class="logo-sub">Suc. Victoria: Pres. Perón 3479 | <a href="https://wa.me/541137735246" style="color:#e63946">11-3773-5246</a><br>
+        Suc. Nordelta: Agustín García 6318, Tigre | <a href="https://wa.me/541157347692" style="color:#e63946">11-5734-7692</a><br>
+        tienda.neumaticosgallo.com.ar</div>
+      </div>
+      <div class="num"><strong>${num}</strong>${fecha}</div>
+    </div>
+    <div class="cliente"><strong>Cliente:</strong> ${cliente} &nbsp;|&nbsp; <strong>WhatsApp:</strong> ${tel || '-'}</div>
+    <p style="font-size:13px;color:#666;margin-bottom:12px">Precios por unidad</p>
+    ${tablaUnitarios}
+    <div class="nota">
+      ✅ Garantía 5 años por defecto de fabricación &nbsp;|&nbsp; 🔧 Colocación sin cargo &nbsp;|&nbsp; ⚠️ Promos presenciales por compra de 2+
+    </div>
   </div>
-  <div class="cliente">
-    <strong>Cliente:</strong> ${cliente}<br>
-    ${tel ? `<strong>WhatsApp:</strong> ${tel}` : ''}
+
+  <!-- HOJA 2: Resumen de compra -->
+  <div class="hoja" style="margin-top:0">
+    <div class="header">
+      <div>
+        <div class="logo">🔴 Neumáticos <span>Gallo</span> — Resumen de compra</div>
+        <div class="logo-sub">Suc. Victoria: Pres. Perón 3479 | 11-3773-5246<br>Suc. Nordelta: Agustín García 6318, Tigre | 11-5734-7692</div>
+      </div>
+      <div class="num"><strong>${num}</strong>${fecha}</div>
+    </div>
+    <p style="font-size:14px;margin-bottom:16px"><strong>Cliente:</strong> ${cliente}</p>
+    ${tablaResumen}
+    <div class="nota" style="margin-top:16px">
+      🌐 Compra online: tienda.neumaticosgallo.com.ar — envíos sin cargo superando mínimo de compra.
+    </div>
   </div>
-  <div class="productos">
-    <p style="font-weight:600;margin-bottom:10px">Productos cotizados:</p>
-    <ul style="padding-left:20px">${productosHtml}</ul>
-  </div>
-  <div class="nota">
-    ✅ Garantía 5 años por defecto de fabricación<br>
-    🔧 Colocación sin cargo en nuestros locales. Válvulas, balanceo y alineación se cobran aparte.<br>
-    💳 Precio de lista en 12 pagos | 6 cuotas -10% | 3 cuotas -15% | Contado -20%<br>
-    🌐 Compra online: <a href="https://tienda.neumaticosgallo.com.ar">tienda.neumaticosgallo.com.ar</a>
-  </div>
-  <div class="sucursales">
-    📍 <strong>Victoria:</strong> Pres. Perón 3479 — <a href="https://wa.me/541137735246">11-3773-5246</a><br>
-    📍 <strong>Nordelta:</strong> Agustín García 6318, Tigre — <a href="https://wa.me/541157347692">11-5734-7692</a><br>
-    🕐 Lun-Vie 8 a 19 hs | Sáb 8 a 16 hs
-  </div>
+
   <button class="btn-print" onclick="window.print()">🖨️ Guardar / Imprimir PDF</button>
 </body>
 </html>`);

@@ -305,10 +305,13 @@
       </div>
 
       <div class="acciones no-print">
-        <button class="btn-accion btn-imprimir" onclick="imprimir()">🖨️ Imprimir</button>
-        <button class="btn-accion btn-whatsapp" onclick="enviarWhatsApp()">💬 Enviar por WhatsApp</button>
+        <button class="btn-accion btn-imprimir" onclick="imprimir()">🖨️ Imprimir / PDF</button>
+        <button class="btn-accion btn-whatsapp" onclick="abrirWhatsApp()">💬 Abrir WhatsApp</button>
         <button class="btn-accion" style="background:#128c7e;color:white" onclick="copiarWhatsApp()">📋 Copiar mensaje</button>
         <button class="btn-accion btn-nuevo" onclick="nuevoPresupuesto()">+ Nuevo</button>
+      </div>
+      <div class="no-print" style="margin-top:10px;padding:10px 16px;background:#fff3cd;border-radius:8px;font-size:12px;color:#856404">
+        💡 <strong>Tip:</strong> Hacé clic en <em>"Imprimir / PDF"</em> → guardá como PDF → luego en <em>"Abrir WhatsApp"</em> para adjuntar el PDF y enviar el mensaje.
       </div>
     </div>
 
@@ -642,24 +645,76 @@
       }
     }
 
-    async function enviarWhatsApp() {
-      if (!presupuestoActual) return;
-      const btn = event.target;
-      btn.textContent = '⏳ Enviando...';
-      btn.disabled = true;
+    function armarMensajeWA() {
+      if (!presupuestoActual) return '';
+      const { cliente, tel, num, items } = presupuestoActual;
+      const cant = parseInt(document.getElementById('select-cantidad')?.value || 4);
+      const fp12 = document.getElementById('fp12')?.checked;
+      const fp6  = document.getElementById('fp6')?.checked;
+      const fp3  = document.getElementById('fp3')?.checked;
+      const fp1  = document.getElementById('fp1')?.checked;
+      const svCant  = parseInt(document.getElementById('sv-cant')?.value || 0);
+      const sbCant  = parseInt(document.getElementById('sb-cant')?.value || 0);
+      const saTipo  = document.getElementById('sa-tipo')?.value || '';
+      const ssPrecio = parseInt(document.getElementById('ss-precio')?.value || 0);
+      const ssPago  = document.getElementById('ss-pago')?.value || '';
 
-      const res = await fetch('/app/enviar-presupuesto', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-        body: JSON.stringify(presupuestoActual)
-      });
+      let msg = `🔴 *Neumáticos Gallo* — Presupuesto ${num}\n`;
+      msg += `👤 ${cliente}`;
+      if (tel && tel !== '-') msg += ` | 📱 ${tel}`;
+      msg += `\n📅 ${new Date().toLocaleDateString('es-AR')}\n\n`;
 
-      if (res.ok) {
-        btn.textContent = '✅ Enviado!';
-      } else {
-        btn.textContent = '❌ Error al enviar';
+      for (const p of items) {
+        const c12 = p.precio * cant;
+        const c6t = Math.round(p.precio * 0.90) * cant;
+        const c6c = Math.round(c6t / 6);
+        const c3t = Math.round(p.precio * 0.85) * cant;
+        const c3c = Math.round(c3t / 3);
+        const c1  = Math.round(p.precio * 0.80) * cant;
+        msg += `🔹 *${p.descripcion}*\n`;
+        msg += `   Cantidad: ${cant} unidades\n`;
+        if (fp12) msg += `   💳 12 pagos (lista): ${fmt(c12)}\n`;
+        if (fp6)  msg += `   💳 6 cuotas (-10%): ${fmt(c6t)} (${fmt(c6c)}/cuota)\n`;
+        if (fp3)  msg += `   💳 3 cuotas (-15%): ${fmt(c3t)} (${fmt(c3c)}/cuota)\n`;
+        if (fp1)  msg += `   💵 Contado (-20%): ${fmt(c1)}\n`;
+        msg += '\n';
       }
-      setTimeout(() => { btn.textContent = '💬 Enviar por WhatsApp'; btn.disabled = false; }, 3000);
+      const sPartes = [];
+      if (svCant > 0) sPartes.push(svCant + ' válvula' + (svCant > 1 ? 's' : ''));
+      if (sbCant > 0) sPartes.push(sbCant + ' balanceo' + (sbCant > 1 ? 's' : ''));
+      if (saTipo) sPartes.push(saTipo);
+      if (sPartes.length > 0 && ssPrecio > 0) {
+        msg += `🔧 *Servicios:* ${sPartes.join(', ')} — ${fmt(ssPrecio)} aprox. (${ssPago})\n\n`;
+      }
+      msg += `✅ Garantía 5 años por defecto de fabricación\n`;
+      msg += `🔧 Colocación sin cargo en nuestros locales\n`;
+      msg += `📍 Victoria: Pres. Perón 3479 | 11-3773-5246\n`;
+      msg += `📍 Nordelta: Agustín García 6318, Tigre | 11-5734-7692\n`;
+      msg += `🌐 tienda.neumaticosgallo.com.ar`;
+      return msg;
+    }
+
+    function abrirWhatsApp() {
+      if (!presupuestoActual) return;
+      const tel = (presupuestoActual.tel || '').replace(/\D/g, '');
+      const msg = armarMensajeWA();
+
+      if (tel) {
+        // Número argentino con prefijo
+        let telWA = tel;
+        if (!telWA.startsWith('549')) {
+          telWA = telWA.startsWith('54') ? '549' + telWA.slice(2) : '549' + telWA;
+        }
+        window.open('https://wa.me/' + telWA + '?text=' + encodeURIComponent(msg), '_blank');
+      } else {
+        // Sin número: abrir WhatsApp sin destinatario
+        window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+      }
+    }
+
+    async function enviarWhatsApp() {
+      // Mantener por compatibilidad, redirige a abrirWhatsApp
+      abrirWhatsApp();
     }
 
     function nuevoPresupuesto() {

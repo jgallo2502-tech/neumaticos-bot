@@ -189,7 +189,7 @@
             <option ${p.estado==='Vendido'?'selected':''}>Vendido</option>
             <option ${p.estado==='Perdido'?'selected':''}>Perdido</option>
           </select></td>` +
-          `<td>${tel ? `<button class="btn-wa" onclick="window.open('https://wa.me/${telWA}','_blank')">💬</button>` : ''}</td>` +
+          `<td>${tel ? `<button class="btn-wa" onclick="seguimiento('${telWA}','${p.cliente}','${p.numero}','${p.productos.replace(/'/g,'')}')">💬</button>` : ''}</td>` +
           '</tr>';
       }
 
@@ -214,6 +214,11 @@
         const estado = document.getElementById('filtro-estado').value;
         return !estado || p.estado === estado;
       }));
+    }
+
+    function seguimiento(telWA, cliente, numero, productos) {
+      const msg = `Hola ${cliente}! 👋\n\nTe escribimos desde *Neumáticos Gallo* para hacer seguimiento del presupuesto *${numero}*.\n\n${productos ? '🔹 ' + productos + '\n\n' : ''}¿Pudiste revisar el presupuesto? ¿Tenés alguna consulta? 😊\n\n📍 Victoria: 11-3773-5246 | Nordelta: 11-5734-7692`;
+      window.open('https://wa.me/' + telWA + '?text=' + encodeURIComponent(msg), '_blank');
     }
 
     function logout() { localStorage.clear(); window.location.href = '/app/login.html'; }

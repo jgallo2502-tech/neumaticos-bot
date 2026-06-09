@@ -142,6 +142,61 @@ router.post('/enviar-presupuesto', express.json(), authMiddleware, async (req, r
   }
 });
 
+// --- Seguimiento: leer presupuestos ---
+router.get('/seguimiento/presupuestos', authMiddleware, async (req, res) => {
+  try {
+    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const result = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Presupuestos!A:H',
+    });
+    const rows = result.data.values || [];
+    const esAdmin = req.user.rol === 'admin';
+    const vendedorActual = req.user.nombre;
+
+    const presupuestos = rows.slice(1)
+      .map((row, idx) => ({
+        fila: idx + 2, // fila en sheet (1-indexed + header)
+        fecha:     row[0] || '',
+        numero:    row[1] || '',
+        vendedor:  row[2] || '',
+        cliente:   row[3] || '',
+        tel:       row[4] || '',
+        productos: row[5] || '',
+        total:     row[6] || '',
+        estado:    row[7] || 'Enviado',
+      }))
+      .filter(p => esAdmin || p.vendedor === vendedorActual)
+      .reverse(); // más recientes primero
+
+    res.json({ presupuestos, esAdmin });
+  } catch (err) {
+    console.error('Error seguimiento:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Seguimiento: actualizar estado ---
+router.post('/seguimiento/actualizar', express.json(), authMiddleware, async (req, res) => {
+  try {
+    const { fila, estado } = req.body;
+    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: `Presupuestos!H${fila}`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [[estado]] },
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- Broadcast: listar plantillas aprobadas ---
 router.get('/broadcast/plantillas', authMiddleware, async (req, res) => {
   try {

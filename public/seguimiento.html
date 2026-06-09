@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mis Presupuestos — Neumáticos Gallo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #f5f5f5; color: #222; }
+    header { background: #1a1a2e; color: white; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; }
+    header h1 { font-size: 18px; }
+    .nav { display: flex; align-items: center; gap: 12px; }
+    .nav a { color: white; font-size: 13px; opacity: 0.8; text-decoration: none; }
+    .logout { background: none; border: 1px solid rgba(255,255,255,0.3); color: white; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .container { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+    .card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    h2 { font-size: 16px; font-weight: 600; color: #1a1a2e; margin-bottom: 16px; }
+
+    /* Filtros */
+    .filtros { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
+    .filtros input, .filtros select { padding: 8px 12px; border: 2px solid #e8e8e8; border-radius: 8px; font-size: 14px; }
+    .filtros input:focus, .filtros select:focus { outline: none; border-color: #e63946; }
+    .filtros input { flex: 1; min-width: 200px; }
+
+    /* Stats */
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+    @media(max-width: 600px) { .stats { grid-template-columns: repeat(2,1fr); } }
+    .stat { background: white; border-radius: 10px; padding: 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .stat-num { font-size: 28px; font-weight: 700; }
+    .stat-label { font-size: 12px; color: #666; margin-top: 4px; }
+    .stat.enviado .stat-num { color: #0d6efd; }
+    .stat.seguimiento .stat-num { color: #fd7e14; }
+    .stat.vendido .stat-num { color: #198754; }
+    .stat.perdido .stat-num { color: #dc3545; }
+
+    /* Tabla */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { background: #1a1a2e; color: white; padding: 10px 12px; text-align: left; font-size: 12px; white-space: nowrap; }
+    td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+    tr:hover td { background: #fafafa; }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+    .badge-enviado { background: #dbeafe; color: #1d4ed8; }
+    .badge-seguimiento { background: #fed7aa; color: #c2410c; }
+    .badge-vendido { background: #dcfce7; color: #166534; }
+    .badge-perdido { background: #fee2e2; color: #991b1b; }
+    .badge-otro { background: #e5e7eb; color: #374151; }
+
+    select.estado-select { border: none; background: transparent; font-size: 12px; font-weight: 600; cursor: pointer; padding: 3px 6px; border-radius: 4px; }
+    .btn-wa { background: #25d366; color: white; border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+    .btn-wa:hover { background: #1da851; }
+    .loading { text-align: center; padding: 40px; color: #888; }
+    .empty { text-align: center; padding: 40px; color: #888; }
+    .tel-link { color: #1a1a2e; text-decoration: none; font-weight: 500; }
+    .tel-link:hover { color: #e63946; }
+    .admin-badge { background: #e63946; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin-left: 8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>📋 Mis Presupuestos <span id="admin-label"></span></h1>
+    <div class="nav">
+      <a href="/app/presupuesto.html">+ Nuevo</a>
+      <button class="logout" onclick="logout()">Salir</button>
+    </div>
+  </header>
+
+  <div class="container">
+
+    <div class="stats">
+      <div class="stat enviado"><div class="stat-num" id="s-enviado">-</div><div class="stat-label">Enviados</div></div>
+      <div class="stat seguimiento"><div class="stat-num" id="s-seguimiento">-</div><div class="stat-label">En seguimiento</div></div>
+      <div class="stat vendido"><div class="stat-num" id="s-vendido">-</div><div class="stat-label">Vendidos</div></div>
+      <div class="stat perdido"><div class="stat-num" id="s-perdido">-</div><div class="stat-label">Perdidos</div></div>
+    </div>
+
+    <div class="card">
+      <div class="filtros">
+        <input type="text" id="buscar" placeholder="🔍 Buscar por cliente, producto o N°..." oninput="filtrar()">
+        <select id="filtro-estado" onchange="filtrar()">
+          <option value="">Todos los estados</option>
+          <option value="Enviado">Enviados</option>
+          <option value="En seguimiento">En seguimiento</option>
+          <option value="Vendido">Vendidos</option>
+          <option value="Perdido">Perdidos</option>
+        </select>
+        <select id="filtro-vendedor" onchange="filtrar()" style="display:none">
+          <option value="">Todos los vendedores</option>
+        </select>
+      </div>
+
+      <div id="tabla-container"><div class="loading">⏳ Cargando...</div></div>
+    </div>
+  </div>
+
+  <script>
+    const token = localStorage.getItem('token');
+    const vendedor = localStorage.getItem('vendedor');
+    if (!token) window.location.href = '/app/login.html';
+
+    let todosLosPresupuestos = [];
+    let esAdmin = false;
+
+    async function cargar() {
+      const res = await fetch('/app/seguimiento/presupuestos', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if (res.status === 401) { window.location.href = '/app/login.html'; return; }
+      const data = await res.json();
+      todosLosPresupuestos = data.presupuestos;
+      esAdmin = data.esAdmin;
+
+      if (esAdmin) {
+        document.getElementById('admin-label').innerHTML = '<span class="admin-badge">ADMIN — Todos los vendedores</span>';
+        document.getElementById('filtro-vendedor').style.display = 'block';
+        // Poblar filtro de vendedores
+        const vendedores = [...new Set(todosLosPresupuestos.map(p => p.vendedor).filter(Boolean))];
+        const sel = document.getElementById('filtro-vendedor');
+        vendedores.forEach(v => {
+          const opt = document.createElement('option');
+          opt.value = v; opt.textContent = v;
+          sel.appendChild(opt);
+        });
+      }
+
+      filtrar();
+    }
+
+    function filtrar() {
+      const busqueda = document.getElementById('buscar').value.toLowerCase();
+      const estado   = document.getElementById('filtro-estado').value;
+      const vendedorF = document.getElementById('filtro-vendedor').value;
+
+      const filtrados = todosLosPresupuestos.filter(p => {
+        if (estado && p.estado !== estado) return false;
+        if (vendedorF && p.vendedor !== vendedorF) return false;
+        if (busqueda) {
+          const texto = [p.numero, p.cliente, p.tel, p.productos, p.vendedor].join(' ').toLowerCase();
+          if (!texto.includes(busqueda)) return false;
+        }
+        return true;
+      });
+
+      actualizarStats(filtrados);
+      renderTabla(filtrados);
+    }
+
+    function actualizarStats(lista) {
+      const cuenta = (estado) => lista.filter(p => p.estado === estado).length;
+      document.getElementById('s-enviado').textContent = cuenta('Enviado');
+      document.getElementById('s-seguimiento').textContent = cuenta('En seguimiento');
+      document.getElementById('s-vendido').textContent = cuenta('Vendido');
+      document.getElementById('s-perdido').textContent = cuenta('Perdido');
+    }
+
+    function badgeClass(estado) {
+      if (estado === 'Enviado') return 'badge-enviado';
+      if (estado === 'En seguimiento') return 'badge-seguimiento';
+      if (estado === 'Vendido') return 'badge-vendido';
+      if (estado === 'Perdido') return 'badge-perdido';
+      return 'badge-otro';
+    }
+
+    function renderTabla(lista) {
+      if (lista.length === 0) {
+        document.getElementById('tabla-container').innerHTML = '<div class="empty">No hay presupuestos que coincidan.</div>';
+        return;
+      }
+
+      let html = '<table><thead><tr>' +
+        '<th>Fecha</th><th>N°</th>' +
+        (esAdmin ? '<th>Vendedor</th>' : '') +
+        '<th>Cliente</th><th>WhatsApp</th><th>Productos</th><th>Total</th><th>Estado</th><th>Acción</th>' +
+        '</tr></thead><tbody>';
+
+      for (const p of lista) {
+        const tel = (p.tel || '').replace(/\D/g,'');
+        const telWA = tel ? ('5549' + tel).slice(0,13) : '';
+        html += '<tr>' +
+          `<td>${p.fecha}</td>` +
+          `<td style="font-weight:600">${p.numero}</td>` +
+          (esAdmin ? `<td>${p.vendedor || '-'}</td>` : '') +
+          `<td>${p.cliente}</td>` +
+          `<td>${tel ? `<a class="tel-link" href="https://wa.me/${telWA}" target="_blank">📱 ${p.tel}</a>` : '-'}</td>` +
+          `<td style="max-width:250px;font-size:12px">${p.productos}</td>` +
+          `<td style="font-weight:600">${p.total ? '$' + parseInt(p.total).toLocaleString('es-AR') : '-'}</td>` +
+          `<td><select class="estado-select ${badgeClass(p.estado)}" onchange="cambiarEstado(${p.fila}, this)">
+            <option ${p.estado==='Enviado'?'selected':''}>Enviado</option>
+            <option ${p.estado==='En seguimiento'?'selected':''}>En seguimiento</option>
+            <option ${p.estado==='Vendido'?'selected':''}>Vendido</option>
+            <option ${p.estado==='Perdido'?'selected':''}>Perdido</option>
+          </select></td>` +
+          `<td>${tel ? `<button class="btn-wa" onclick="window.open('https://wa.me/${telWA}','_blank')">💬</button>` : ''}</td>` +
+          '</tr>';
+      }
+
+      html += '</tbody></table>';
+      document.getElementById('tabla-container').innerHTML = html;
+    }
+
+    async function cambiarEstado(fila, sel) {
+      const nuevoEstado = sel.value;
+      sel.className = 'estado-select ' + badgeClass(nuevoEstado);
+
+      await fetch('/app/seguimiento/actualizar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ fila, estado: nuevoEstado })
+      });
+
+      // Actualizar en memoria
+      const p = todosLosPresupuestos.find(x => x.fila === fila);
+      if (p) p.estado = nuevoEstado;
+      actualizarStats(todosLosPresupuestos.filter(p => {
+        const estado = document.getElementById('filtro-estado').value;
+        return !estado || p.estado === estado;
+      }));
+    }
+
+    function logout() { localStorage.clear(); window.location.href = '/app/login.html'; }
+
+    cargar();
+  </script>
+</body>
+</html>

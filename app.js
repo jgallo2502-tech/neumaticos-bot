@@ -75,6 +75,7 @@ router.post('/guardar-presupuesto', express.json(), authMiddleware, async (req, 
     // Generar token único para URL pública
     const token = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
     const datos = JSON.stringify(req.body); // guardar datos completos
+    console.log('GUARDAR - items:', req.body?.items?.length, '| cant:', req.body?.cant, '| datos length:', datos.length, '| token:', token);
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: process.env.GOOGLE_SHEET_ID,

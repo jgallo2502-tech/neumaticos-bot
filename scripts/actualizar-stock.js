@@ -89,24 +89,40 @@ async function main() {
 
   console.log(`   Artículos Express: ${Object.keys(expressMap).length}`);
 
-  // --- Leer lista de precios de referencia Michelin (precio con IVA / 0.8) ---
-  console.log('📊 Leyendo lista de precios de referencia...');
-  const listRes = await sheets.spreadsheets.values.get({ spreadsheetId: LISTA_REF_ID, range: 'A:L' });
-  const listRows = listRes.data.values || [];
-  // Fila 4 es el encabezado: Sección | Serie | Llanta | CAI | Dimensión | Gama | ... | Precio con IVA
-  const listHeader = listRows[3]; // índice 3 = fila 4
-  const iCAIList = listHeader ? listHeader.indexOf('CAI') : 3;
-  const iPrecioIVA = listHeader ? listHeader.indexOf('Precio Referencia con IVA') : 10;
+  // --- Leer todas las pestañas de precios de referencia ---
+  console.log('📊 Leyendo listas de precios de referencia...');
+  const TABS_PRECIOS = [
+    'Turismo y Camioneta Michelin',
+    'Camioneta BFG',
+    'BFGoodrich Auto',
+    'Michelin R14',
+    'Invierno Michelin',
+  ];
 
-  const listaPreciosCAI = {}; // CAI -> precio lista (con IVA / 0.8, sin decimales)
-  for (const row of listRows.slice(4)) {
-    const cai   = (row[iCAIList] || '').toString().trim();
-    const pIVA  = parseNum((row[iPrecioIVA] || '').toString().replace(/[^\d,\.]/g, ''));
-    if (cai && pIVA > 0) {
-      listaPreciosCAI[cai] = Math.round(pIVA / 0.8);
+  const listaPreciosCAI = {};
+  for (const tab of TABS_PRECIOS) {
+    const listRes = await sheets.spreadsheets.values.get({ spreadsheetId: LISTA_REF_ID, range: `${tab}!A:L` });
+    const listRows = listRes.data.values || [];
+    // Buscar fila de encabezado (contiene 'CAI')
+    let headerIdx = listRows.findIndex(r => r.some(c => (c||'').toString().trim() === 'CAI'));
+    if (headerIdx === -1) continue;
+    const header = listRows[headerIdx];
+    const iCAIList = header.findIndex(c => (c||'').toString().trim() === 'CAI');
+    const iPrecioIVA = header.findIndex(c => (c||'').toString().includes('con IVA'));
+    if (iCAIList === -1 || iPrecioIVA === -1) continue;
+
+    let count = 0;
+    for (const row of listRows.slice(headerIdx + 1)) {
+      const cai  = (row[iCAIList] || '').toString().trim();
+      const pIVA = parseNum((row[iPrecioIVA] || '').toString().replace(/[^\d,\.]/g, ''));
+      if (cai && pIVA > 0 && !listaPreciosCAI[cai]) {
+        listaPreciosCAI[cai] = Math.round(pIVA / 0.8);
+        count++;
+      }
     }
+    console.log(`   ${tab}: ${count} precios`);
   }
-  console.log(`   Artículos con precio referencia: ${Object.keys(listaPreciosCAI).length}`);
+  console.log(`   Total con precio referencia: ${Object.keys(listaPreciosCAI).length}`);
 
   // --- Leer hoja principal Bot WhatsApp ---
   console.log('📊 Leyendo hoja Bot WhatsApp...');
@@ -208,6 +224,112 @@ async function main() {
 
   console.log('\n✅ ¡Actualización completada!');
   console.log(`   Victoria/Nordelta/Express/Precio actualizados: ${actualizados} filas`);
+
+  // --- Actualizar precios de productos Celsur (sin CodArt) usando lista de referencia ---
+  console.log('\n💰 Actualizando precios de productos Celsur...');
+  const updatesCelsur = [];
+  for (let i = 1; i < botRows.length; i++) {
+    const row = botRows[i];
+    const codArt = (row[0] || '').toString().trim();
+    const codAlt = (row[1] || '').toString().trim();
+    const pActual = parseInt((row[9] || '0').toString().replace(/\D/g, '')) || 0;
+    if (codArt) continue; // tiene CodArt, ya fue procesado arriba
+    if (!codAlt) continue;
+    const nuevoPrecio = listaPreciosCAI[codAlt];
+    if (!nuevoPrecio || nuevoPrecio === pActual) continue;
+    updatesCelsur.push({ range: `Bot WhatsApp!J${i + 1}`, values: [[nuevoPrecio]] });
+  }
+
+  if (updatesCelsur.length > 0) {
+    for (let i = 0; i < updatesCelsur.length; i += 500) {
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: SHEET_ID,
+        requestBody: { valueInputOption: 'RAW', data: updatesCelsur.slice(i, i + 500) },
+      });
+    }
+    console.log(`   ✅ ${updatesCelsur.length} precios Celsur actualizados`);
+  } else {
+    console.log('   Sin cambios en precios Celsur');
+  }
+
+  // --- Agregar productos nuevos de Celsur (Michelin y BFGoodrich) que no están en la hoja ---
+  console.log('\n🔍 Buscando productos nuevos de Celsur...');
+
+  // CodAlternativo ya existentes en la hoja
+  const codAltsExistentes = new Set(botRows.slice(1).map(r => (r[1] || '').toString().trim()).filter(Boolean));
+
+  // Función para normalizar medida desde descripción
+  function extraerMedidaDesc(desc) {
+    const m = desc.match(/(\d{3})[\/\s](\d{2,3})\s*[rR]\s*(\d{2})/);
+    if (m) return `${m[1]}/${m[2]}R${m[3]}`;
+    const m2 = desc.match(/LT(\d{3})[\/\s](\d{2,3})\s*[rR]\s*(\d{2})/);
+    if (m2) return `${m2[1]}/${m2[2]}R${m2[3]}`;
+    const m3 = desc.match(/(\d{2,3})[Xx](\d{2,3}\.\d{1,2})[rR](\d{2})/);
+    if (m3) return `${m3[1]}X${m3[2]}R${m3[3]}`;
+    return '';
+  }
+
+  const nuevasFilas = [];
+  const MARCAS_CELSUR = ['MICHELIN', 'BFGOODRICH'];
+
+  // Términos agrícolas/industriales a excluir
+  const EXCLUIR = ['AGRIBIB','MEGAXBIB','CEREXBIB','SPRAYBIB','MACHXBIB','CARGOXBIB','AXIOBIB','ULTRAFLEX','TRACBIB','BIBLOAD','POWER CL','AGIL'];
+
+  for (const row of expRows.slice(1)) {
+    const cai   = (row[iCAI] || '').toString().trim();
+    const desc  = (row[iDesc] || '').toString().trim();
+    const marca = (row[iMarca] || '').toString().trim().toUpperCase();
+    const familia = (row[4] || '').toString().trim().toUpperCase();
+    const llanta = parseInt((row[5] || '0').toString().trim()) || 0;
+    const stock = parseNum(row[iStock]);
+
+    if (!MARCAS_CELSUR.includes(marca)) continue;
+    if (!familia.includes('NEUMATICO')) continue;
+    if (!cai || stock <= 0) continue;
+    if (codAltsExistentes.has(cai)) continue;
+
+    // Solo rodados de auto/camioneta (13 a 24)
+    if (llanta < 13 || llanta > 24) continue;
+
+    // Excluir agrícolas/industriales por nombre
+    if (EXCLUIR.some(ex => desc.toUpperCase().includes(ex))) continue;
+
+    const medida = extraerMedidaDesc(desc);
+    if (!medida) continue; // si no pudo parsear la medida, saltar
+
+    const precio = listaPreciosCAI[cai] || 0;
+    const descripcionFull = `N. ${marca} ${desc}`;
+
+    nuevasFilas.push([
+      '',           // A: CodArt
+      cai,          // B: CodAlt (CAI)
+      descripcionFull, // C: Descripcion
+      marca,        // D: Marca
+      '',           // E: Modelo
+      medida,       // F: Medida
+      0,            // G: Victoria
+      0,            // H: Nordelta
+      stock,        // I: Express
+      precio,       // J: Precio
+      '',           // K: Promo
+    ]);
+  }
+
+  if (nuevasFilas.length === 0) {
+    console.log('   No hay productos nuevos para agregar.');
+  } else {
+    console.log(`   Agregando ${nuevasFilas.length} productos nuevos...`);
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SHEET_ID,
+      range: 'Bot WhatsApp!A:K',
+      valueInputOption: 'RAW',
+      requestBody: { values: nuevasFilas },
+    });
+    console.log(`✅ ${nuevasFilas.length} productos nuevos agregados a la hoja.`);
+    for (const f of nuevasFilas) {
+      console.log(`   + ${f[2]} | Medida: ${f[5]} | Stock: ${f[8]} | Precio: ${f[9]}`);
+    }
+  }
 }
 
 main().catch(console.error);

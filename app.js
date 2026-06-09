@@ -101,7 +101,7 @@ router.get('/ver/:token', async (req, res) => {
     const sheets = google.sheets({ version: 'v4', auth });
     const result = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GOOGLE_SHEET_ID,
-      range: 'Presupuestos!A:I',
+      range: 'Presupuestos!A:J',
     });
     const rows = result.data.values || [];
     const row = rows.find(r => r[8] === token);

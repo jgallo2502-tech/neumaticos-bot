@@ -244,14 +244,15 @@ async function main() {
   // Fila 3 es encabezado: Diseño | Linea | Llanta | Medida | Descripción | ... | CODIGO | PL | Cat20% | PROMO | STOCK
   const yokoHeader = yokoRows[2];
   const iCodigo  = yokoHeader ? yokoHeader.findIndex(c => c.includes('CODIGO')) : 7;
-  const iPL      = yokoHeader ? yokoHeader.findIndex(c => c.trim() === 'PL') : 8;
   const iStockYo = yokoHeader ? yokoHeader.findIndex(c => c.includes('STOCK')) : 11;
+  // Usar el precio más bajo: columna justo antes de STOCK
+  const iPrecioYo = iStockYo > 0 ? iStockYo - 1 : 10;
 
   // Mapa: YO+CODIGO -> { stock, precio }
   const yokoMap = {};
   for (const row of yokoRows.slice(3)) {
     const codigo = (row[iCodigo] || '').toString().trim();
-    const plStr  = (row[iPL] || '').toString().replace(/[^\d,\.]/g, '');
+    const plStr  = (row[iPrecioYo] || '').toString().replace(/[^\d,\.]/g, '');
     const stockStr = (row[iStockYo] || '').toString().trim().toUpperCase();
     if (!codigo) continue;
     const pl    = parseNum(plStr);
@@ -260,7 +261,7 @@ async function main() {
       yokoMap['YO' + codigo] = { stock, precio: Math.round(pl * 1.80) };
     }
   }
-  console.log(`   Yokohama con precio: ${Object.keys(yokoMap).length}`);
+  console.log(`   Yokohama con precio: ${Object.keys(yokoMap).length} (usando columna precio más bajo x1.80)`);
 
   // Actualizar en la hoja los productos Yokohama que matchean por CodAlt
   const updatesYoko = [];
@@ -302,7 +303,7 @@ async function main() {
     const desc     = (row[4]||'').toString().trim();
     const medida   = (row[3]||'').toString().trim();
     const llanta   = parseInt((row[2]||'0').toString()) || 0;
-    const plStr    = (row[iPL]||'').toString().replace(/[^\d,\.]/g,'');
+    const plStr    = (row[iPrecioYo]||'').toString().replace(/[^\d,\.]/g,'');
     const stockStr = (row[iStockYo]||'').toString().trim().toUpperCase();
     if (!codigo || !desc) continue;
     if (llanta < 13 || llanta > 24) continue; // solo auto/camioneta

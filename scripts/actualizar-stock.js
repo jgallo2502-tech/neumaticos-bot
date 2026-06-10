@@ -293,6 +293,43 @@ async function main() {
     console.log('   Sin matches Yokohama');
   }
 
+  // Agregar productos Yokohama nuevos (no están en la hoja)
+  const codAltsExistentesYoko = new Set(botRows.slice(1).map(r => (r[1]||'').toString().trim()));
+  const nuevasYoko = [];
+  for (const row of yokoRows.slice(3)) {
+    const codigo   = (row[iCodigo]||'').toString().trim();
+    const desc     = (row[4]||'').toString().trim();
+    const medida   = (row[3]||'').toString().trim();
+    const llanta   = parseInt((row[2]||'0').toString()) || 0;
+    const plStr    = (row[iPL]||'').toString().replace(/[^\d,\.]/g,'');
+    const stockStr = (row[iStockYo]||'').toString().trim().toUpperCase();
+    if (!codigo || !desc) continue;
+    if (llanta < 13 || llanta > 24) continue; // solo auto/camioneta
+    const pl    = parseNum(plStr);
+    const stock = stockStr === 'OK' || parseInt(stockStr) > 0 ? (parseInt(stockStr) || 99) : 0;
+    if (pl === 0 || stock === 0) continue;
+    const codAlt = 'YO' + codigo;
+    if (codAltsExistentesYoko.has(codAlt)) continue; // ya existe
+
+    const precio  = Math.round(pl * 1.80);
+    const medNorm = extraerMedidaDesc(medida.replace(/\s/g,''));
+    if (!medNorm) continue;
+    const descFull = 'N. YOKOHAMA ' + desc.replace('YOKOHAMA','').trim();
+    nuevasYoko.push(['', codAlt, descFull, 'YOKOHAMA', '', medNorm, 0, 0, stock, precio, '']);
+  }
+
+  if (nuevasYoko.length > 0) {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SHEET_ID,
+      range: 'Bot WhatsApp!A:K',
+      valueInputOption: 'RAW',
+      requestBody: { values: nuevasYoko }
+    });
+    console.log(`   ✅ ${nuevasYoko.length} productos Yokohama nuevos agregados`);
+  } else {
+    console.log('   Sin productos Yokohama nuevos');
+  }
+
   console.log('\n✅ ¡Actualización completada!');
   console.log(`   Victoria/Nordelta/Express/Precio actualizados: ${actualizados} filas`);
 

@@ -266,14 +266,15 @@ async function main() {
   const updatesYoko = [];
   for (let i = 1; i < botRows.length; i++) {
     const row = botRows[i];
+    const codArt = (row[0] || '').toString().trim();
     const codAlt = (row[1] || '').toString().trim();
     if (!codAlt.startsWith('YO')) continue;
     const yoko = yokoMap[codAlt];
     if (!yoko) continue;
 
-    const precioActual = parseInt((row[9] || '0').toString().replace(/\D/g, '')) || 0;
-    // Solo actualizar precio si el producto NO tiene precio propio (inventario)
-    const nuevoPrecio = precioActual > 0 ? precioActual : yoko.precio;
+    // Precio del inventario propio (actualizado en este run) tiene prioridad
+    const precioInventario = codArt && stockMap[codArt] ? Math.round(stockMap[codArt].precio) : 0;
+    const nuevoPrecio = precioInventario > 0 ? precioInventario : yoko.precio;
 
     updatesYoko.push(
       { range: `Bot WhatsApp!I${i + 1}`, values: [[yoko.stock]] },

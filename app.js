@@ -423,7 +423,8 @@ async function generarReporteDiario() {
 
     // Fecha de hoy en formato dd/mm/yyyy
     const ahora = new Date(Date.now() - 3 * 60 * 60 * 1000);
-    const hoy = ahora.toISOString().slice(0,10).split('-').reverse().join('/');
+    // Formato d/m/yyyy sin ceros adelante (como guarda la app)
+    const hoy = `${ahora.getUTCDate()}/${ahora.getUTCMonth()+1}/${ahora.getUTCFullYear()}`;
 
     const presupuestosHoy = rows.slice(1).filter(r => r[0] === hoy);
 

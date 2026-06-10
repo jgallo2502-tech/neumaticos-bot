@@ -137,7 +137,7 @@
     }
 
     function buildRow(p, mostrarHoras = false) {
-      const tel = (p.tel||'').replace(/\D','');
+      const tel = (p.tel||'').replace(/\D/g,'');
       let telWA = '';
       if (tel) telWA = tel.startsWith('549') ? tel : tel.startsWith('54') ? '549'+tel.slice(2) : '549'+tel;
       const horas = horasDiff(p.fecha);

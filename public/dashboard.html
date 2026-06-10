@@ -74,6 +74,21 @@
     <div class="bienvenida">Buenos días, <span id="nombre-usuario"></span> 👋</div>
     <div class="fecha" id="fecha-hoy"></div>
 
+    <!-- Filtros admin -->
+    <div id="filtros-admin" style="display:none;margin-bottom:16px;display:none">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+        <select id="filtro-suc" onchange="cargar()" style="padding:8px 12px;border:2px solid #e8e8e8;border-radius:8px;font-size:14px">
+          <option value="">Todas las sucursales</option>
+          <option value="Victoria">Victoria</option>
+          <option value="Nordelta">Nordelta</option>
+        </select>
+        <select id="filtro-vend" onchange="cargar()" style="padding:8px 12px;border:2px solid #e8e8e8;border-radius:8px;font-size:14px">
+          <option value="">Todos los vendedores</option>
+        </select>
+        <button onclick="verReporte()" style="padding:8px 16px;background:#1a1a2e;color:white;border:none;border-radius:8px;cursor:pointer;font-size:13px">📊 Ver reporte del día</button>
+      </div>
+    </div>
+
     <div class="stats">
       <div class="stat-card hoy"><div class="stat-num" id="s-hoy">-</div><div class="stat-label">Presupuestos hoy</div></div>
       <div class="stat-card cerrado"><div class="stat-num" id="s-cerrado">-</div><div class="stat-label">Vendidos (mes)</div></div>
@@ -143,9 +158,11 @@
       const horas = horasDiff(p.fecha);
       const horasHtml = mostrarHoras ? `<td><span class="horas ${horas > 72 ? 'urgente' : 'normal'}">${horas}hs</span></td>` : '';
       const msg = encodeURIComponent('Hola ' + p.cliente + '! Te escribimos desde Neumáticos Gallo para hacer seguimiento del presupuesto ' + p.numero + '. ¿Pudiste revisarlo? 😊');
+      const mostrarVend = p.sucursal !== undefined;
       return `<tr>
         <td>${p.fecha}</td>
         <td style="font-weight:600">${p.numero}</td>
+        ${mostrarVend ? `<td style="font-size:12px">${p.vendedor||'-'}</td><td><span style="font-size:11px;padding:2px 6px;background:#e8f4f8;border-radius:4px">${p.sucursal||'-'}</span></td>` : ''}
         <td>${p.cliente}</td>
         <td>${p.tel||'-'}</td>
         <td style="font-size:12px;max-width:200px">${p.productos||''}</td>
@@ -168,7 +185,8 @@
         document.getElementById(containerId).innerHTML = '<div class="empty">Sin resultados</div>';
         return;
       }
-      const headers = `<tr><th>Fecha</th><th>N°</th><th>Cliente</th><th>Tel</th><th>Productos</th><th>Estado</th>${mostrarHoras ? '<th>Antigüedad</th>' : ''}<th>Acción</th></tr>`;
+      const esAdmin = lista[0]?.sucursal !== undefined;
+      const headers = `<tr><th>Fecha</th><th>N°</th>${esAdmin ? '<th>Vendedor</th><th>Suc.</th>' : ''}<th>Cliente</th><th>Tel</th><th>Productos</th><th>Estado</th>${mostrarHoras ? '<th>Antigüedad</th>' : ''}<th>Acción</th></tr>`;
       document.getElementById(containerId).innerHTML = '<table><thead>' + headers + '</thead><tbody>' +
         lista.map(p => buildRow(p, mostrarHoras)).join('') + '</tbody></table>';
     }
@@ -182,14 +200,34 @@
       cargar(); // recargar
     }
 
+    async function verReporte() {
+      const res = await fetch('/app/reporte-diario', { headers: { 'Authorization': 'Bearer ' + token } });
+      const data = await res.json();
+      alert(data.reporte || 'Sin datos');
+    }
+
     async function cargar() {
       const res = await fetch('/app/seguimiento/presupuestos', {
         headers: { 'Authorization': 'Bearer ' + token }
       });
       if (res.status === 401) { window.location.href = '/app/login.html'; return; }
       const data = await res.json();
-      const todos = data.presupuestos;
+      let todos = data.presupuestos;
       const hoyStr = ahora.toLocaleDateString('es-AR');
+
+      // Filtros admin
+      if (data.esAdmin) {
+        document.getElementById('filtros-admin').style.display = 'flex';
+        const vendedores = [...new Set(todos.map(p => p.vendedor).filter(Boolean))];
+        const sel = document.getElementById('filtro-vend');
+        if (sel.options.length === 1) {
+          vendedores.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; sel.appendChild(o); });
+        }
+        const filtroSuc = document.getElementById('filtro-suc')?.value;
+        const filtroVend = document.getElementById('filtro-vend')?.value;
+        if (filtroSuc) todos = todos.filter(p => p.sucursal === filtroSuc);
+        if (filtroVend) todos = todos.filter(p => p.vendedor === filtroVend);
+      }
 
       // Auto-cerrar los que tienen más de 10 días en "En seguimiento"
       const aCerrar = todos.filter(p => p.estado === 'En seguimiento' && horasDiff(p.fecha) > 240);

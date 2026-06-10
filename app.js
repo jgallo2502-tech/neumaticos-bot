@@ -8,15 +8,18 @@ const JWT_SECRET = process.env.JWT_SECRET || 'neumaticos-gallo-2026';
 
 // --- Usuarios (en producción esto podría ir en Google Sheets) ---
 const USUARIOS = [
-  { usuario: 'admin',      password: 'gallo2026', nombre: 'Administrador', rol: 'admin' },
-  { usuario: 'rgallo',     password: '12345',     nombre: 'R. Gallo',      rol: 'vendedor' },
-  { usuario: 'lmoreno',    password: '12345',     nombre: 'L. Moreno',     rol: 'vendedor' },
-  { usuario: 'ifukushima', password: '12345',     nombre: 'I. Fukushima',  rol: 'vendedor' },
-  { usuario: 'rgonzalez',  password: '12345',     nombre: 'R. Gonzalez',   rol: 'vendedor' },
-  { usuario: 'nruiz',      password: '12345',     nombre: 'N. Ruiz',       rol: 'vendedor' },
-  { usuario: 'hvillalobos',password: '12345',     nombre: 'H. Villalobos', rol: 'vendedor' },
-  { usuario: 'prueba',     password: '12345',     nombre: 'Prueba',        rol: 'vendedor' },
+  { usuario: 'admin',      password: 'gallo2026', nombre: 'Administrador', rol: 'admin',     sucursal: null },
+  { usuario: 'rgallo',     password: '12345',     nombre: 'R. Gallo',      rol: 'vendedor',  sucursal: 'Victoria' },
+  { usuario: 'lmoreno',    password: '12345',     nombre: 'L. Moreno',     rol: 'vendedor',  sucursal: 'Nordelta' },
+  { usuario: 'ifukushima', password: '12345',     nombre: 'I. Fukushima',  rol: 'vendedor',  sucursal: 'Victoria' },
+  { usuario: 'rgonzalez',  password: '12345',     nombre: 'R. Gonzalez',   rol: 'vendedor',  sucursal: 'Victoria' },
+  { usuario: 'nruiz',      password: '12345',     nombre: 'N. Ruiz',       rol: 'vendedor',  sucursal: 'Victoria' },
+  { usuario: 'hvillalobos',password: '12345',     nombre: 'H. Villalobos', rol: 'vendedor',  sucursal: 'Victoria' },
+  { usuario: 'prueba',     password: '12345',     nombre: 'Prueba',        rol: 'vendedor',  sucursal: 'Victoria' },
 ];
+
+// Mapa vendedor -> sucursal
+const SUCURSAL_MAP = Object.fromEntries(USUARIOS.filter(u => u.sucursal).map(u => [u.nombre, u.sucursal]));
 
 // --- Middleware de auth ---
 function authMiddleware(req, res, next) {
@@ -366,10 +369,11 @@ router.get('/seguimiento/presupuestos', authMiddleware, async (req, res) => {
 
     const presupuestos = rows.slice(1)
       .map((row, idx) => ({
-        fila: idx + 2, // fila en sheet (1-indexed + header)
+        fila: idx + 2,
         fecha:     row[0] || '',
         numero:    row[1] || '',
         vendedor:  row[2] || '',
+        sucursal:  SUCURSAL_MAP[row[2]] || 'Victoria',
         cliente:   row[3] || '',
         tel:       row[4] || '',
         productos: row[5] || '',
@@ -401,6 +405,108 @@ router.post('/seguimiento/actualizar', express.json(), authMiddleware, async (re
     });
     res.json({ ok: true });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Reporte diario ---
+async function generarReporteDiario() {
+  try {
+    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const result = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Presupuestos!A:H',
+    });
+    const rows = result.data.values || [];
+
+    // Fecha de hoy en formato dd/mm/yyyy
+    const ahora = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    const hoy = ahora.toISOString().slice(0,10).split('-').reverse().join('/');
+
+    const presupuestosHoy = rows.slice(1).filter(r => r[0] === hoy);
+
+    if (presupuestosHoy.length === 0) {
+      return '📊 *Reporte del día* — ' + hoy + '\n\nNo se registraron presupuestos hoy.';
+    }
+
+    // Agrupar por sucursal y vendedor
+    const porSucursal = {};
+    for (const row of presupuestosHoy) {
+      const vendedor = row[2] || 'Sin vendedor';
+      const suc = SUCURSAL_MAP[vendedor] || 'Victoria';
+      const estado = row[7] || 'Enviado';
+      const total = parseInt((row[6]||'0').replace(/\D/g,'')) || 0;
+
+      if (!porSucursal[suc]) porSucursal[suc] = {};
+      if (!porSucursal[suc][vendedor]) porSucursal[suc][vendedor] = { total: 0, vendidos: 0, monto: 0 };
+      porSucursal[suc][vendedor].total++;
+      if (estado === 'Vendido') {
+        porSucursal[suc][vendedor].vendidos++;
+        porSucursal[suc][vendedor].monto += total;
+      }
+    }
+
+    let msg = `📊 *Reporte del día — ${hoy}*\n`;
+    msg += `Total presupuestos: *${presupuestosHoy.length}*\n`;
+    const vendidosTotales = presupuestosHoy.filter(r => (r[7]||'') === 'Vendido').length;
+    msg += `Vendidos: *${vendidosTotales}*\n\n`;
+
+    for (const [suc, vendedores] of Object.entries(porSucursal)) {
+      msg += `📍 *${suc}*\n`;
+      for (const [vend, stats] of Object.entries(vendedores)) {
+        msg += `  • ${vend}: ${stats.total} presup.`;
+        if (stats.vendidos > 0) msg += ` | ${stats.vendidos} vendidos`;
+        msg += '\n';
+      }
+      msg += '\n';
+    }
+
+    // Pendientes sin respuesta
+    const sinRespuesta = rows.slice(1).filter(r => {
+      if ((r[7]||'') !== 'Enviado') return false;
+      const [d,m,y] = (r[0]||'').split('/');
+      const fecha = new Date(y, m-1, d);
+      const horas = (Date.now() - fecha.getTime()) / (1000*60*60);
+      return horas >= 48;
+    });
+    if (sinRespuesta.length > 0) {
+      msg += `⚠️ *Sin respuesta +48hs: ${sinRespuesta.length}* presupuestos pendientes de seguimiento`;
+    }
+
+    return msg;
+  } catch (err) {
+    console.error('Error reporte diario:', err.message);
+    return null;
+  }
+}
+
+router.get('/reporte-diario', authMiddleware, async (req, res) => {
+  if (req.user.rol !== 'admin') return res.status(403).json({ error: 'Solo admin' });
+  const reporte = await generarReporteDiario();
+  res.json({ reporte });
+});
+
+// Endpoint interno para trigger por cron/schedule
+router.post('/reporte-diario/enviar', async (req, res) => {
+  const key = req.headers['x-cron-key'];
+  if (key !== (process.env.CRON_KEY || 'neumaticos-cron-2026')) return res.status(401).end();
+
+  const reporte = await generarReporteDiario();
+  if (!reporte) return res.json({ ok: false });
+
+  try {
+    const twilio = require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+    await twilio.messages.create({
+      from: process.env.TWILIO_WHATSAPP_NUMBER,
+      to: 'whatsapp:+5491132903238', // número de Juani (admin)
+      body: reporte,
+    });
+    console.log('Reporte diario enviado');
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Error enviando reporte:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

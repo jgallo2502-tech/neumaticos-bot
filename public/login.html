@@ -116,7 +116,7 @@
         const data = await res.json();
         localStorage.setItem('token', data.token);
         localStorage.setItem('vendedor', data.nombre);
-        window.location.href = '/app/presupuesto.html';
+        window.location.href = '/app/dashboard.html';
       } else {
         errorEl.style.display = 'block';
       }

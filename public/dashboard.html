@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — Neumáticos Gallo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; color: #222; }
+    header { background: #1a1a2e; color: white; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; }
+    header h1 { font-size: 18px; }
+    .nav { display: flex; align-items: center; gap: 14px; }
+    .nav a { color: white; font-size: 13px; opacity: 0.8; text-decoration: none; }
+    .nav a:hover { opacity: 1; }
+    .logout { background: none; border: 1px solid rgba(255,255,255,0.3); color: white; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .container { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+    .bienvenida { font-size: 22px; font-weight: 700; color: #1a1a2e; margin-bottom: 4px; }
+    .fecha { font-size: 13px; color: #666; margin-bottom: 20px; }
+
+    /* Stats */
+    .stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 24px; }
+    @media(max-width:600px) { .stats { grid-template-columns: repeat(2,1fr); } }
+    .stat-card { background: white; border-radius: 12px; padding: 18px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .stat-num { font-size: 32px; font-weight: 700; }
+    .stat-label { font-size: 12px; color: #666; margin-top: 4px; }
+    .stat-card.hoy .stat-num { color: #0d6efd; }
+    .stat-card.cerrado .stat-num { color: #198754; }
+    .stat-card.seguimiento .stat-num { color: #fd7e14; }
+    .stat-card.vencido .stat-num { color: #dc3545; }
+
+    /* Secciones */
+    .seccion { background: white; border-radius: 12px; padding: 20px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .seccion-titulo { font-size: 15px; font-weight: 700; color: #1a1a2e; margin-bottom: 14px; display: flex; align-items: center; gap:8px; }
+    .badge-count { background: #e63946; color: white; border-radius: 20px; padding: 2px 10px; font-size: 12px; font-weight: 600; }
+
+    /* Tabla compacta */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { background: #f8f9fa; color: #555; padding: 8px 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e8e8e8; }
+    td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafafa; }
+
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+    .badge-enviado { background: #dbeafe; color: #1d4ed8; }
+    .badge-seguimiento { background: #fed7aa; color: #c2410c; }
+    .badge-vendido { background: #dcfce7; color: #166534; }
+    .badge-perdido { background: #fee2e2; color: #991b1b; }
+
+    .horas { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 4px; }
+    .horas.urgente { background: #fee2e2; color: #991b1b; }
+    .horas.normal { background: #fff3cd; color: #856404; }
+
+    .btn-wa { background: #25d366; color: white; border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+    .btn-estado { border: 1px solid #e8e8e8; background: white; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; color: #555; }
+    .btn-estado:hover { background: #f0f0f0; }
+    .empty { text-align: center; padding: 20px; color: #aaa; font-size: 13px; }
+    .loading { text-align: center; padding: 30px; color: #888; }
+    .nuevo-btn { background: #e63946; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .nuevo-btn:hover { background: #c1121f; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🔴 Neumáticos Gallo</h1>
+    <div class="nav">
+      <a href="/app/presupuesto.html">📋 Nuevo presupuesto</a>
+      <a href="/app/seguimiento.html">📊 Seguimiento</a>
+      <span id="vendedor-nombre" style="font-size:13px;opacity:0.7"></span>
+      <button class="logout" onclick="logout()">Salir</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="bienvenida">Buenos días, <span id="nombre-usuario"></span> 👋</div>
+    <div class="fecha" id="fecha-hoy"></div>
+
+    <div class="stats">
+      <div class="stat-card hoy"><div class="stat-num" id="s-hoy">-</div><div class="stat-label">Presupuestos hoy</div></div>
+      <div class="stat-card cerrado"><div class="stat-num" id="s-cerrado">-</div><div class="stat-label">Vendidos (mes)</div></div>
+      <div class="stat-card seguimiento"><div class="stat-num" id="s-seguim">-</div><div class="stat-label">En seguimiento</div></div>
+      <div class="stat-card vencido"><div class="stat-num" id="s-vencido">-</div><div class="stat-label">Sin respuesta +48hs</div></div>
+    </div>
+
+    <!-- Acciones del día: +48hs sin respuesta -->
+    <div class="seccion">
+      <div class="seccion-titulo">
+        🔔 Acciones del día — Sin respuesta hace más de 48hs
+        <span class="badge-count" id="cnt-urgente">0</span>
+      </div>
+      <div id="tabla-urgente"><div class="loading">Cargando...</div></div>
+    </div>
+
+    <!-- En seguimiento -->
+    <div class="seccion">
+      <div class="seccion-titulo">
+        📌 En seguimiento
+        <span class="badge-count" id="cnt-seguim">0</span>
+      </div>
+      <div id="tabla-seguimiento"><div class="loading">Cargando...</div></div>
+    </div>
+
+    <!-- Presupuestos de hoy -->
+    <div class="seccion">
+      <div class="seccion-titulo">
+        📋 Presupuestos de hoy
+        <span class="badge-count" id="cnt-hoy">0</span>
+      </div>
+      <div id="tabla-hoy"><div class="loading">Cargando...</div></div>
+    </div>
+  </div>
+
+  <script>
+    const token = localStorage.getItem('token');
+    const vendedor = localStorage.getItem('vendedor') || '';
+    if (!token) window.location.href = '/app/login.html';
+
+    document.getElementById('vendedor-nombre').textContent = vendedor;
+    document.getElementById('nombre-usuario').textContent = vendedor;
+
+    const ahora = new Date();
+    const diasSemana = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+    const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    document.getElementById('fecha-hoy').textContent =
+      diasSemana[ahora.getDay()] + ' ' + ahora.getDate() + ' de ' + meses[ahora.getMonth()] + ' de ' + ahora.getFullYear();
+
+    function horasDiff(fechaStr) {
+      // fechaStr formato dd/mm/yyyy
+      if (!fechaStr) return 0;
+      const [d,m,y] = fechaStr.split('/');
+      const fecha = new Date(y, m-1, d);
+      return Math.floor((Date.now() - fecha.getTime()) / (1000 * 60 * 60));
+    }
+
+    function badgeEstado(estado) {
+      const cls = estado === 'Enviado' ? 'badge-enviado' : estado === 'En seguimiento' ? 'badge-seguimiento' : estado === 'Vendido' ? 'badge-vendido' : 'badge-perdido';
+      return `<span class="badge ${cls}">${estado}</span>`;
+    }
+
+    function buildRow(p, mostrarHoras = false) {
+      const tel = (p.tel||'').replace(/\D','');
+      let telWA = '';
+      if (tel) telWA = tel.startsWith('549') ? tel : tel.startsWith('54') ? '549'+tel.slice(2) : '549'+tel;
+      const horas = horasDiff(p.fecha);
+      const horasHtml = mostrarHoras ? `<td><span class="horas ${horas > 72 ? 'urgente' : 'normal'}">${horas}hs</span></td>` : '';
+      const msg = encodeURIComponent('Hola ' + p.cliente + '! Te escribimos desde Neumáticos Gallo para hacer seguimiento del presupuesto ' + p.numero + '. ¿Pudiste revisarlo? 😊');
+      return `<tr>
+        <td>${p.fecha}</td>
+        <td style="font-weight:600">${p.numero}</td>
+        <td>${p.cliente}</td>
+        <td>${p.tel||'-'}</td>
+        <td style="font-size:12px;max-width:200px">${p.productos||''}</td>
+        <td>${badgeEstado(p.estado)}</td>
+        ${horasHtml}
+        <td>
+          ${telWA ? `<button class="btn-wa" onclick="window.open('https://wa.me/${telWA}?text=${msg}','_blank')">💬</button>` : ''}
+          <select onchange="cambiarEstado(${p.fila}, this.value)" style="margin-left:6px;font-size:12px;padding:3px 6px;border:1px solid #e8e8e8;border-radius:4px">
+            <option value="Enviado" ${p.estado==='Enviado'?'selected':''}>Enviado</option>
+            <option value="En seguimiento" ${p.estado==='En seguimiento'?'selected':''}>En seguimiento</option>
+            <option value="Vendido" ${p.estado==='Vendido'?'selected':''}>Vendido</option>
+            <option value="No cerrado" ${p.estado==='No cerrado'?'selected':''}>No cerrado</option>
+          </select>
+        </td>
+      </tr>`;
+    }
+
+    function renderTabla(containerId, lista, mostrarHoras = false) {
+      if (lista.length === 0) {
+        document.getElementById(containerId).innerHTML = '<div class="empty">Sin resultados</div>';
+        return;
+      }
+      const headers = `<tr><th>Fecha</th><th>N°</th><th>Cliente</th><th>Tel</th><th>Productos</th><th>Estado</th>${mostrarHoras ? '<th>Antigüedad</th>' : ''}<th>Acción</th></tr>`;
+      document.getElementById(containerId).innerHTML = '<table><thead>' + headers + '</thead><tbody>' +
+        lista.map(p => buildRow(p, mostrarHoras)).join('') + '</tbody></table>';
+    }
+
+    async function cambiarEstado(fila, estado) {
+      await fetch('/app/seguimiento/actualizar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ fila, estado })
+      });
+      cargar(); // recargar
+    }
+
+    async function cargar() {
+      const res = await fetch('/app/seguimiento/presupuestos', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if (res.status === 401) { window.location.href = '/app/login.html'; return; }
+      const data = await res.json();
+      const todos = data.presupuestos;
+      const hoyStr = ahora.toLocaleDateString('es-AR');
+
+      // Auto-cerrar los que tienen más de 10 días en "En seguimiento"
+      const aCerrar = todos.filter(p => p.estado === 'En seguimiento' && horasDiff(p.fecha) > 240);
+      for (const p of aCerrar) {
+        await cambiarEstado(p.fila, 'No cerrado');
+      }
+
+      // Stats
+      const hoy = todos.filter(p => p.fecha === hoyStr);
+      const vendidos = todos.filter(p => p.estado === 'Vendido');
+      const enSeguim = todos.filter(p => p.estado === 'En seguimiento');
+      const sinResp  = todos.filter(p => p.estado === 'Enviado' && horasDiff(p.fecha) >= 48);
+
+      document.getElementById('s-hoy').textContent = hoy.length;
+      document.getElementById('s-cerrado').textContent = vendidos.length;
+      document.getElementById('s-seguim').textContent = enSeguim.length;
+      document.getElementById('s-vencido').textContent = sinResp.length;
+
+      // Tablas
+      document.getElementById('cnt-urgente').textContent = sinResp.length;
+      document.getElementById('cnt-seguim').textContent = enSeguim.length;
+      document.getElementById('cnt-hoy').textContent = hoy.length;
+
+      renderTabla('tabla-urgente', sinResp, true);
+      renderTabla('tabla-seguimiento', enSeguim, true);
+      renderTabla('tabla-hoy', hoy, false);
+    }
+
+    function logout() { localStorage.clear(); window.location.href = '/app/login.html'; }
+
+    cargar();
+  </script>
+</body>
+</html>

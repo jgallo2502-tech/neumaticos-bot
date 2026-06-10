@@ -49,13 +49,23 @@ router.post('/login', express.json(), (req, res) => {
 
 // --- Buscar precios (reutiliza lógica del bot) ---
 router.post('/precios', express.json(), authMiddleware, async (req, res) => {
-  const { medidas } = req.body;
+  const { medidas, depositos } = req.body;
   const { obtenerPrecios, normalizarMedida } = require('./index');
   const resultado = {};
   for (const medida of medidas) {
     const norm = normalizarMedida(medida);
     if (!norm) { resultado[medida] = []; continue; }
-    resultado[norm] = await obtenerPrecios(norm, null, false);
+    let prods = await obtenerPrecios(norm, null, false);
+    // Filtrar por depósito si se especificaron
+    if (depositos) {
+      prods = prods.filter(p => {
+        if (depositos.victoria && p.stockVic >= 4) return true;
+        if (depositos.nordelta && p.stockNor >= 4) return true;
+        if (depositos.express  && p.stockExpr > 0) return true;
+        return false;
+      });
+    }
+    resultado[norm] = prods;
   }
   res.json(resultado);
 });

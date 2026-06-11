@@ -501,8 +501,9 @@ router.post('/reporte-diario/enviar', async (req, res) => {
     const twilio = require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
     await twilio.messages.create({
       from: process.env.TWILIO_WHATSAPP_NUMBER,
-      to: 'whatsapp:+5491132903238', // número de Juani (admin)
-      body: reporte,
+      to: 'whatsapp:+5491132903238',
+      contentSid: 'HXb3d37d3ffd461ca6a214ca9070012012',
+      contentVariables: JSON.stringify({ '1': reporte }),
     });
     console.log('Reporte diario enviado');
     res.json({ ok: true });

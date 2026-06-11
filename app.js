@@ -638,7 +638,6 @@ router.get('/tiendanube/callback', async (req, res) => {
 // --- Tiendanube: iniciar OAuth ---
 // --- Conversaciones del bot ---
 router.get('/conversaciones/mensajes', authMiddleware, async (req, res) => {
-  if (req.user.rol !== 'admin') return res.status(403).json({ error: 'Solo admin' });
   try {
     const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
     const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
@@ -663,6 +662,44 @@ router.get('/conversaciones/mensajes', authMiddleware, async (req, res) => {
       return ub.localeCompare(ua);
     });
     res.json({ conversaciones });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Alertas de ayuda humana ---
+router.get('/conversaciones/alertas', authMiddleware, async (req, res) => {
+  try {
+    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const result = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Alertas!A:E',
+    });
+    const rows = (result.data.values || []).slice(1);
+    const pendientes = rows
+      .map((r, i) => ({ fila: i + 2, fecha: r[0], hora: r[1], numero: r[2], mensaje: r[3], atendido: r[4] }))
+      .filter(a => a.atendido !== 'SI' && a.numero);
+    res.json({ alertas: pendientes });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/conversaciones/alertas/atender', express.json(), authMiddleware, async (req, res) => {
+  const { fila } = req.body;
+  try {
+    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: `Alertas!E${fila}`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [['SI']] },
+    });
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

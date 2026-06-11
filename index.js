@@ -37,6 +37,21 @@ function registrarMensajeSesion(numero, rol, texto) {
   sesion.timer = setTimeout(() => cerrarSesion(numero), INACTIVIDAD_MS);
 }
 
+async function guardarAlerta(numero, mensaje) {
+  const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+  const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+  const sheets = google.sheets({ version: 'v4', auth });
+  const ahora = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const fecha = ahora.toISOString().slice(0, 10).split('-').reverse().join('/');
+  const hora  = ahora.toISOString().slice(11, 16);
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: process.env.GOOGLE_SHEET_ID,
+    range: 'Alertas!A:E',
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [[fecha, hora, numero, mensaje, 'NO']] },
+  });
+}
+
 async function guardarMensaje(numero, rol, texto) {
   const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
   const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
@@ -478,6 +493,11 @@ app.post('/webhook', async (req, res) => {
 
   // Registrar mensaje en sesión
   registrarMensajeSesion(fromNumber, 'cliente', body);
+
+  // Detectar pedido de ayuda humana
+  if (/hablar|persona|alguien|humano|asesor|vendedor|ayuda/i.test(lower)) {
+    guardarAlerta(fromNumber, body).catch(() => {});
+  }
 
   try {
     const esRev = await esRevendedor(fromNumber);

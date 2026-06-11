@@ -138,6 +138,7 @@
             <h3 id="chat-num"></h3>
             <p id="chat-fecha"></p>
           </div>
+          <button id="btn-intervenir" onclick="intervenir()" style="margin-left:auto;background:#25d366;color:white;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600">💬 Intervenir</button>
         </div>
         <div class="chat-messages" id="chat-messages"></div>
       </div>
@@ -151,15 +152,21 @@
     let todasConversaciones = [];
     let convActiva = null;
 
+    let numeroActivo = null;
+
+    function intervenir() {
+      if (!numeroActivo) return;
+      const n = numeroActivo.replace(/\D/g, '');
+      let tel = n.startsWith('549') ? n : n.startsWith('54') ? '549' + n.slice(2) : '549' + n;
+      const msg = encodeURIComponent('Hola! Te comunico con un asesor de Neumáticos Gallo para ayudarte. 😊');
+      window.open('https://wa.me/' + tel + '?text=' + msg, '_blank');
+    }
+
     async function cargar() {
       const res = await fetch('/app/conversaciones/mensajes', {
         headers: { 'Authorization': 'Bearer ' + token }
       });
       if (res.status === 401) { window.location.href = '/app/login.html'; return; }
-      if (res.status === 403) {
-        document.getElementById('lista-conv').innerHTML = '<div class="loading-lista">Solo disponible para administradores.</div>';
-        return;
-      }
       const data = await res.json();
       todasConversaciones = data.conversaciones || [];
       renderLista(todasConversaciones);
@@ -200,6 +207,7 @@
     function abrirConv(idx) {
       convActiva = idx;
       const c = todasConversaciones[idx];
+      numeroActivo = c.numero;
 
       // Marcar activo en lista
       document.querySelectorAll('.conv-item').forEach((el, i) => {
@@ -239,7 +247,17 @@
 
     function logout() { localStorage.clear(); window.location.href = '/app/login.html'; }
 
-    cargar();
+    async function cargarYAbrir() {
+      await cargar();
+      const numPendiente = localStorage.getItem('abrirNumero');
+      if (numPendiente) {
+        localStorage.removeItem('abrirNumero');
+        const idx = todasConversaciones.findIndex(c => c.numero === numPendiente);
+        if (idx >= 0) abrirConv(idx);
+      }
+    }
+
+    cargarYAbrir();
   </script>
 </body>
 </html>

@@ -119,12 +119,13 @@
 </head>
 <body>
   <header>
-    <h1>🔴 Neumáticos Gallo — Presupuestos</h1>
+    <h1>🔴 Neumáticos Gallo</h1>
     <div style="display:flex;align-items:center;gap:12px">
-      <span id="vendedor-nombre"></span>
-      <a href="/app/dashboard.html" style="color:white;font-size:13px;opacity:0.8">🏠 Dashboard</a>
-      <a href="/app/seguimiento.html" style="color:white;font-size:13px;opacity:0.8">📋 Seguimiento</a>
-      <a href="/app/broadcast.html" style="color:white;font-size:13px;opacity:0.8">📢 Broadcast</a>
+      <a href="/app/dashboard.html" style="color:white;font-size:13px;opacity:0.8;text-decoration:none">🏠 Dashboard</a>
+      <a href="/app/seguimiento.html" style="color:white;font-size:13px;opacity:0.8;text-decoration:none">📊 Seguimiento</a>
+      <a href="/app/conversaciones.html" style="color:white;font-size:13px;opacity:0.8;text-decoration:none">💬 Conversaciones</a>
+      <a href="/app/broadcast.html" id="nav-broadcast" style="display:none;color:white;font-size:13px;opacity:0.8;text-decoration:none">📢 Broadcast</a>
+      <span id="vendedor-nombre" style="color:white;font-size:13px;opacity:0.7"></span>
       <button class="logout" onclick="logout()">Salir</button>
     </div>
   </header>
@@ -336,6 +337,7 @@
     const token = localStorage.getItem('token');
     if (!token) window.location.href = '/app/login.html';
     document.getElementById('vendedor-nombre').textContent = localStorage.getItem('vendedor') || '';
+    if (localStorage.getItem('rol') === 'admin') document.getElementById('nav-broadcast').style.display = 'inline';
 
     let seleccionados = {};
     let presupuestoActual = null;

@@ -111,7 +111,10 @@
     <h1>🤖 Conversaciones Bot WhatsApp</h1>
     <div class="nav">
       <a href="/app/dashboard.html">🏠 Dashboard</a>
-      <a href="/app/presupuesto.html">📋 Presupuesto</a>
+      <a href="/app/presupuesto.html">📋 Nuevo presupuesto</a>
+      <a href="/app/seguimiento.html">📊 Seguimiento</a>
+      <a href="/app/broadcast.html" id="nav-broadcast" style="display:none">📢 Broadcast</a>
+      <span id="vendedor-nombre" style="font-size:13px;opacity:0.7"></span>
       <button class="logout" onclick="logout()">Salir</button>
     </div>
   </header>
@@ -148,6 +151,8 @@
   <script>
     const token = localStorage.getItem('token');
     if (!token) window.location.href = '/app/login.html';
+    document.getElementById('vendedor-nombre').textContent = localStorage.getItem('vendedor') || '';
+    if (localStorage.getItem('rol') === 'admin') document.getElementById('nav-broadcast').style.display = 'inline';
 
     let todasConversaciones = [];
     let convActiva = null;

@@ -57,9 +57,13 @@
 </head>
 <body>
   <header>
-    <h1>📋 Mis Presupuestos <span id="admin-label"></span></h1>
+    <h1>🔴 Neumáticos Gallo</h1>
     <div class="nav">
-      <a href="/app/presupuesto.html">+ Nuevo</a>
+      <a href="/app/dashboard.html">🏠 Dashboard</a>
+      <a href="/app/presupuesto.html">📋 Nuevo presupuesto</a>
+      <a href="/app/conversaciones.html">💬 Conversaciones</a>
+      <a href="/app/broadcast.html" id="nav-broadcast" style="display:none">📢 Broadcast</a>
+      <span id="vendedor-nombre" style="font-size:13px;opacity:0.7"></span>
       <button class="logout" onclick="logout()">Salir</button>
     </div>
   </header>
@@ -96,6 +100,8 @@
     const token = localStorage.getItem('token');
     const vendedor = localStorage.getItem('vendedor');
     if (!token) window.location.href = '/app/login.html';
+    document.getElementById('vendedor-nombre').textContent = vendedor || '';
+    if (localStorage.getItem('rol') === 'admin') document.getElementById('nav-broadcast').style.display = 'inline';
 
     let todosLosPresupuestos = [];
     let esAdmin = false;

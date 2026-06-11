@@ -29,9 +29,27 @@ function registrarMensajeSesion(numero, rol, texto) {
   const sesion = sesiones.get(numero);
   sesion.mensajes.push({ rol, texto });
 
+  // Persistir mensaje en Google Sheets (fire & forget)
+  guardarMensaje(numero, rol, texto).catch(() => {});
+
   // Reiniciar timer de inactividad
   if (sesion.timer) clearTimeout(sesion.timer);
   sesion.timer = setTimeout(() => cerrarSesion(numero), INACTIVIDAD_MS);
+}
+
+async function guardarMensaje(numero, rol, texto) {
+  const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+  const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+  const sheets = google.sheets({ version: 'v4', auth });
+  const ahora = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const fecha = ahora.toISOString().slice(0, 10).split('-').reverse().join('/');
+  const hora  = ahora.toISOString().slice(11, 16);
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: process.env.GOOGLE_SHEET_ID,
+    range: 'Mensajes!A:E',
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [[fecha, hora, numero, rol, texto]] },
+  });
 }
 
 async function cerrarSesion(numero) {

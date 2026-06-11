@@ -635,6 +635,38 @@ router.get('/tiendanube/callback', async (req, res) => {
 });
 
 // --- Tiendanube: iniciar OAuth ---
+// --- Conversaciones del bot ---
+router.get('/conversaciones/mensajes', authMiddleware, async (req, res) => {
+  if (req.user.rol !== 'admin') return res.status(403).json({ error: 'Solo admin' });
+  try {
+    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const result = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Mensajes!A:E',
+    });
+    const rows = (result.data.values || []).slice(1); // skip header if any
+    // Agrupar por numero + fecha (una conversación por día por número)
+    const grupos = {};
+    for (const [fecha, hora, numero, rol, texto] of rows) {
+      if (!numero) continue;
+      const key = `${numero}||${fecha}`;
+      if (!grupos[key]) grupos[key] = { numero, fecha, mensajes: [] };
+      grupos[key].mensajes.push({ hora, rol, texto });
+    }
+    // Ordenar por fecha+hora del último mensaje (más reciente primero)
+    const conversaciones = Object.values(grupos).sort((a, b) => {
+      const ua = a.fecha.split('/').reverse().join('') + (a.mensajes.at(-1)?.hora || '');
+      const ub = b.fecha.split('/').reverse().join('') + (b.mensajes.at(-1)?.hora || '');
+      return ub.localeCompare(ua);
+    });
+    res.json({ conversaciones });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/tiendanube/auth', (req, res) => {
   const url = `https://www.tiendanube.com/apps/33802/authorize`;
   res.redirect(url);

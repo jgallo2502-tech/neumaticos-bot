@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Conversaciones Bot — Neumáticos Gallo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; color: #222; }
+    header { background: #1a1a2e; color: white; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; }
+    header h1 { font-size: 18px; }
+    .nav { display: flex; align-items: center; gap: 14px; }
+    .nav a { color: white; font-size: 13px; opacity: 0.8; text-decoration: none; }
+    .nav a:hover { opacity: 1; }
+    .logout { background: none; border: 1px solid rgba(255,255,255,0.3); color: white; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+
+    .layout { display: flex; height: calc(100vh - 52px); }
+
+    /* Panel izquierdo: lista de conversaciones */
+    .panel-lista {
+      width: 340px;
+      min-width: 260px;
+      background: white;
+      border-right: 1px solid #e8e8e8;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .buscar {
+      padding: 12px;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .buscar input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1.5px solid #e0e0e0;
+      border-radius: 20px;
+      font-size: 13px;
+      outline: none;
+    }
+    .buscar input:focus { border-color: #25d366; }
+    .lista { overflow-y: auto; flex: 1; }
+    .conv-item {
+      padding: 12px 16px;
+      cursor: pointer;
+      border-bottom: 1px solid #f5f5f5;
+      transition: background 0.15s;
+    }
+    .conv-item:hover { background: #f5f5f5; }
+    .conv-item.activo { background: #e8f5e9; border-left: 3px solid #25d366; }
+    .conv-num { font-size: 13px; font-weight: 600; color: #1a1a2e; }
+    .conv-preview { font-size: 12px; color: #888; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .conv-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
+    .conv-fecha { font-size: 11px; color: #aaa; }
+    .conv-cant { font-size: 11px; background: #e8f5e9; color: #2e7d32; padding: 1px 7px; border-radius: 10px; }
+    .loading-lista { padding: 30px; text-align: center; color: #aaa; font-size: 13px; }
+
+    /* Panel derecho: chat */
+    .panel-chat {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: #efeae2;
+    }
+    .chat-header {
+      background: #1a1a2e;
+      color: white;
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .chat-avatar {
+      width: 38px; height: 38px;
+      background: #25d366;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    .chat-info h3 { font-size: 14px; font-weight: 600; }
+    .chat-info p { font-size: 12px; opacity: 0.7; }
+    .chat-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+    .msg-wrap { display: flex; }
+    .msg-wrap.cliente { justify-content: flex-end; }
+    .msg-wrap.bot { justify-content: flex-start; }
+    .burbuja {
+      max-width: 72%;
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .burbuja.cliente { background: #dcf8c6; border-bottom-right-radius: 2px; }
+    .burbuja.bot { background: white; border-bottom-left-radius: 2px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+    .msg-hora { font-size: 10px; color: #aaa; margin-top: 3px; text-align: right; }
+    .chat-vacio { flex: 1; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 14px; flex-direction: column; gap: 8px; }
+
+    @media(max-width:600px) {
+      .panel-lista { width: 100%; display: block; }
+      .panel-chat { display: none; }
+      .panel-lista.oculto { display: none; }
+      .panel-chat.visible { display: flex; width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🤖 Conversaciones Bot WhatsApp</h1>
+    <div class="nav">
+      <a href="/app/dashboard.html">🏠 Dashboard</a>
+      <a href="/app/presupuesto.html">📋 Presupuesto</a>
+      <button class="logout" onclick="logout()">Salir</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <div class="panel-lista" id="panel-lista">
+      <div class="buscar">
+        <input type="text" id="buscar-input" placeholder="🔍 Buscar número..." oninput="filtrar()">
+      </div>
+      <div class="lista" id="lista-conv">
+        <div class="loading-lista">Cargando conversaciones...</div>
+      </div>
+    </div>
+
+    <div class="panel-chat" id="panel-chat">
+      <div class="chat-vacio" id="chat-vacio">
+        <span style="font-size:40px">💬</span>
+        <span>Seleccioná una conversación</span>
+      </div>
+      <div id="chat-activo" style="display:none;flex-direction:column;height:100%">
+        <div class="chat-header">
+          <div class="chat-avatar">👤</div>
+          <div class="chat-info">
+            <h3 id="chat-num"></h3>
+            <p id="chat-fecha"></p>
+          </div>
+        </div>
+        <div class="chat-messages" id="chat-messages"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const token = localStorage.getItem('token');
+    if (!token) window.location.href = '/app/login.html';
+
+    let todasConversaciones = [];
+    let convActiva = null;
+
+    async function cargar() {
+      const res = await fetch('/app/conversaciones/mensajes', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if (res.status === 401) { window.location.href = '/app/login.html'; return; }
+      if (res.status === 403) {
+        document.getElementById('lista-conv').innerHTML = '<div class="loading-lista">Solo disponible para administradores.</div>';
+        return;
+      }
+      const data = await res.json();
+      todasConversaciones = data.conversaciones || [];
+      renderLista(todasConversaciones);
+    }
+
+    function renderLista(lista) {
+      const el = document.getElementById('lista-conv');
+      if (lista.length === 0) {
+        el.innerHTML = '<div class="loading-lista">Sin conversaciones aún.</div>';
+        return;
+      }
+      el.innerHTML = lista.map((c, i) => {
+        const ultimo = c.mensajes.at(-1);
+        const preview = (ultimo?.texto || '').replace(/\n/g, ' ').slice(0, 60);
+        const numDisplay = formatNum(c.numero);
+        return `<div class="conv-item${convActiva === i ? ' activo' : ''}" onclick="abrirConv(${i})">
+          <div class="conv-meta">
+            <span class="conv-num">${numDisplay}</span>
+            <span class="conv-fecha">${c.fecha}</span>
+          </div>
+          <div class="conv-meta">
+            <span class="conv-preview">${preview}</span>
+            <span class="conv-cant">${c.mensajes.length} msg</span>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    function formatNum(num) {
+      // Mostrar como +54 9 11 XXXX-XXXX si es número argentino
+      const n = num.replace(/\D/g, '');
+      if (n.startsWith('5491') && n.length >= 12) {
+        return '+54 9 ' + n.slice(4, 6) + ' ' + n.slice(6, 10) + '-' + n.slice(10);
+      }
+      return num;
+    }
+
+    function abrirConv(idx) {
+      convActiva = idx;
+      const c = todasConversaciones[idx];
+
+      // Marcar activo en lista
+      document.querySelectorAll('.conv-item').forEach((el, i) => {
+        el.classList.toggle('activo', i === idx);
+      });
+
+      document.getElementById('chat-vacio').style.display = 'none';
+      const chatActivo = document.getElementById('chat-activo');
+      chatActivo.style.display = 'flex';
+
+      document.getElementById('chat-num').textContent = formatNum(c.numero);
+      document.getElementById('chat-fecha').textContent = c.fecha + ' — ' + c.mensajes.length + ' mensajes';
+
+      const msgs = document.getElementById('chat-messages');
+      msgs.innerHTML = c.mensajes.map(m => `
+        <div class="msg-wrap ${m.rol}">
+          <div class="burbuja ${m.rol}">
+            ${escapeHtml(m.texto)}
+            <div class="msg-hora">${m.hora}</div>
+          </div>
+        </div>
+      `).join('');
+      msgs.scrollTop = msgs.scrollHeight;
+    }
+
+    function escapeHtml(t) {
+      return (t || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function filtrar() {
+      const q = document.getElementById('buscar-input').value.toLowerCase().replace(/\D/g,'');
+      const filtradas = q
+        ? todasConversaciones.filter(c => c.numero.replace(/\D/g,'').includes(q))
+        : todasConversaciones;
+      renderLista(filtradas);
+    }
+
+    function logout() { localStorage.clear(); window.location.href = '/app/login.html'; }
+
+    cargar();
+  </script>
+</body>
+</html>

@@ -132,6 +132,15 @@
       </div>
       <div id="tabla-hoy"><div class="loading">Cargando...</div></div>
     </div>
+
+    <!-- Seguimiento Bot -->
+    <div class="seccion">
+      <div class="seccion-titulo">
+        🤖 Seguimiento Bot — Consultas sin contactar +48hs
+        <span class="badge-count" id="cnt-bot">0</span>
+      </div>
+      <div id="tabla-bot"><div class="loading">Cargando...</div></div>
+    </div>
   </div>
 
   <script>
@@ -311,9 +320,70 @@
       cargarAlertas();
     }
 
+    // --- Seguimiento Bot ---
+    async function cargarSeguimientoBot() {
+      const res = await fetch('/app/bot/seguimiento', { headers: { 'Authorization': 'Bearer ' + token } });
+      if (!res.ok) return;
+      const data = await res.json();
+      const consultas = data.consultas || [];
+
+      // Solo las +48hs sin contactar
+      const pendientes = consultas.filter(c => {
+        const [d,m,y] = (c.fecha||'').split('/');
+        const fecha = new Date(y, m-1, d);
+        const horas = (Date.now() - fecha.getTime()) / (1000*60*60);
+        return horas >= 48 && (!c.estado || c.estado === 'Pendiente');
+      });
+
+      document.getElementById('cnt-bot').textContent = pendientes.length;
+
+      if (pendientes.length === 0) {
+        document.getElementById('tabla-bot').innerHTML = '<div class="empty">Sin consultas pendientes</div>';
+        return;
+      }
+
+      document.getElementById('tabla-bot').innerHTML = `<table>
+        <thead><tr><th>Fecha</th><th>Número</th><th>Medida</th><th>Marca</th><th>Antigüedad</th><th>Estado</th><th>Acción</th></tr></thead>
+        <tbody>${pendientes.map(c => {
+          const n = (c.numero||'').replace(/\D/g,'');
+          let tel = n.startsWith('549') ? n : '549' + n;
+          const [d,m,y] = (c.fecha||'').split('/');
+          const horas = Math.floor((Date.now() - new Date(y,m-1,d).getTime()) / (1000*60*60));
+          const msg = encodeURIComponent(`Hola! Te escribimos desde Neumáticos Gallo. Consultaste por neumáticos ${c.medida}${c.marca ? ' ' + c.marca : ''}. ¿Pudiste decidirte? Estamos para ayudarte 😊`);
+          return `<tr>
+            <td>${c.fecha}</td>
+            <td>${formatNumDash(c.numero)}</td>
+            <td style="font-weight:600">${c.medida||'-'}</td>
+            <td>${c.marca||'-'}</td>
+            <td><span class="horas ${horas>72?'urgente':'normal'}">${horas}hs</span></td>
+            <td>
+              <select onchange="actualizarBot(${c.fila}, this.value)" style="font-size:12px;padding:3px 6px;border:1px solid #e8e8e8;border-radius:4px">
+                <option value="Pendiente" ${(!c.estado||c.estado==='Pendiente')?'selected':''}>Pendiente</option>
+                <option value="Contactado" ${c.estado==='Contactado'?'selected':''}>Contactado</option>
+                <option value="Vendido" ${c.estado==='Vendido'?'selected':''}>Vendido</option>
+                <option value="No interesado" ${c.estado==='No interesado'?'selected':''}>No interesado</option>
+              </select>
+            </td>
+            <td>
+              <button class="btn-wa" onclick="window.open('https://wa.me/${tel}?text=${msg}','_blank')">💬 WhatsApp</button>
+            </td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`;
+    }
+
+    async function actualizarBot(fila, estado) {
+      await fetch('/app/bot/seguimiento/actualizar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ fila, estado })
+      });
+      cargarSeguimientoBot();
+    }
+
     cargar();
     cargarAlertas();
-    // Polling cada 60 segundos
+    cargarSeguimientoBot();
     setInterval(cargarAlertas, 60000);
   </script>
 </body>

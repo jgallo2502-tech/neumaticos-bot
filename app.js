@@ -667,6 +667,54 @@ router.get('/conversaciones/mensajes', authMiddleware, async (req, res) => {
   }
 });
 
+// --- Seguimiento Bot ---
+router.get('/bot/seguimiento', authMiddleware, async (req, res) => {
+  try {
+    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const result = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Consultas!A:I',
+    });
+    const rows = (result.data.values || []).slice(1);
+    // Una consulta por número por día (la última)
+    const map = {};
+    rows.forEach((r, i) => {
+      const numero = r[2];
+      if (!numero) return;
+      const key = `${r[0]}||${numero}`;
+      map[key] = { fila: i + 2, fecha: r[0], hora: r[1], numero, medida: r[3], marca: r[4], estado: r[8] || 'Pendiente' };
+    });
+    const consultas = Object.values(map).sort((a, b) => {
+      const fa = a.fecha.split('/').reverse().join('') + a.hora;
+      const fb = b.fecha.split('/').reverse().join('') + b.hora;
+      return fb.localeCompare(fa);
+    });
+    res.json({ consultas });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/bot/seguimiento/actualizar', express.json(), authMiddleware, async (req, res) => {
+  const { fila, estado } = req.body;
+  try {
+    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: `Consultas!I${fila}`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [[estado]] },
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- Alertas de ayuda humana ---
 router.get('/conversaciones/alertas', authMiddleware, async (req, res) => {
   try {

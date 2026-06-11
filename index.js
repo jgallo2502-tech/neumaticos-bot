@@ -522,11 +522,11 @@ app.post('/webhook', async (req, res) => {
         const productos = await obtenerPrecios(medidaNorm, marca, pidioRunFlat);
         registrarConsulta(fromNumber, medidaNorm, marca, productos);
         const mensajes = armarMensajes(productos, medidaNorm, esRev);
-        for (const m of mensajes) twiml.message(m);
+        for (const m of mensajes) { twiml.message(m); registrarMensajeSesion(fromNumber, 'bot', m); }
         if (!esRev && productos.length > 0) {
-          twiml.message('¿Te puedo ayudar con algo más? 😊\n\n¿Cuál sucursal te queda más cómoda?\n• *Victoria* — wa.me/541137735246\n• *Nordelta* — wa.me/541157347692\n\nColocación *sin cargo* en ambas sucursales. 🔧');
+          const mCierre = '¿Te puedo ayudar con algo más? 😊\n\n¿Cuál sucursal te queda más cómoda?\n• *Victoria* — wa.me/541137735246\n• *Nordelta* — wa.me/541157347692\n\nColocación *sin cargo* en ambas sucursales. 🔧';
+          twiml.message(mCierre); registrarMensajeSesion(fromNumber, 'bot', mCierre);
         }
-        registrarMensajeSesion(fromNumber, 'bot', `Precios para ${medidaNorm}`);
       } else {
         twiml.message(respuesta);
         registrarMensajeSesion(fromNumber, 'bot', respuesta);
@@ -548,15 +548,12 @@ app.post('/webhook', async (req, res) => {
       registrarConsulta(fromNumber, medidaNorm, marca, productos);
 
       const mensajes = armarMensajes(productos, medidaNorm, esRev);
-      for (const m of mensajes) twiml.message(m);
+      for (const m of mensajes) { twiml.message(m); registrarMensajeSesion(fromNumber, 'bot', m); }
 
-      // Cierre motivador solo para clientes
       if (!esRev && productos.length > 0) {
-        twiml.message('¿Te puedo ayudar con algo más? 😊\n\n¿Cuál sucursal te queda más cómoda?\n• *Victoria* — wa.me/541137735246\n• *Nordelta* — wa.me/541157347692\n\nColocación *sin cargo* en ambas sucursales. 🔧');
+        const mCierre = '¿Te puedo ayudar con algo más? 😊\n\n¿Cuál sucursal te queda más cómoda?\n• *Victoria* — wa.me/541137735246\n• *Nordelta* — wa.me/541157347692\n\nColocación *sin cargo* en ambas sucursales. 🔧';
+        twiml.message(mCierre); registrarMensajeSesion(fromNumber, 'bot', mCierre);
       }
-
-      // Guardar respuesta del bot en sesión
-      registrarMensajeSesion(fromNumber, 'bot', `Precios para ${medidaNorm}: ${productos.length} opciones`);
     } else {
       // Respuesta conversacional de Claude
       twiml.message(respuesta);

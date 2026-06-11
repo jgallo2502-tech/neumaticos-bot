@@ -410,7 +410,7 @@ router.post('/seguimiento/actualizar', express.json(), authMiddleware, async (re
 });
 
 // --- Reporte diario ---
-async function generarReporteDiario() {
+async function generarReporteDiario(fechaParam) {
   try {
     const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
     const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
@@ -421,10 +421,16 @@ async function generarReporteDiario() {
     });
     const rows = result.data.values || [];
 
-    // Fecha de hoy en formato dd/mm/yyyy
-    const ahora = new Date(Date.now() - 3 * 60 * 60 * 1000);
-    // Formato d/m/yyyy sin ceros adelante (como guarda la app)
-    const hoy = `${ahora.getUTCDate()}/${ahora.getUTCMonth()+1}/${ahora.getUTCFullYear()}`;
+    // Fecha: parámetro o hoy (formato d/m/yyyy sin ceros)
+    let hoy;
+    if (fechaParam) {
+      // Viene como yyyy-mm-dd desde el input date del HTML
+      const [y, m, d] = fechaParam.split('-');
+      hoy = `${parseInt(d)}/${parseInt(m)}/${y}`;
+    } else {
+      const ahora = new Date(Date.now() - 3 * 60 * 60 * 1000);
+      hoy = `${ahora.getUTCDate()}/${ahora.getUTCMonth()+1}/${ahora.getUTCFullYear()}`;
+    }
 
     const presupuestosHoy = rows.slice(1).filter(r => r[0] === hoy);
 
@@ -485,7 +491,7 @@ async function generarReporteDiario() {
 
 router.get('/reporte-diario', authMiddleware, async (req, res) => {
   if (req.user.rol !== 'admin') return res.status(403).json({ error: 'Solo admin' });
-  const reporte = await generarReporteDiario();
+  const reporte = await generarReporteDiario(req.query.fecha || null);
   res.json({ reporte });
 });
 

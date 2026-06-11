@@ -57,6 +57,19 @@
     .loading { text-align: center; padding: 30px; color: #888; }
     .nuevo-btn { background: #e63946; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
     .nuevo-btn:hover { background: #c1121f; }
+
+    /* Modal reporte */
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; }
+    .modal-overlay.visible { display:flex; }
+    .modal { background:white; border-radius:16px; padding:28px; width:100%; max-width:560px; max-height:85vh; display:flex; flex-direction:column; gap:16px; }
+    .modal h2 { font-size:17px; color:#1a1a2e; }
+    .modal-controls { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .modal-controls input[type=date] { padding:8px 12px; border:1.5px solid #e0e0e0; border-radius:8px; font-size:13px; }
+    .modal-controls button { padding:8px 16px; border-radius:8px; border:none; cursor:pointer; font-size:13px; font-weight:600; }
+    .btn-buscar-rep { background:#1a1a2e; color:white; }
+    .btn-copiar-rep { background:#25d366; color:white; }
+    .reporte-texto { background:#f8f9fa; border-radius:8px; padding:16px; font-size:13px; white-space:pre-wrap; line-height:1.6; flex:1; overflow-y:auto; font-family:monospace; }
+    .modal-close { align-self:flex-end; background:none; border:none; font-size:20px; cursor:pointer; color:#888; padding:0; }
   </style>
 </head>
 <body>
@@ -96,7 +109,7 @@
         <select id="filtro-vend" onchange="cargar()" style="padding:8px 12px;border:2px solid #e8e8e8;border-radius:8px;font-size:14px">
           <option value="">Todos los vendedores</option>
         </select>
-        <button onclick="verReporte()" style="padding:8px 16px;background:#1a1a2e;color:white;border:none;border-radius:8px;cursor:pointer;font-size:13px">📊 Ver reporte del día</button>
+        <button onclick="abrirReporte()" style="padding:8px 16px;background:#1a1a2e;color:white;border:none;border-radius:8px;cursor:pointer;font-size:13px">📊 Ver reporte</button>
         <a href="/app/conversaciones.html" style="padding:8px 16px;background:#25d366;color:white;border-radius:8px;font-size:13px;text-decoration:none">💬 Conversaciones bot</a>
       </div>
     </div>
@@ -133,6 +146,20 @@
         <span class="badge-count" id="cnt-hoy">0</span>
       </div>
       <div id="tabla-hoy"><div class="loading">Cargando...</div></div>
+    </div>
+
+    <!-- Modal reporte -->
+    <div class="modal-overlay" id="modal-reporte">
+      <div class="modal">
+        <button class="modal-close" onclick="cerrarReporte()">✕</button>
+        <h2>📊 Reporte de presupuestos</h2>
+        <div class="modal-controls">
+          <input type="date" id="rep-fecha" />
+          <button class="btn-buscar-rep" onclick="verReporte()">Ver reporte</button>
+          <button class="btn-copiar-rep" onclick="copiarReporte()">📋 Copiar</button>
+        </div>
+        <div class="reporte-texto" id="reporte-contenido">Cargando...</div>
+      </div>
     </div>
 
     <!-- Seguimiento Bot -->
@@ -222,10 +249,36 @@
       cargar(); // recargar
     }
 
+    async function abrirReporte() {
+      const hoy = new Date().toISOString().slice(0, 10);
+      document.getElementById('rep-fecha').value = hoy;
+      document.getElementById('modal-reporte').classList.add('visible');
+      verReporte();
+    }
+
     async function verReporte() {
-      const res = await fetch('/app/reporte-diario', { headers: { 'Authorization': 'Bearer ' + token } });
+      const fecha = document.getElementById('rep-fecha').value;
+      document.getElementById('reporte-contenido').textContent = 'Cargando...';
+      const url = '/app/reporte-diario' + (fecha ? '?fecha=' + fecha : '');
+      const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
       const data = await res.json();
-      alert(data.reporte || 'Sin datos');
+      const texto = (data.reporte || 'Sin datos').replace(/\*/g, '');
+      document.getElementById('reporte-contenido').textContent = texto;
+    }
+
+    function copiarReporte() {
+      const texto = document.getElementById('reporte-contenido').textContent;
+      navigator.clipboard.writeText(texto).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value = texto; document.body.appendChild(ta); ta.select();
+        document.execCommand('copy'); document.body.removeChild(ta);
+      });
+      const btn = document.querySelector('.btn-copiar-rep');
+      btn.textContent = '✅ Copiado'; setTimeout(() => btn.textContent = '📋 Copiar', 2000);
+    }
+
+    function cerrarReporte() {
+      document.getElementById('modal-reporte').classList.remove('visible');
     }
 
     async function cargar() {

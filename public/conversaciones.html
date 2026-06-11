@@ -189,10 +189,10 @@
     }
 
     function formatNum(num) {
-      // Mostrar como +54 9 11 XXXX-XXXX si es número argentino
       const n = num.replace(/\D/g, '');
-      if (n.startsWith('5491') && n.length >= 12) {
-        return '+54 9 ' + n.slice(4, 6) + ' ' + n.slice(6, 10) + '-' + n.slice(10);
+      // +54 9 XX XXXX-XXXX (celular argentino con 549 + 10 dígitos = 13 total)
+      if (n.startsWith('549') && n.length === 13) {
+        return '+54 9 ' + n.slice(3, 5) + ' ' + n.slice(5, 9) + '-' + n.slice(9);
       }
       return num;
     }

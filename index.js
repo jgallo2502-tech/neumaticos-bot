@@ -53,6 +53,11 @@ async function guardarAlerta(numero, mensaje) {
 }
 
 async function guardarMensaje(numero, rol, texto) {
+  return guardarMensajes([[numero, rol, texto]]);
+}
+
+async function guardarMensajes(lista) {
+  // lista = [[numero, rol, texto], ...]
   const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
   const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
   const sheets = google.sheets({ version: 'v4', auth });
@@ -63,7 +68,7 @@ async function guardarMensaje(numero, rol, texto) {
     spreadsheetId: process.env.GOOGLE_SHEET_ID,
     range: 'Mensajes!A:E',
     valueInputOption: 'USER_ENTERED',
-    requestBody: { values: [[fecha, hora, numero, rol, texto]] },
+    requestBody: { values: lista.map(([numero, rol, texto]) => [fecha, hora, numero, rol, texto]) },
   });
 }
 
@@ -523,18 +528,18 @@ app.post('/webhook', async (req, res) => {
 
       const matchClaude = respuesta.match(/BUSCAR_MEDIDA:(\S+)/);
       if (matchClaude) {
-        // Claude detectó medida (fallback)
         const medidaNorm = matchClaude[1];
         const marca = extraerMarca(body);
         const pidioRunFlat = /runflat|run flat|run-flat|\brft\b|\bzp\b/i.test(body.toLowerCase());
         const productos = await obtenerPrecios(medidaNorm, marca, pidioRunFlat);
         registrarConsulta(fromNumber, medidaNorm, marca, productos);
         const mensajes = armarMensajes(productos, medidaNorm, esRev);
-        for (const m of mensajes) { twiml.message(m); registrarMensajeSesion(fromNumber, 'bot', m); }
-        if (!esRev && productos.length > 0) {
-          const mCierre = '¿Te puedo ayudar con algo más? 😊\n\n¿Cuál sucursal te queda más cómoda?\n• *Victoria* — wa.me/541137735246\n• *Nordelta* — wa.me/541157347692\n\nColocación *sin cargo* en ambas sucursales. 🔧';
-          twiml.message(mCierre); registrarMensajeSesion(fromNumber, 'bot', mCierre);
-        }
+        const todosBot = [...mensajes];
+        if (!esRev && productos.length > 0)
+          todosBot.push('¿Te puedo ayudar con algo más? 😊\n\n¿Cuál sucursal te queda más cómoda?\n• *Victoria* — wa.me/541137735246\n• *Nordelta* — wa.me/541157347692\n\nColocación *sin cargo* en ambas sucursales. 🔧');
+        todosBot.forEach(m => twiml.message(m));
+        guardarMensajes(todosBot.map(m => [fromNumber, 'bot', m])).catch(() => {});
+        todosBot.forEach(m => sesionActual.mensajes?.push({ rol: 'bot', texto: m }));
       } else {
         twiml.message(respuesta);
         registrarMensajeSesion(fromNumber, 'bot', respuesta);
@@ -544,26 +549,22 @@ app.post('/webhook', async (req, res) => {
       return res.type('text/xml').send(twiml.toString());
     }
 
-    // Si hay medida detectada directamente, buscar precios sin pasar por Claude
-    const matchMedidaFinal = matchMedida;
+    // Medida detectada directamente
     if (matchMedida) {
       const medidaNorm = matchMedida[1];
       const marca = extraerMarca(body);
       const pidioRunFlat = /runflat|run flat|run-flat|\brft\b|\bzp\b/i.test(body.toLowerCase());
-
       const productos = await obtenerPrecios(medidaNorm, marca, pidioRunFlat);
       console.log('Productos encontrados:', productos.length, '| Revendedor:', esRev);
       registrarConsulta(fromNumber, medidaNorm, marca, productos);
-
       const mensajes = armarMensajes(productos, medidaNorm, esRev);
-      for (const m of mensajes) { twiml.message(m); registrarMensajeSesion(fromNumber, 'bot', m); }
-
-      if (!esRev && productos.length > 0) {
-        const mCierre = '¿Te puedo ayudar con algo más? 😊\n\n¿Cuál sucursal te queda más cómoda?\n• *Victoria* — wa.me/541137735246\n• *Nordelta* — wa.me/541157347692\n\nColocación *sin cargo* en ambas sucursales. 🔧';
-        twiml.message(mCierre); registrarMensajeSesion(fromNumber, 'bot', mCierre);
-      }
+      const todosBot = [...mensajes];
+      if (!esRev && productos.length > 0)
+        todosBot.push('¿Te puedo ayudar con algo más? 😊\n\n¿Cuál sucursal te queda más cómoda?\n• *Victoria* — wa.me/541137735246\n• *Nordelta* — wa.me/541157347692\n\nColocación *sin cargo* en ambas sucursales. 🔧');
+      todosBot.forEach(m => twiml.message(m));
+      guardarMensajes(todosBot.map(m => [fromNumber, 'bot', m])).catch(() => {});
+      todosBot.forEach(m => sesionActual.mensajes?.push({ rol: 'bot', texto: m }));
     } else {
-      // Respuesta conversacional de Claude
       twiml.message(respuesta);
       registrarMensajeSesion(fromNumber, 'bot', respuesta);
     }

@@ -345,11 +345,17 @@
     let seleccionados = {};
     let presupuestoActual = null;
     let mapaImagenes = {};
+    let imagenesPromise = null;
 
-    // Cargar mapa de imágenes al iniciar
-    fetch('/app/imagenes', { headers: { 'Authorization': 'Bearer ' + token } })
-      .then(r => r.json()).then(data => { mapaImagenes = data; })
-      .catch(() => {});
+    function cargarImagenes() {
+      if (!imagenesPromise) {
+        imagenesPromise = fetch('/app/imagenes', { headers: { 'Authorization': 'Bearer ' + token } })
+          .then(r => r.json()).then(data => { mapaImagenes = data; return data; })
+          .catch(() => { imagenesPromise = null; return {}; });
+      }
+      return imagenesPromise;
+    }
+    cargarImagenes();
 
     function fmt(n) {
       return '$' + Math.round(n).toLocaleString('es-AR');
@@ -369,6 +375,7 @@
       document.getElementById('btn-generar-wrap').style.display = 'none';
       document.getElementById('presupuesto-generado').style.display = 'none';
       seleccionados = {};
+      await cargarImagenes();
 
       const medidas = [medida1];
       if (medida2) medidas.push(medida2);

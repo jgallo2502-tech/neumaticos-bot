@@ -172,7 +172,7 @@ function descuentoRevendedor(marca) {
   const m = marca.toLowerCase();
   if (['michelin', 'bfgoodrich'].includes(m)) return 0.35;
   if (['giti', 'gtradial'].includes(m)) return 0.33;
-  if (m === 'yokohama') return 0.32;
+  if (['yokohama', 'nexen'].includes(m)) return 0.32;
   return 0.28;
 }
 

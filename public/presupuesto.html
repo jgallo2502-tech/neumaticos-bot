@@ -294,7 +294,7 @@
             <span id="presup-fecha"></span>
           </div>
         </div>
-        <p><strong>Cliente:</strong> <span id="presup-cliente"></span> &nbsp;|&nbsp; <strong>WhatsApp:</strong> <span id="presup-tel"></span></p>
+        <p><strong>Cliente:</strong> <span id="presup-cliente"></span> &nbsp;|&nbsp; <strong>WhatsApp:</strong> <span id="presup-tel"></span> &nbsp;|&nbsp; <strong>Vendedor:</strong> <span id="presup-vendedor"></span></p>
         <p style="margin-top:8px;font-size:13px;color:#666">Precios por unidad</p>
         <div id="tabla-unitarios"></div>
         <div id="servicios-hoja1"></div>
@@ -315,7 +315,7 @@
             <span id="presup-fecha2"></span>
           </div>
         </div>
-        <p><strong>Cliente:</strong> <span id="presup-cliente2"></span></p>
+        <p><strong>Cliente:</strong> <span id="presup-cliente2"></span> &nbsp;|&nbsp; <strong>Vendedor:</strong> <span id="presup-vendedor2"></span></p>
         <div id="tabla-totales" style="margin-top:12px"></div>
         <div id="servicios-hoja2"></div>
         <p class="nota" style="margin-top:12px">
@@ -464,10 +464,13 @@
       const fecha = new Date().toLocaleDateString('es-AR');
       const num = '#' + String(Date.now()).slice(-6);
 
+      const vendedor = localStorage.getItem('vendedor') || '';
+
       // Poblar datos fijos
       ['presup-num','presup-num2'].forEach(id => document.getElementById(id).textContent = num);
       ['presup-fecha','presup-fecha2'].forEach(id => document.getElementById(id).textContent = fecha);
       ['presup-cliente','presup-cliente2'].forEach(id => document.getElementById(id).textContent = cliente);
+      ['presup-vendedor','presup-vendedor2'].forEach(id => document.getElementById(id).textContent = vendedor);
       document.getElementById('presup-tel').textContent = tel;
 
       // Recopilar todos los datos ANTES de guardar
@@ -631,9 +634,11 @@
       const ssPrecio = parseInt(document.getElementById('ss-precio')?.value || 0);
       const ssPago  = document.getElementById('ss-pago')?.value || '';
 
+      const vendedor = localStorage.getItem('vendedor') || '';
       let msg = `🔴 *Neumáticos Gallo* — Presupuesto ${num}\n`;
       msg += `👤 ${cliente}`;
       if (tel && tel !== '-') msg += ` | 📱 ${tel}`;
+      if (vendedor) msg += ` | 🧑‍💼 ${vendedor}`;
       msg += `\n📅 ${new Date().toLocaleDateString('es-AR')}\n\n`;
 
       for (const p of items) {
@@ -714,7 +719,9 @@
       const ssPrecio = parseInt(document.getElementById('ss-precio')?.value || 0);
       const ssPago  = document.getElementById('ss-pago')?.value || '';
 
+      const vendedor = localStorage.getItem('vendedor') || '';
       let msg = 'Hola ' + cliente + '! Te enviamos el presupuesto ' + num + ' de Neumaticos Gallo.\n\n';
+      if (vendedor) msg += 'Vendedor: ' + vendedor + '\n\n';
 
 
 

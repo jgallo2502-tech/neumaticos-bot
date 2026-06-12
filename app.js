@@ -96,9 +96,10 @@ router.get('/imagenes', authMiddleware, async (req, res) => {
     });
     const mapa = {};
     for (const row of (r.data.values || []).slice(1)) {
-      const desc = (row[0] || '').trim();
-      const url  = (row[3] || '').trim();
-      if (desc && url) mapa[desc] = url;
+      const marca  = (row[0] || '').trim().toUpperCase();
+      const modelo = (row[1] || '').trim().toUpperCase();
+      const url    = (row[2] || '').trim();
+      if (marca && modelo && url) mapa[marca + '|' + modelo] = url;
     }
     imagenesCache = mapa;
     imagenesCacheTs = ahora;

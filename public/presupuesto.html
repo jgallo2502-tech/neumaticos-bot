@@ -361,6 +361,30 @@
       return '$' + Math.round(n).toLocaleString('es-AR');
     }
 
+    const MARCAS_CONOCIDAS = ['MICHELIN','BFGOODRICH','YOKOHAMA','GITI','GTRADIAL','NEXEN','HANKOOK',
+      'LINGLONG','DUNLOP','PIRELLI','GOODYEAR','CONTINENTAL','BRIDGESTONE','FATE',
+      'WESTLAKE','TRACMAX','SUNNY','CHAOYANG','TOYO','KUMHO','FALKEN','FIRESTONE',
+      'COOPER','MAXXIS','NANKANG','ATLAS','TRIANGLE','UNIROYAL','SAILUN'];
+
+    function extraerModelo(desc) {
+      let s = desc.toUpperCase().trim();
+      for (const m of MARCAS_CONOCIDAS) {
+        if (s.startsWith(m)) { s = s.slice(m.length).trim(); break; }
+      }
+      s = s.replace(/\bLT\d{3}\/\d{2}\s*R\s*\d{2}C?\b/g, '');
+      s = s.replace(/\b\d{3}\/\d{2}\s*R\s*\d{2}C?\b/g, '');
+      s = s.replace(/\b\d{3}\/\d{2}ZR\d{2}\b/g, '');
+      s = s.replace(/\b\d{2,3}\/\d{2,3}[A-Z]\b/g, '');
+      s = s.replace(/\b\d{2,3}[A-Z]{1,2}\b/g, '');
+      s = s.replace(/\b(XL|TL|SL|RWL|RBL|RFT|RF|N[0-9]|MO|AO|VOL|SSR)\b/g, '');
+      return s.replace(/\s+/g, ' ').trim();
+    }
+
+    function buscarImagen(marca, desc) {
+      const modelo = extraerModelo(desc);
+      return mapaImagenes[(marca.toUpperCase() + '|' + modelo)] || '';
+    }
+
     function logout() {
       localStorage.clear();
       window.location.href = '/app/login.html';
@@ -437,7 +461,7 @@
               if (p.stockNor > 0) stockParts.push('Nordelta: ' + p.stockNor);
               if (p.stockExpr > 0) stockParts.push('Express 48hs: ' + (p.stockExpr >= 99 ? 'disponible' : p.stockExpr));
               const stockStr = stockParts.length > 0 ? stockParts.join(' | ') : 'Sin stock en depósito';
-              const imgUrl = mapaImagenes[p.descripcion] || '';
+              const imgUrl = buscarImagen(p.marca, p.descripcion);
               html += '<div class="producto-card" id="card-' + idx + '" onclick="toggleSeleccion(' + idx + ')">';
               html += '<div style="display:flex;align-items:center;gap:12px">';
               if (imgUrl) html += '<img src="' + imgUrl + '" class="no-print" style="width:72px;height:72px;object-fit:contain;border-radius:6px;flex-shrink:0" onerror="this.style.display=\'none\'">';

@@ -344,6 +344,12 @@
 
     let seleccionados = {};
     let presupuestoActual = null;
+    let mapaImagenes = {};
+
+    // Cargar mapa de imágenes al iniciar
+    fetch('/app/imagenes', { headers: { 'Authorization': 'Bearer ' + token } })
+      .then(r => r.json()).then(data => { mapaImagenes = data; })
+      .catch(() => {});
 
     function fmt(n) {
       return '$' + Math.round(n).toLocaleString('es-AR');
@@ -424,12 +430,15 @@
               if (p.stockNor > 0) stockParts.push('Nordelta: ' + p.stockNor);
               if (p.stockExpr > 0) stockParts.push('Express 48hs: ' + (p.stockExpr >= 99 ? 'disponible' : p.stockExpr));
               const stockStr = stockParts.length > 0 ? stockParts.join(' | ') : 'Sin stock en depósito';
+              const imgUrl = mapaImagenes[p.descripcion] || '';
               html += '<div class="producto-card" id="card-' + idx + '" onclick="toggleSeleccion(' + idx + ')">';
+              html += '<div style="display:flex;align-items:center;gap:12px">';
+              if (imgUrl) html += '<img src="' + imgUrl + '" class="no-print" style="width:72px;height:72px;object-fit:contain;border-radius:6px;flex-shrink:0" onerror="this.style.display=\'none\'">';
               html += '<div>';
               html += '<div class="producto-nombre">' + p.descripcion + '</div>';
               html += '<div class="producto-precios">12 pagos: ' + fmt(p.precio) + ' &nbsp;|&nbsp; 6 cuotas (-10%): ' + fmt(c6) + ' &nbsp;|&nbsp; 3 cuotas (-15%): ' + fmt(c3) + '</div>';
               html += '<div class="stock-info no-print">📦 ' + stockStr + '</div>';
-              html += '</div>';
+              html += '</div></div>';
               html += '<div style="text-align:right">';
               html += '<div class="producto-precio-main">' + fmt(contado) + '</div>';
               html += '<div style="font-size:11px;color:#888">contado</div>';

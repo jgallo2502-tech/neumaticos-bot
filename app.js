@@ -73,6 +73,42 @@ router.post('/precios', express.json(), authMiddleware, async (req, res) => {
   res.json(resultado);
 });
 
+// --- Imágenes de productos ---
+let imagenesCache = null;
+let imagenesCacheTs = 0;
+
+router.get('/imagenes', authMiddleware, async (req, res) => {
+  try {
+    const ahora = Date.now();
+    if (imagenesCache && ahora - imagenesCacheTs < 5 * 60 * 1000) {
+      return res.json(imagenesCache);
+    }
+    const auth = new google.auth.GoogleAuth({
+      ...(process.env.GOOGLE_CREDENTIALS
+        ? { credentials: JSON.parse(process.env.GOOGLE_CREDENTIALS) }
+        : { keyFile: path.join(__dirname, 'credentials.json') }),
+      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+    });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const r = await sheets.spreadsheets.values.get({
+      spreadsheetId: '160e1dKlTch9gzOOxjhz7hKJKfbrMifAyTXE10aZRbgw',
+      range: 'Imágenes!A:D',
+    });
+    const mapa = {};
+    for (const row of (r.data.values || []).slice(1)) {
+      const desc = (row[0] || '').trim();
+      const url  = (row[3] || '').trim();
+      if (desc && url) mapa[desc] = url;
+    }
+    imagenesCache = mapa;
+    imagenesCacheTs = ahora;
+    res.json(mapa);
+  } catch (e) {
+    console.error('Error cargando imágenes:', e.message);
+    res.json({});
+  }
+});
+
 // --- Guardar presupuesto en Google Sheets ---
 router.post('/guardar-presupuesto', express.json(), authMiddleware, async (req, res) => {
   try {

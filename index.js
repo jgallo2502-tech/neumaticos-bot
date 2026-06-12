@@ -380,7 +380,12 @@ function armarMensajes(productos, medidaOriginal, esRev = false) {
     if (grupos[orden].length === 0) continue;
     let msg = `${nombresGrupo[orden]}\n`;
     for (const p of grupos[orden]) {
-      const express = p.stockExpr > 0 ? '\n⚡ _Disponible también vía Pedido Express en 48 hs hábiles_' : '';
+      const tienePropio = (p.stockVic + p.stockNor) > 0;
+      const express = p.stockExpr > 0
+        ? (tienePropio
+            ? '\n⚡ _Disponible también vía Pedido Express — entrega en 48 hs hábiles_'
+            : '\n⚡ _Solo disponible vía Pedido Express — entrega en 48 hs hábiles (no en stock en local)_')
+        : '';
       msg += `\n🔹 *${p.descripcion}*\n`;
       msg += preciosProducto(p.precio, esRev, p.marca);
       if (p.promocion && !esRev && p.promocion.trim()) {

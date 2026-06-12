@@ -61,9 +61,10 @@ router.post('/precios', express.json(), authMiddleware, async (req, res) => {
     let prods = await obtenerPrecios(norm, null, false);
     // Filtrar por depósito si se especificaron
     if (depositos) {
+      const minStock = depositos.pocoStock ? 1 : 4;
       prods = prods.filter(p => {
-        if (depositos.victoria && p.stockVic >= 4) return true;
-        if (depositos.nordelta && p.stockNor >= 4) return true;
+        if (depositos.victoria && p.stockVic >= minStock) return true;
+        if (depositos.nordelta && p.stockNor >= minStock) return true;
         if (depositos.express  && p.stockExpr > 0) return true;
         return false;
       });

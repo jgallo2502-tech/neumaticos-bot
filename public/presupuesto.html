@@ -167,6 +167,9 @@
           <label style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:400;text-transform:none;letter-spacing:0">
             <input type="checkbox" id="dep-express" checked> ⚡ Express 48hs
           </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:400;text-transform:none;letter-spacing:0">
+            <input type="checkbox" id="poco-stock"> 📦 Incluir stock &lt; 4 unidades
+          </label>
         </div>
       </div>
       <button class="btn-buscar" onclick="buscar()">🔍 Buscar precios</button>
@@ -368,6 +371,7 @@
         victoria: document.getElementById('dep-victoria')?.checked,
         nordelta: document.getElementById('dep-nordelta')?.checked,
         express:  document.getElementById('dep-express')?.checked,
+        pocoStock: document.getElementById('poco-stock')?.checked,
       };
       const res = await fetch('/app/precios', {
         method: 'POST',
@@ -418,7 +422,7 @@
               const stockParts = [];
               if (p.stockVic > 0) stockParts.push('Victoria: ' + p.stockVic);
               if (p.stockNor > 0) stockParts.push('Nordelta: ' + p.stockNor);
-              if (p.stockExpr > 0) stockParts.push('Express 48hs: ' + p.stockExpr);
+              if (p.stockExpr > 0) stockParts.push('Express 48hs: ' + (p.stockExpr >= 99 ? 'disponible' : p.stockExpr));
               const stockStr = stockParts.length > 0 ? stockParts.join(' | ') : 'Sin stock en depósito';
               html += '<div class="producto-card" id="card-' + idx + '" onclick="toggleSeleccion(' + idx + ')">';
               html += '<div>';
@@ -640,12 +644,16 @@
         const c3c = Math.round(c3t / 3);
         const c1  = Math.round(p.precio * 0.80) * cant;
 
+        const soloExpress = (p.stockVic === 0 && p.stockNor === 0 && p.stockExpr > 0);
+        const tambiénExpress = ((p.stockVic > 0 || p.stockNor > 0) && p.stockExpr > 0);
         msg += `🔹 *${p.descripcion}*\n`;
         msg += `   Cantidad: ${cant} unidades\n`;
         if (fp12) msg += `   💳 12 pagos (lista): ${fmt(c12)} (${fmt(Math.round(c12/12))}/cuota)\n`;
         if (fp6)  msg += `   💳 6 cuotas (-10%): ${fmt(c6t)} (${fmt(c6c)}/cuota)\n`;
         if (fp3)  msg += `   💳 3 cuotas (-15%): ${fmt(c3t)} (${fmt(c3c)}/cuota)\n`;
         if (fp1)  msg += `   💵 Contado (-20%): ${fmt(c1)}\n`;
+        if (soloExpress)   msg += `   ⚡ Solo disponible vía Pedido Express — entrega 48 hs hábiles\n`;
+        if (tambiénExpress) msg += `   ⚡ Disponible también vía Pedido Express — entrega 48 hs hábiles\n`;
         msg += '\n';
       }
 

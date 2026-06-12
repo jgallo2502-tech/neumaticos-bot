@@ -245,7 +245,7 @@ async function registrarConsulta(numero, medida, marca, productos) {
 // --- Leer Google Sheets ---
 // Columnas: A=Cod.Art | B=Cod.Alt | C=Descripción | D=Marca | E=Modelo | F=Medida
 //           G=Victoria | H=Nordelta | I=Pedido Express 48hs | J=Precio | K=Promoción
-async function obtenerPrecios(medida, marca, incluirRunFlat = false) {
+async function obtenerPrecios(medida, marca, incluirRunFlat = false, minStock = 4) {
   const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
   const auth = new google.auth.GoogleAuth({
     credentials,
@@ -285,8 +285,7 @@ async function obtenerPrecios(medida, marca, incluirRunFlat = false) {
     const esRunFlat = /runflat|run flat|run-flat|\bRFT\b|\bZP\b/i.test(rowDesc);
     if (esRunFlat && !incluirRunFlat) continue;
 
-    // Solo mostrar productos con 4 o más unidades en stock
-    if (coincideMedida && coincideMarca && stockTotal >= 4) {
+    if (coincideMedida && coincideMarca && stockTotal >= minStock) {
       resultados.push({
         descripcion: rowDesc,
         marca: rowMarca,

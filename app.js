@@ -58,10 +58,9 @@ router.post('/precios', express.json(), authMiddleware, async (req, res) => {
   for (const medida of medidas) {
     const norm = normalizarMedida(medida);
     if (!norm) { resultado[medida] = []; continue; }
-    let prods = await obtenerPrecios(norm, null, false);
-    // Filtrar por depósito si se especificaron
+    const minStock = (depositos && depositos.pocoStock) ? 1 : 4;
+    let prods = await obtenerPrecios(norm, null, false, minStock);
     if (depositos) {
-      const minStock = depositos.pocoStock ? 1 : 4;
       prods = prods.filter(p => {
         if (depositos.victoria && p.stockVic >= minStock) return true;
         if (depositos.nordelta && p.stockNor >= minStock) return true;

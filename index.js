@@ -153,7 +153,7 @@ const MARCAS_PREMIUM = ['michelin', 'continental', 'dunlop', 'yokohama', 'bfgood
 const MARCAS_PRECIO_CALIDAD = ['gtradial', 'giti', 'nexen', 'falken', 'hankook'];
 const MARCAS_ECONOMICAS = ['westlake', 'tracmax', 'linglong'];
 const TODAS_MARCAS = [...MARCAS_PREMIUM, ...MARCAS_PRECIO_CALIDAD, ...MARCAS_ECONOMICAS];
-const MARCAS_DESCUENTO_35 = ['michelin', 'bfgoodrich'];
+
 
 function extraerMarca(texto) {
   const lower = texto.toLowerCase();
@@ -169,7 +169,11 @@ function categoriaYEmoji(marca) {
 }
 
 function descuentoRevendedor(marca) {
-  return MARCAS_DESCUENTO_35.includes(marca.toLowerCase()) ? 0.35 : 0.28;
+  const m = marca.toLowerCase();
+  if (['michelin', 'bfgoodrich'].includes(m)) return 0.35;
+  if (['giti', 'gtradial'].includes(m)) return 0.33;
+  if (m === 'yokohama') return 0.32;
+  return 0.28;
 }
 
 // --- Cache de revendedores ---

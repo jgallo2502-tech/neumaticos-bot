@@ -663,9 +663,12 @@ router.get('/conversaciones/mensajes', authMiddleware, async (req, res) => {
     }
     // Ordenar por fecha+hora del último mensaje (más reciente primero)
     const conversaciones = Object.values(grupos).sort((a, b) => {
-      const ua = a.fecha.split('/').reverse().join('') + (a.mensajes.at(-1)?.hora || '');
-      const ub = b.fecha.split('/').reverse().join('') + (b.mensajes.at(-1)?.hora || '');
-      return ub.localeCompare(ua);
+      const toNum = (c) => {
+        const [d, m, y] = c.fecha.split('/');
+        const h = (c.mensajes.at(-1)?.hora || '00:00').replace(':', '');
+        return parseInt(y + m + d + h);
+      };
+      return toNum(b) - toNum(a);
     });
     res.json({ conversaciones });
   } catch (err) {

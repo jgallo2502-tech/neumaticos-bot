@@ -133,11 +133,18 @@ async function guardarResumenSesion(numero, inicio, resumen) {
 }
 
 // --- Normalizar medida de neumático ---
-// Acepta: 185/65R15, 185-65-15, 185/65-15, 18565r15, 205 55 16, 2055516, etc.
+// Acepta: 185/65R15, 185-65-15, 18565r15, 205 55 16, 33x12.50R15, 31x10.5 r15, etc.
 function normalizarMedida(texto) {
   const t = texto.replace(/\s+/g, ' ').trim();
 
-  // Formato con separadores: 205/55R16, 205-55-16, 205/55 16, 205 55 r16, etc.
+  // Formato americano/flotación: 33x12.50R15, 31x10.5 r15, 35X12.5R20
+  const mAm = t.match(/(\d{2})\s*[xX]\s*(\d{2}\.?\d*)\s*[rR]\s*(\d{2})\b/);
+  if (mAm) {
+    const ancho = parseFloat(mAm[2]).toString(); // 12.50 → "12.5", 10.5 → "10.5"
+    return `${mAm[1]}X${ancho}R${mAm[3]}`.toUpperCase();
+  }
+
+  // Formato métrico con separadores: 205/55R16, 205-55-16, 205 55 r16, etc.
   const m1 = t.match(/(\d{3})\s*[\/\-\s]\s*(\d{2})\s*[rR\/\-\s]\s*(\d{2})\b/);
   if (m1) return `${m1[1]}/${m1[2]}R${m1[3]}`;
 

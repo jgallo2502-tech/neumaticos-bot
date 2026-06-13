@@ -380,10 +380,8 @@ function armarMensajes(productos, medidaOriginal, esRev = false) {
     let msg = `${nombresGrupo[orden]}\n`;
     for (const p of grupos[orden]) {
       const tienePropio = (p.stockVic + p.stockNor) > 0;
-      const express = p.stockExpr > 0
-        ? (tienePropio
-            ? '\n⚡ _Disponible también vía Pedido Express — entrega en 48 hs hábiles_'
-            : '\n⚡ _Solo disponible vía Pedido Express — entrega en 48 hs hábiles (no en stock en local)_')
+      const express = (!tienePropio && p.stockExpr > 0)
+        ? '\n⚡ _Solo disponible vía Pedido Express — entrega en 48 hs hábiles (no en stock en local)_'
         : '';
       msg += `\n🔹 *${p.descripcion}*\n`;
       msg += preciosProducto(p.precio, esRev, p.marca);

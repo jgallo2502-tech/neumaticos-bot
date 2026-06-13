@@ -690,15 +690,13 @@
         const c1  = Math.round(p.precio * 0.80) * cant;
 
         const soloExpress = (p.stockVic === 0 && p.stockNor === 0 && p.stockExpr > 0);
-        const tambiénExpress = ((p.stockVic > 0 || p.stockNor > 0) && p.stockExpr > 0);
         msg += `🔹 *${p.descripcion}*\n`;
         msg += `   Cantidad: ${cant} unidades\n`;
         if (fp12) msg += `   💳 12 pagos (lista): ${fmt(c12)} (${fmt(Math.round(c12/12))}/cuota)\n`;
         if (fp6)  msg += `   💳 6 cuotas (-10%): ${fmt(c6t)} (${fmt(c6c)}/cuota)\n`;
         if (fp3)  msg += `   💳 3 cuotas (-15%): ${fmt(c3t)} (${fmt(c3c)}/cuota)\n`;
         if (fp1)  msg += `   💵 Contado (-20%): ${fmt(c1)}\n`;
-        if (soloExpress)   msg += `   ⚡ Solo disponible vía Pedido Express — entrega 48 hs hábiles\n`;
-        if (tambiénExpress) msg += `   ⚡ Disponible también vía Pedido Express — entrega 48 hs hábiles\n`;
+        if (soloExpress) msg += `   ⚡ Solo disponible vía Pedido Express — entrega 48 hs hábiles\n`;
         msg += '\n';
       }
 

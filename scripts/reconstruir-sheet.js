@@ -147,6 +147,7 @@ function leerMichelinBFGoodrich() {
     'Invierno Michelin':            { marca: 'Michelin',   dim: 4,  refIVA: 10, obs: 11 },
   };
   const precioMap = new Map();
+  const promoInvierno = new Set(); // claves medida|marca con descuento adicional para reventa
   for (const [sheetName, cfg] of Object.entries(sheetsConfig)) {
     if (!wbP.SheetNames.includes(sheetName)) continue;
     const rows = XLSX.utils.sheet_to_json(wbP.Sheets[sheetName], { header: 1 }).slice(4);
@@ -155,14 +156,18 @@ function leerMichelinBFGoodrich() {
       if (!medida) continue;
       const refIVA = parseFloat(row[cfg.refIVA]);
       if (!refIVA) continue;
-      const obs = (row[cfg.obs] || '').toString().toUpperCase();
-      const esPromoInvierno = obs.includes('PROMO INVIERNO');
-      const divisor = esPromoInvierno ? 0.9 : 0.8;
-      const precio = Math.round(refIVA / divisor);
+      const precio = Math.round(refIVA / 0.8); // precio de lista: siempre /0.8
       const key = `${medida}|${cfg.marca.toUpperCase()}`;
       if (!precioMap.has(key)) precioMap.set(key, precio);
+      const obs = (row[cfg.obs] || '').toString().toUpperCase();
+      if (obs.includes('PROMO INVIERNO')) promoInvierno.add(key);
     }
   }
+  require('fs').writeFileSync(
+    path.join(__dirname, 'promo-invierno.json'),
+    JSON.stringify([...promoInvierno], null, 2)
+  );
+  console.log(`Promo invierno: ${promoInvierno.size} medidas marcadas`);
 
   // 2. Stock express
   const wbS = XLSX.readFile('C:/Users/juani/Downloads/Stock_Disponible_2026-06-12_17-42-31.xlsx');

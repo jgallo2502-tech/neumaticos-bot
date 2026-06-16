@@ -135,27 +135,31 @@ function leerLinglong() {
 }
 
 function leerMichelinBFGoodrich() {
-  // 1. Mapa de precios desde lista de referencia (Mostrador = col9, o col10/0.8)
-  const wbP = XLSX.readFile('C:/Users/juani/Desktop/PC Anterior Backup/Google Drive/Documents/Listas de Precio/202606/Lista de Referencia Auto y Camioneta - 01 Junio 2026.xlsx');
-  const sheetsMarca = {
-    'Turismo y Camioneta Michelin': 'Michelin',
-    'Michelin R14':                 'Michelin',
-    'Invierno Michelin':            'Michelin',
-    'Camioneta BFG':                'Bfgoodrich',
-    'BFGoodrich Auto':              'Bfgoodrich',
+  // 1. Mapa de precios desde lista de referencia
+  // Precio mostrador = Precio Referencia con IVA / 0.8 (normal) o / 0.9 (promo invierno, ya tiene 20% off)
+  const wbP = XLSX.readFile('C:/Users/juani/Desktop/PC Anterior Backup/Google Drive/Documents/Listas de Precio/202606/Lista de Referencia Auto y Camioneta - 15 Junio 2026 (1).xlsx');
+  // columnas: [dimensión, refIVA, observación] por hoja (difieren por la col extra "MARCA/SEGMENTO")
+  const sheetsConfig = {
+    'Turismo y Camioneta Michelin': { marca: 'Michelin',   dim: 4,  refIVA: 10, obs: 11 },
+    'Camioneta BFG':                { marca: 'Bfgoodrich', dim: 4,  refIVA: 10, obs: 11 },
+    'Michelin R14':                 { marca: 'Michelin',   dim: 4,  refIVA: 11, obs: 12 },
+    'BFGoodrich Auto':              { marca: 'Bfgoodrich', dim: 4,  refIVA: 11, obs: 12 },
+    'Invierno Michelin':            { marca: 'Michelin',   dim: 4,  refIVA: 10, obs: 11 },
   };
   const precioMap = new Map();
-  for (const [sheetName, marca] of Object.entries(sheetsMarca)) {
+  for (const [sheetName, cfg] of Object.entries(sheetsConfig)) {
     if (!wbP.SheetNames.includes(sheetName)) continue;
-    const rows = XLSX.utils.sheet_to_json(wbP.Sheets[sheetName], { header: 1 });
+    const rows = XLSX.utils.sheet_to_json(wbP.Sheets[sheetName], { header: 1 }).slice(4);
     for (const row of rows) {
-      const medida = extraerMedida((row[4] || '').toString());
+      const medida = extraerMedida((row[cfg.dim] || '').toString());
       if (!medida) continue;
-      const mostrador = parseFloat(row[9]);
-      const refIVA    = parseFloat(row[10]);
-      const precio    = mostrador > 0 ? Math.round(mostrador) : (refIVA > 0 ? Math.round(refIVA / 0.8) : 0);
-      if (!precio) continue;
-      const key = `${medida}|${marca.toUpperCase()}`;
+      const refIVA = parseFloat(row[cfg.refIVA]);
+      if (!refIVA) continue;
+      const obs = (row[cfg.obs] || '').toString().toUpperCase();
+      const esPromoInvierno = obs.includes('PROMO INVIERNO');
+      const divisor = esPromoInvierno ? 0.9 : 0.8;
+      const precio = Math.round(refIVA / divisor);
+      const key = `${medida}|${cfg.marca.toUpperCase()}`;
       if (!precioMap.has(key)) precioMap.set(key, precio);
     }
   }

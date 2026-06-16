@@ -145,12 +145,13 @@ function normalizarMedida(texto) {
   }
 
   // Formato métrico con separadores: 205/55R16, 205-55-16, 205 55 r16, etc.
-  const m1 = t.match(/(\d{3})\s*[\/\-\s]\s*(\d{2})\s*[rR\/\-\s]\s*(\d{2})\b/);
-  if (m1) return `${m1[1]}/${m1[2]}R${m1[3]}`;
+  // El sufijo "C" (ej: 205/75R16C) indica neumático de carga/comercial (Sprinter, Master, Transit)
+  const m1 = t.match(/(\d{3})\s*[\/\-\s]\s*(\d{2})\s*[rR\/\-\s]\s*(\d{2})(C)?\b/i);
+  if (m1) return `${m1[1]}/${m1[2]}R${m1[3]}${m1[4] ? 'C' : ''}`;
 
   // Sin separadores: 2055516, 20555r16, 20555R16
-  const m2 = t.match(/(\d{3})(\d{2})[rR]?(\d{2})\b/);
-  if (m2) return `${m2[1]}/${m2[2]}R${m2[3]}`;
+  const m2 = t.match(/(\d{3})(\d{2})[rR]?(\d{2})(C)?\b/i);
+  if (m2) return `${m2[1]}/${m2[2]}R${m2[3]}${m2[4] ? 'C' : ''}`;
 
   return null;
 }
@@ -280,7 +281,9 @@ async function obtenerPrecios(medida, marca, incluirRunFlat = false, minStock = 
 
     if (!rowMarca || !rowMedida || !rowPrecio) continue;
 
-    const coincideMedida = normalizarMedida(rowMedida) === medida;
+    const medidaRowNorm = normalizarMedida(rowMedida);
+    // Si el usuario no especificó "C", igual debe encontrar neumáticos de carga/comerciales (ej: 205/75R16C)
+    const coincideMedida = medidaRowNorm === medida || medidaRowNorm === `${medida}C`;
     const coincideMarca = marca ? rowMarca.toLowerCase().includes(marca) : true;
 
     const sVic  = parseInt(stockVic.toString().replace(/\D/g, '')) || 0;

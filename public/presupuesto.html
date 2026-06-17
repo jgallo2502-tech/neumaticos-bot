@@ -116,6 +116,7 @@
     .loading { text-align: center; padding: 30px; color: #888; }
     .sin-stock { text-align: center; padding: 30px; color: #888; background: #f9f9f9; border-radius: 10px; }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <header>
@@ -131,6 +132,24 @@
   </header>
 
   <div class="container">
+
+    <!-- Stats del vendedor -->
+    <div class="card" id="stats-card" style="padding:18px 24px">
+      <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+        <div style="text-align:center;min-width:90px">
+          <div id="stat-hoy" style="font-size:36px;font-weight:700;color:#1a1a2e;line-height:1">—</div>
+          <div style="font-size:11px;color:#888;margin-top:4px;text-transform:uppercase;letter-spacing:.5px">Hoy</div>
+        </div>
+        <div style="text-align:center;min-width:110px">
+          <div id="stat-mes" style="font-size:36px;font-weight:700;color:#1a1a2e;line-height:1">—</div>
+          <div style="font-size:11px;color:#888;margin-top:4px;text-transform:uppercase;letter-spacing:.5px">Últimos 30 días</div>
+        </div>
+        <div style="flex:1;min-width:220px">
+          <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Últimos 7 días</div>
+          <canvas id="chart-7d" height="60"></canvas>
+        </div>
+      </div>
+    </div>
 
     <!-- Datos del cliente y búsqueda -->
     <div class="card" id="form-card">
@@ -344,6 +363,50 @@
     if (!token) window.location.href = '/app/login.html';
     document.getElementById('vendedor-nombre').textContent = localStorage.getItem('vendedor') || '';
     if (localStorage.getItem('rol') === 'admin') document.getElementById('nav-broadcast').style.display = 'inline';
+
+    // --- Stats del vendedor ---
+    async function cargarStats() {
+      try {
+        const r = await fetch('/app/mis-stats', { headers: { 'Authorization': 'Bearer ' + token } });
+        if (!r.ok) return;
+        const { hoy, mes30, dias7 } = await r.json();
+        document.getElementById('stat-hoy').textContent = hoy;
+        document.getElementById('stat-mes').textContent = mes30;
+
+        const labels = Object.keys(dias7).map(d => {
+          const [,m,dd] = d.split('-');
+          return dd + '/' + m;
+        });
+        const valores = Object.values(dias7);
+        const max = Math.max(...valores, 1);
+
+        new Chart(document.getElementById('chart-7d'), {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [{
+              data: valores,
+              borderColor: '#e63946',
+              backgroundColor: 'rgba(230,57,70,0.08)',
+              borderWidth: 2.5,
+              pointBackgroundColor: '#e63946',
+              pointRadius: 4,
+              tension: 0.3,
+              fill: true,
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + ctx.parsed.y + ' presup.' } } },
+            scales: {
+              x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+              y: { display: false, min: 0, max: max + 1 }
+            }
+          }
+        });
+      } catch(e) { console.error('stats:', e); }
+    }
+    cargarStats();
 
     let seleccionados = {};
     let presupuestoActual = null;

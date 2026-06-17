@@ -111,6 +111,54 @@ router.get('/imagenes', authMiddleware, async (req, res) => {
   }
 });
 
+// --- Stats de presupuestos del vendedor ---
+router.get('/mis-stats', authMiddleware, async (req, res) => {
+  try {
+    const vendedor = req.user.nombre;
+    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const result = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Presupuestos!A:C',
+    });
+    const rows = (result.data.values || []).slice(1);
+
+    // Fecha actual en AR (UTC-3)
+    const ahora = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    const hoy = ahora.toISOString().slice(0, 10); // YYYY-MM-DD
+
+    const parseDate = (f) => {
+      if (!f) return null;
+      // Soporta DD/MM/YYYY y YYYY-MM-DD
+      if (f.includes('/')) { const [d,m,y] = f.split('/'); return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`; }
+      return f.slice(0, 10);
+    };
+
+    let hoyCount = 0, mes30 = 0;
+    const dias7 = {};
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(ahora); d.setDate(d.getDate() - i);
+      dias7[d.toISOString().slice(0,10)] = 0;
+    }
+    const hace30 = new Date(ahora); hace30.setDate(hace30.getDate() - 29);
+    const hace30Str = hace30.toISOString().slice(0,10);
+
+    for (const row of rows) {
+      if ((row[2] || '') !== vendedor) continue;
+      const fecha = parseDate(row[0]);
+      if (!fecha) continue;
+      if (fecha === hoy) hoyCount++;
+      if (fecha >= hace30Str) mes30++;
+      if (dias7.hasOwnProperty(fecha)) dias7[fecha]++;
+    }
+
+    res.json({ hoy: hoyCount, mes30, dias7 });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- Guardar presupuesto en Google Sheets ---
 router.post('/guardar-presupuesto', express.json(), authMiddleware, async (req, res) => {
   try {

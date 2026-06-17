@@ -226,7 +226,8 @@
     }
 
     function seguimiento(telWA, cliente, numero, productos) {
-      const msg = `Hola ${cliente}! 👋\n\nTe escribimos desde *Neumáticos Gallo* para hacer seguimiento del presupuesto *${numero}*.\n\n${productos ? '🔹 ' + productos + '\n\n' : ''}¿Pudiste revisar el presupuesto? ¿Tenés alguna consulta? 😊\n\n📍 Victoria: 11-3773-5246 | Nordelta: 11-5734-7692`;
+      const vendedor = (localStorage.getItem('vendedor') || '').split(' ')[0];
+      const msg = `Hola ${cliente} cómo estás? Soy ${vendedor} de Neumáticos Gallo, quería saber qué te había parecido el presupuesto que te pasamos, a ver si tenías alguna duda o algo en lo que te podamos ayudar 😊`;
       window.open('https://wa.me/' + telWA + '?text=' + encodeURIComponent(msg), '_blank');
     }
 

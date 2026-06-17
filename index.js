@@ -135,22 +135,23 @@ async function guardarResumenSesion(numero, inicio, resumen) {
 // --- Normalizar medida de neumático ---
 // Acepta: 185/65R15, 185-65-15, 18565r15, 205 55 16, 33x12.50R15, 31x10.5 r15, etc.
 function normalizarMedida(texto) {
-  const t = texto.replace(/\s+/g, ' ').trim();
+  // Quitar prefijo RF de run flat (ej: RF205/45RF17 → 205/45R17)
+  const t = texto.replace(/\s+/g, ' ').trim().replace(/^RF\s*/i, '');
 
   // Formato americano/flotación: 33x12.50R15, 31x10.5 r15, 35X12.5R20
   const mAm = t.match(/(\d{2})\s*[xX]\s*(\d{2}\.?\d*)\s*[rR]\s*(\d{2})\b/);
   if (mAm) {
-    const ancho = parseFloat(mAm[2]).toString(); // 12.50 → "12.5", 10.5 → "10.5"
+    const ancho = parseFloat(mAm[2]).toString();
     return `${mAm[1]}X${ancho}R${mAm[3]}`.toUpperCase();
   }
 
-  // Formato métrico con separadores: 205/55R16, 205-55-16, 205 55 r16, etc.
-  // El sufijo "C" (ej: 205/75R16C) indica neumático de carga/comercial (Sprinter, Master, Transit)
-  const m1 = t.match(/(\d{3})\s*[\/\-\s]\s*(\d{2})\s*[rR\/\-\s]\s*(\d{2})(C)?\b/i);
+  // Formato métrico: 205/55R16, RF205/45RF17, 205-55-16, etc.
+  // El sufijo "C" indica neumático de carga/comercial (Sprinter, Master, Transit)
+  const m1 = t.match(/(\d{3})\s*[\/\-\s]\s*(\d{2})\s*(?:[rR][fF]?|[\/\-\s])\s*(\d{2})(C)?\b/i);
   if (m1) return `${m1[1]}/${m1[2]}R${m1[3]}${m1[4] ? 'C' : ''}`;
 
-  // Sin separadores: 2055516, 20555r16, 20555R16
-  const m2 = t.match(/(\d{3})(\d{2})[rR]?(\d{2})(C)?\b/i);
+  // Sin separadores: 2055516, 20555r16, 20555RF16
+  const m2 = t.match(/(\d{3})(\d{2})[rR][fF]?(\d{2})(C)?\b/i);
   if (m2) return `${m2[1]}/${m2[2]}R${m2[3]}${m2[4] ? 'C' : ''}`;
 
   return null;
@@ -291,7 +292,8 @@ async function obtenerPrecios(medida, marca, incluirRunFlat = false, minStock = 
     const sExpr = parseInt(stockExpr.toString().replace(/\D/g, '')) || 0;
     const stockTotal = sVic + sNor + sExpr;
 
-    const esRunFlat = /runflat|run flat|run-flat|\bRFT\b|\bZP\b/i.test(rowDesc);
+    // RF seguido de dígito = run flat (RF205..., RF 235...); RF11/RF12 son modelos Hankook, no run flat
+    const esRunFlat = /runflat|run flat|run-flat|\bRFT\b|\bZP\b/i.test(rowDesc) || /^RF\s*\d{3}/i.test(rowDesc);
     if (incluirRunFlat && !esRunFlat) continue;  // modo solo run flat: excluir normales
     if (!incluirRunFlat && esRunFlat) continue;  // modo normal: excluir run flat
 

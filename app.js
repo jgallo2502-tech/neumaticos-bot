@@ -59,7 +59,8 @@ router.post('/precios', express.json(), authMiddleware, async (req, res) => {
     const norm = normalizarMedida(medida);
     if (!norm) { resultado[medida] = []; continue; }
     const minStock = (depositos && depositos.pocoStock) ? 1 : 4;
-    let prods = await obtenerPrecios(norm, null, false, minStock);
+    const soloRunFlat = !!(depositos && depositos.soloRunFlat);
+    let prods = await obtenerPrecios(norm, null, soloRunFlat, minStock);
     if (depositos) {
       prods = prods.filter(p => {
         if (depositos.victoria && p.stockVic >= minStock) return true;

@@ -170,6 +170,9 @@
           <label style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:400;text-transform:none;letter-spacing:0">
             <input type="checkbox" id="poco-stock"> 📦 Incluir stock &lt; 4 unidades
           </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:400;text-transform:none;letter-spacing:0">
+            <input type="checkbox" id="solo-runflat"> 🛞 Solo Run Flat
+          </label>
         </div>
       </div>
       <button class="btn-buscar" onclick="buscar()">🔍 Buscar precios</button>
@@ -409,6 +412,7 @@
         nordelta: document.getElementById('dep-nordelta')?.checked,
         express:  document.getElementById('dep-express')?.checked,
         pocoStock: document.getElementById('poco-stock')?.checked,
+        soloRunFlat: document.getElementById('solo-runflat')?.checked,
       };
       const res = await fetch('/app/precios', {
         method: 'POST',

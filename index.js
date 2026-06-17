@@ -291,9 +291,9 @@ async function obtenerPrecios(medida, marca, incluirRunFlat = false, minStock = 
     const sExpr = parseInt(stockExpr.toString().replace(/\D/g, '')) || 0;
     const stockTotal = sVic + sNor + sExpr;
 
-    // Excluir run flat salvo que el cliente los pida explícitamente
     const esRunFlat = /runflat|run flat|run-flat|\bRFT\b|\bZP\b/i.test(rowDesc);
-    if (esRunFlat && !incluirRunFlat) continue;
+    if (incluirRunFlat && !esRunFlat) continue;  // modo solo run flat: excluir normales
+    if (!incluirRunFlat && esRunFlat) continue;  // modo normal: excluir run flat
 
     if (coincideMedida && coincideMarca && stockTotal >= minStock) {
       resultados.push({

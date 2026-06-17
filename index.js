@@ -453,6 +453,9 @@ SUCURSALES (solo si preguntan):
 - Victoria: Pres. Perón 3479 | 11-3773-5246 | Lun-Vie 8-19, Sáb 8-16
 - Nordelta: Agustín García 6318, Tigre | 11-5734-7692 | Lun-Vie 8-19, Sáb 8-16
 
+SERVICIOS (si preguntan por mecánica, frenos, amortiguadores, baterías, etc.):
+También hacemos: frenos, amortiguadores, tren delantero, baterías, escobillas, antirrobos/bujes de seguridad y más. Si alguien pregunta por esto, respondé: "Sí, hacemos ese servicio! Un asesor te va a contactar en breve."
+
 Respondé en español argentino. Sin emojis excesivos. Máximo 3 líneas por respuesta salvo que sean precios.`;
 
 async function respuestaClaude(historial, mensajeActual) {
@@ -514,6 +517,17 @@ app.post('/webhook', async (req, res) => {
   // Detectar pedido de ayuda humana
   if (/hablar|persona|alguien|humano|asesor|vendedor|ayuda/i.test(lower)) {
     guardarAlerta(fromNumber, body).catch(() => {});
+  }
+
+  // Detectar consultas de servicios mecánicos → alertar y derivar a humano
+  const esMecanica = /freno|pastilla|disco de freno|amortiguador|buje|tren delantero|direcci[oó]n|suspensi[oó]n|batería|bateria|escobilla|limpiaparabrisas|antirrobo|bul[oó]n|tuerca de seguridad|reparaci[oó]n|taller|cambio de aceite|alineaci[oó]n|balanceo/i.test(body);
+  if (esMecanica) {
+    guardarAlerta(fromNumber, body).catch(() => {});
+    const msg = 'Sí, hacemos ese servicio! 🔧 Voy a pasarte con un asesor para coordinar. En breve te contactamos.';
+    await client.messages.create({ from: `whatsapp:${process.env.TWILIO_PHONE}`, to: `whatsapp:${fromNumber}`, body: msg });
+    registrarMensajeSesion(fromNumber, 'bot', msg);
+    guardarMensaje(fromNumber, 'bot', msg).catch(() => {});
+    return res.sendStatus(200);
   }
 
   try {

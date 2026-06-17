@@ -111,6 +111,47 @@ router.get('/imagenes', authMiddleware, async (req, res) => {
   }
 });
 
+// --- Resumen de vendedores (solo admin) ---
+router.get('/stats-vendedores', authMiddleware, async (req, res) => {
+  try {
+    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const result = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Presupuestos!A:H',
+    });
+    const rows = (result.data.values || []).slice(1);
+
+    const ahora = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    const hoy = ahora.toISOString().slice(0, 10);
+    const hace7 = new Date(ahora); hace7.setDate(hace7.getDate() - 6);
+    const hace30 = new Date(ahora); hace30.setDate(hace30.getDate() - 29);
+
+    const parseDate = (f) => {
+      if (!f) return null;
+      if (f.includes('/')) { const [d,m,y] = f.split('/'); return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`; }
+      return f.slice(0, 10);
+    };
+
+    const stats = {};
+    for (const row of rows) {
+      const vend = row[2] || 'Sin asignar';
+      const fecha = parseDate(row[0]);
+      const estado = row[7] || '';
+      if (!stats[vend]) stats[vend] = { hoy: 0, dias7: 0, dias30: 0, seguimiento: 0 };
+      const s = stats[vend];
+      if (fecha === hoy) s.hoy++;
+      if (fecha >= hace7.toISOString().slice(0,10)) s.dias7++;
+      if (fecha >= hace30.toISOString().slice(0,10)) s.dias30++;
+      if (estado === 'En seguimiento') s.seguimiento++;
+    }
+    res.json(stats);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- Stats de presupuestos del vendedor ---
 router.get('/mis-stats', authMiddleware, async (req, res) => {
   try {

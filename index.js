@@ -138,8 +138,9 @@ function normalizarMedida(texto) {
   // Quitar prefijo RF de run flat (ej: RF205/45RF17 → 205/45R17)
   const t = texto.replace(/\s+/g, ' ').trim().replace(/^RF\s*/i, '');
 
-  // Formato americano/flotación: 33x12.50R15, 31x10.5 r15, 35X12.5R20
-  const mAm = t.match(/(\d{2})\s*[xX]\s*(\d{2}\.?\d*)\s*[rR]\s*(\d{2})\b/);
+  // Formato americano/flotación: 33x12.50R15, 35X12.50R17LT, etc.
+  // Sufijo LT (Light Truck) se descarta para normalizar
+  const mAm = t.match(/(\d{2})\s*[xX]\s*(\d{2}\.?\d*)\s*[rR]\s*(\d{2})(?:LT)?\b/i);
   if (mAm) {
     const ancho = parseFloat(mAm[2]).toString();
     return `${mAm[1]}X${ancho}R${mAm[3]}`.toUpperCase();

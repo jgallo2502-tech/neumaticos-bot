@@ -248,7 +248,8 @@
       if (tel) telWA = tel.startsWith('549') ? tel : tel.startsWith('54') ? '549'+tel.slice(2) : '549'+tel;
       const horas = horasDiff(p.fecha);
       const horasHtml = mostrarHoras ? `<td><span class="horas ${horas > 72 ? 'urgente' : 'normal'}">${horas}hs</span></td>` : '';
-      const msg = encodeURIComponent('Hola ' + p.cliente + '! Te escribimos desde Neumáticos Gallo para hacer seguimiento del presupuesto ' + p.numero + '. ¿Pudiste revisarlo? 😊');
+      const nombreVend = (localStorage.getItem('vendedor') || '').split(' ')[0];
+      const msg = encodeURIComponent('Hola ' + p.cliente + ' cómo estás? Soy ' + nombreVend + ' de Neumáticos Gallo, quería saber qué te había parecido el presupuesto que te pasamos, a ver si tenías alguna duda o algo en lo que te podamos ayudar 😊');
       const mostrarVend = p.sucursal !== undefined;
       return `<tr>
         <td>${p.fecha}</td>

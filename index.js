@@ -255,7 +255,7 @@ async function registrarConsulta(numero, medida, marca, productos) {
 // --- Leer Google Sheets ---
 // Columnas: A=Cod.Art | B=Cod.Alt | C=Descripción | D=Marca | E=Modelo | F=Medida
 //           G=Victoria | H=Nordelta | I=Pedido Express 48hs | J=Precio | K=Promoción
-async function obtenerPrecios(medida, marca, incluirRunFlat = false, minStock = 4) {
+async function obtenerPrecios(medida, marca, incluirRunFlat = false, minStock = 4, incluirNieve = false) {
   const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
   const auth = new google.auth.GoogleAuth({
     credentials,
@@ -297,6 +297,10 @@ async function obtenerPrecios(medida, marca, incluirRunFlat = false, minStock = 
     const esRunFlat = /runflat|run flat|run-flat|\bRFT\b|\bZP\b/i.test(rowDesc) || /^RF\s*\d{3}/i.test(rowDesc);
     if (incluirRunFlat && !esRunFlat) continue;  // modo solo run flat: excluir normales
     if (!incluirRunFlat && esRunFlat) continue;  // modo normal: excluir run flat
+
+    // Gamas de nieve/invierno Michelin: ocultar salvo que el cliente lo pida explícitamente
+    const esNieve = /\b(alpin|ice snow|x-ice|xice|agilis alpin)\b/i.test(rowModelo);
+    if (!incluirNieve && esNieve) continue;
 
     if (coincideMedida && coincideMarca && stockTotal >= minStock) {
       resultados.push({
@@ -377,7 +381,7 @@ function armarMensajes(productos, medidaOriginal, esRev = false) {
   const grupos = { 1: [], 2: [], 3: [], 4: [] };
   for (const p of productos) {
     const { orden } = categoriaYEmoji(p.marca);
-    if (grupos[orden].length < 3) grupos[orden].push(p);
+    if (grupos[orden].length < 5) grupos[orden].push(p);
   }
 
   const nombresGrupo = {
@@ -564,7 +568,8 @@ app.post('/webhook', async (req, res) => {
         const medidaNorm = matchClaude[1];
         const marca = extraerMarca(body);
         const pidioRunFlat = /runflat|run flat|run-flat|\brft\b|\bzp\b/i.test(body.toLowerCase());
-        const productos = await obtenerPrecios(medidaNorm, marca, pidioRunFlat);
+        const pidioNieve = /\b(nieve|invierno|alpin|ice snow|x-ice|xice|agilis alpin|snow)\b/i.test(body.toLowerCase());
+        const productos = await obtenerPrecios(medidaNorm, marca, pidioRunFlat, 4, pidioNieve);
         registrarConsulta(fromNumber, medidaNorm, marca, productos);
         const mensajes = armarMensajes(productos, medidaNorm, esRev);
         const todosBot = [...mensajes];

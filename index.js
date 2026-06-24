@@ -281,7 +281,7 @@ async function obtenerPrecios(medida, marca, incluirRunFlat = false, minStock = 
     const rowPrecio  = row[9] || '';  // J
     const rowPromo   = row[10] || ''; // K
 
-    if (!rowMarca || !rowMedida || !rowPrecio) continue;
+    if (!rowMarca || !rowMedida || !rowPrecio || parseInt(rowPrecio) <= 0) continue;
 
     const medidaRowNorm = normalizarMedida(rowMedida);
     // Si el usuario no especificó "C", igual debe encontrar neumáticos de carga/comerciales (ej: 205/75R16C)
@@ -298,8 +298,8 @@ async function obtenerPrecios(medida, marca, incluirRunFlat = false, minStock = 
     if (incluirRunFlat && !esRunFlat) continue;  // modo solo run flat: excluir normales
     if (!incluirRunFlat && esRunFlat) continue;  // modo normal: excluir run flat
 
-    // Gamas de nieve/invierno Michelin: ocultar salvo que el cliente lo pida explícitamente
-    const esNieve = /\b(alpin|ice snow|x-ice|xice|agilis alpin)\b/i.test(rowModelo);
+    // Gamas de nieve/invierno: ocultar salvo que el cliente lo pida explícitamente
+    const esNieve = /\b(alpin|ice snow|x-ice|xice|agilis alpin)\b/i.test(rowModelo + ' ' + rowDesc);
     if (!incluirNieve && esNieve) continue;
 
     if (coincideMedida && coincideMarca && stockTotal >= minStock) {

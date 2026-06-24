@@ -271,6 +271,7 @@ async function obtenerPrecios(medida, marca, incluirRunFlat = false, minStock = 
   const resultados = [];
 
   for (const row of rows.slice(1)) {
+    const rowCodAlt  = row[1] || '';  // B
     const rowDesc    = row[2] || '';  // C
     const rowMarca   = row[3] || '';  // D
     const rowModelo  = row[4] || '';  // E
@@ -304,6 +305,7 @@ async function obtenerPrecios(medida, marca, incluirRunFlat = false, minStock = 
 
     if (coincideMedida && coincideMarca && stockTotal >= minStock) {
       resultados.push({
+        codAlt: rowCodAlt,
         descripcion: rowDesc,
         marca: rowMarca,
         medida: rowMedida,

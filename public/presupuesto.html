@@ -533,7 +533,7 @@
               html += '<div style="display:flex;align-items:center;gap:12px">';
               if (imgUrl) html += '<img src="' + imgUrl + '" class="no-print" style="width:72px;height:72px;object-fit:contain;border-radius:6px;flex-shrink:0" onerror="this.style.display=\'none\'">';
               html += '<div>';
-              html += '<div class="producto-nombre">' + p.descripcion + '</div>';
+              html += '<div class="producto-nombre">' + p.descripcion + (p.codAlt ? ' <span style="font-size:10px;font-weight:400;color:#999;margin-left:6px">[' + p.codAlt + ']</span>' : '') + '</div>';
               html += '<div class="producto-precios">12 pagos: ' + fmt(p.precio) + ' &nbsp;|&nbsp; 6 cuotas (-10%): ' + fmt(c6) + ' &nbsp;|&nbsp; 3 cuotas (-15%): ' + fmt(c3) + '</div>';
               html += '<div class="stock-info no-print">📦 ' + stockStr + '</div>';
               html += '</div></div>';

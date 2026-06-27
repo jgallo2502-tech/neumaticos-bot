@@ -48,6 +48,8 @@
     select.estado-select { border: none; background: transparent; font-size: 12px; font-weight: 600; cursor: pointer; padding: 3px 6px; border-radius: 4px; }
     .btn-wa { background: #25d366; color: white; border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
     .btn-wa:hover { background: #1da851; }
+    .btn-print { background: #1a1a2e; color: white; border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; margin-left: 6px; }
+    .btn-print:hover { background: #161621; }
     .loading { text-align: center; padding: 40px; color: #888; }
     .empty { text-align: center; padding: 40px; color: #888; }
     .tel-link { color: #1a1a2e; text-decoration: none; font-weight: 500; }
@@ -64,6 +66,7 @@
       <a href="/app/conversaciones.html">💬 Conversaciones</a>
       <a href="/app/broadcast.html" id="nav-broadcast" style="display:none">📢 Broadcast</a>
       <span id="vendedor-nombre" style="font-size:13px;opacity:0.7"></span>
+      <span id="admin-label" style="font-size:12px;opacity:0.7;margin-left:12px"></span>
       <button class="logout" onclick="logout()">Salir</button>
     </div>
   </header>
@@ -100,35 +103,72 @@
     const token = localStorage.getItem('token');
     const vendedor = localStorage.getItem('vendedor');
     if (!token) window.location.href = '/app/login.html';
-    document.getElementById('vendedor-nombre').textContent = vendedor || '';
-    if (localStorage.getItem('rol') === 'admin') document.getElementById('nav-broadcast').style.display = 'inline';
+    const vendedorNombreEl = document.getElementById('vendedor-nombre');
+    if (vendedorNombreEl) vendedorNombreEl.textContent = vendedor || '';
+    if (localStorage.getItem('rol') === 'admin') {
+      const navBroadcastEl = document.getElementById('nav-broadcast');
+      if (navBroadcastEl) navBroadcastEl.style.display = 'inline';
+    }
 
     let todosLosPresupuestos = [];
     let esAdmin = false;
 
-    async function cargar() {
-      const res = await fetch('/app/seguimiento/presupuestos', {
-        headers: { 'Authorization': 'Bearer ' + token }
-      });
-      if (res.status === 401) { window.location.href = '/app/login.html'; return; }
-      const data = await res.json();
-      todosLosPresupuestos = data.presupuestos;
-      esAdmin = data.esAdmin;
+    function showSeguimientoError(msg) {
+      const tablaContainer = document.getElementById('tabla-container');
+      if (tablaContainer) tablaContainer.innerHTML = `<div class="empty">${msg}</div>`;
+    }
 
-      if (esAdmin) {
-        document.getElementById('admin-label').innerHTML = '<span class="admin-badge">ADMIN — Todos los vendedores</span>';
-        document.getElementById('filtro-vendedor').style.display = 'block';
-        // Poblar filtro de vendedores
-        const vendedores = [...new Set(todosLosPresupuestos.map(p => p.vendedor).filter(Boolean))];
-        const sel = document.getElementById('filtro-vendedor');
-        vendedores.forEach(v => {
-          const opt = document.createElement('option');
-          opt.value = v; opt.textContent = v;
-          sel.appendChild(opt);
+    window.onerror = function(message, source, lineno, colno, error) {
+      console.error('Error JS seguimiento:', message, source, lineno, colno, error);
+      showSeguimientoError('Error en seguimiento. Refresca la página o vuelve a iniciar sesión.');
+      return true;
+    };
+
+    async function cargar() {
+      const tablaContainer = document.getElementById('tabla-container');
+      if (tablaContainer) tablaContainer.innerHTML = '<div class="loading">⏳ Cargando...</div>';
+      try {
+        const res = await fetch('/app/seguimiento/presupuestos', {
+          headers: { 'Authorization': 'Bearer ' + token }
         });
+        if (res.status === 401) { window.location.href = '/app/login.html'; return; }
+        if (!res.ok) {
+          const text = await res.text();
+          if (tablaContainer) tablaContainer.innerHTML = '<div class="empty">No se puede cargar seguimiento. Refresca la página o inicia sesión de nuevo.</div>';
+          console.error('Error seguimiento:', res.status, text);
+          return;
+        }
+        const data = await res.json();
+        todosLosPresupuestos = data.presupuestos;
+        esAdmin = data.esAdmin;
+      } catch (err) {
+        if (tablaContainer) tablaContainer.innerHTML = '<div class="empty">Error cargando seguimiento. Revisa la conexión o vuelve a iniciar sesión.</div>';
+        console.error('Error seguimiento:', err);
+        return;
       }
 
-      filtrar();
+      if (esAdmin) {
+        const adminLabelEl = document.getElementById('admin-label');
+        if (adminLabelEl) adminLabelEl.innerHTML = '<span class="admin-badge">ADMIN — Todos los vendedores</span>';
+        const filtroVendedorEl = document.getElementById('filtro-vendedor');
+        if (filtroVendedorEl) {
+          filtroVendedorEl.style.display = 'block';
+          // Poblar filtro de vendedores
+          const vendedores = [...new Set(todosLosPresupuestos.map(p => p.vendedor).filter(Boolean))];
+          vendedores.forEach(v => {
+            const opt = document.createElement('option');
+            opt.value = v; opt.textContent = v;
+            filtroVendedorEl.appendChild(opt);
+          });
+        }
+      }
+
+      try {
+        filtrar();
+      } catch (err) {
+        console.error('Error al renderizar seguimiento:', err);
+        showSeguimientoError('Error en seguimiento. Refresca la página o vuelve a iniciar sesión.');
+      }
     }
 
     function filtrar() {
@@ -184,6 +224,7 @@
         if (tel) {
           telWA = tel.startsWith('549') ? tel : tel.startsWith('54') ? '549'+tel.slice(2) : '549'+tel;
         }
+        const reprintButton = p.fila ? `<button class="btn-print" title="Reimprimir presupuesto" onclick="reimprimir('${p.token || ''}', ${p.fila})">🖨️ Reimprimir</button>` : '';
         html += '<tr>' +
           `<td>${p.fecha}</td>` +
           `<td style="font-weight:600">${p.numero}</td>` +
@@ -192,13 +233,13 @@
           `<td>${telWA ? `<a class="tel-link" href="https://wa.me/${telWA}" target="_blank">📱 ${p.tel}</a>` : (p.tel || '-')}</td>` +
           `<td style="max-width:250px;font-size:12px">${p.productos}</td>` +
           `<td style="font-weight:600">${p.total ? '$' + parseInt(p.total).toLocaleString('es-AR') : '-'}</td>` +
-          `<td><select class="estado-select ${badgeClass(p.estado)}" onchange="cambiarEstado(${p.fila}, this)">
-            <option ${p.estado==='Enviado'?'selected':''}>Enviado</option>
-            <option ${p.estado==='En seguimiento'?'selected':''}>En seguimiento</option>
-            <option ${p.estado==='Vendido'?'selected':''}>Vendido</option>
-            <option ${p.estado==='Perdido'?'selected':''}>Perdido</option>
-          </select></td>` +
-          `<td>${tel ? `<button class="btn-wa" onclick="seguimiento('${telWA}','${p.cliente}','${p.numero}','${p.productos.replace(/'/g,'')}')">💬</button>` : ''}</td>` +
+          `<td><select class="estado-select ${badgeClass(p.estado)}" onchange="cambiarEstado(${p.fila}, this)">` +
+            `<option ${p.estado==='Enviado'?'selected':''}>Enviado</option>` +
+            `<option ${p.estado==='En seguimiento'?'selected':''}>En seguimiento</option>` +
+            `<option ${p.estado==='Vendido'?'selected':''}>Vendido</option>` +
+            `<option ${p.estado==='Perdido'?'selected':''}>Perdido</option>` +
+          `</select></td>` +
+          `<td>${tel ? `<button class="btn-wa" onclick="seguimiento('${telWA}','${p.cliente}','${p.numero}','${p.productos.replace(/'/g,'')}')">💬</button>` : ''}${reprintButton}</td>` +
           '</tr>';
       }
 
@@ -225,6 +266,16 @@
       }));
     }
 
+    function reimprimir(token, fila) {
+      let url = '';
+      if (token) {
+        url = '/app/ver/' + token + '?print=1';
+      } else if (fila) {
+        url = '/app/ver/fila/' + fila + '?print=1';
+      }
+      if (url) window.open(url, '_blank');
+    }
+
     function seguimiento(telWA, cliente, numero, productos) {
       const vendedor = (localStorage.getItem('vendedor') || '').split(' ')[0];
       const msg = `Hola ${cliente} cómo estás? Soy ${vendedor} de Neumáticos Gallo, quería saber qué te había parecido el presupuesto que te pasamos, a ver si tenías alguna duda o algo en lo que te podamos ayudar 😊`;
@@ -233,7 +284,7 @@
 
     function logout() { localStorage.clear(); window.location.href = '/app/login.html'; }
 
-    cargar();
+    window.addEventListener('load', cargar);
   </script>
 </body>
 </html>

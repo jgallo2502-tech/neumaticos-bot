@@ -83,7 +83,13 @@
     .check { font-size: 22px; color: #e63946; display: none; }
     .producto-card.seleccionado .check { display: block; }
     .stock-info { font-size: 11px; color: #2d6a4f; background: #d1e7dd; padding: 3px 8px; border-radius: 4px; margin-top: 5px; display: inline-block; }
-    @media print { .no-print { display: none !important; } header { display: none; } .btn-buscar, .acciones, #form-card, #resultados, #btn-generar-wrap { display: none !important; } #presupuesto-generado { display: block !important; } }
+    @media print {
+      body { background: white !important; }
+      body * { visibility: hidden !important; }
+      header, .no-print, #stats-card, #stats-card *, .stats, #form-card, #resultados, #btn-generar-wrap { display: none !important; }
+      #presupuesto-generado, #presupuesto-generado * { visibility: visible !important; }
+      #presupuesto-generado { display: block !important; position: absolute; top: 0; left: 0; width: 100%; }
+    }
 
     /* Presupuesto generado */
     #presupuesto-generado { display: none; }
@@ -134,7 +140,7 @@
   <div class="container">
 
     <!-- Stats del vendedor -->
-    <div class="card" id="stats-card" style="padding:18px 24px">
+    <div class="card no-print" id="stats-card" style="padding:18px 24px">
       <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
         <div style="text-align:center;min-width:90px">
           <div id="stat-hoy" style="font-size:36px;font-weight:700;color:#1a1a2e;line-height:1">—</div>
@@ -722,7 +728,19 @@
     }
 
     function imprimir() {
+      const stats = document.getElementById('stats-card');
+      const prevDisplay = stats?.style.display;
+      if (stats) stats.style.display = 'none';
       window.print();
+      if (stats) stats.style.display = prevDisplay || '';
+    }
+    window.onbeforeprint = function() {
+      const stats = document.getElementById('stats-card');
+      if (stats) stats.style.display = 'none';
+    };
+    window.onafterprint = function() {
+      const stats = document.getElementById('stats-card');
+      if (stats) stats.style.display = '';
     }
 
     function copiarWhatsApp() {

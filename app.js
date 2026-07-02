@@ -3,6 +3,15 @@ const jwt = require('jsonwebtoken');
 const path = require('path');
 const { google } = require('googleapis');
 
+// Fix private_key newlines en GOOGLE_CREDENTIALS (Railway guarda \n literal)
+if (process.env.GOOGLE_CREDENTIALS) {
+  try {
+    const creds = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    if (creds.private_key) creds.private_key = creds.private_key.replace(/\\n/g, '\n');
+    process.env.GOOGLE_CREDENTIALS = JSON.stringify(creds);
+  } catch(e) {}
+}
+
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'neumaticos-gallo-2026';
 

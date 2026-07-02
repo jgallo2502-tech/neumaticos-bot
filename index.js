@@ -1,4 +1,14 @@
 require('dotenv').config();
+
+// Fix private_key newlines en GOOGLE_CREDENTIALS (Railway guarda \n literal)
+if (process.env.GOOGLE_CREDENTIALS) {
+  try {
+    const creds = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    if (creds.private_key) creds.private_key = creds.private_key.replace(/\\n/g, '\n');
+    process.env.GOOGLE_CREDENTIALS = JSON.stringify(creds);
+  } catch(e) {}
+}
+
 const express = require('express');
 const twilio = require('twilio');
 const { google } = require('googleapis');
@@ -255,12 +265,16 @@ async function registrarConsulta(numero, medida, marca, productos) {
 // --- Leer Google Sheets ---
 // Columnas: A=Cod.Art | B=Cod.Alt | C=Descripción | D=Marca | E=Modelo | F=Medida
 //           G=Victoria | H=Nordelta | I=Pedido Express 48hs | J=Precio | K=Promoción
-async function obtenerPrecios(medida, marca, incluirRunFlat = false, minStock = 4, incluirNieve = false) {
+function getGoogleAuth(scopes) {
   const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-  const auth = new google.auth.GoogleAuth({
-    credentials,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
-  });
+  if (credentials.private_key) {
+    credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
+  }
+  return new google.auth.GoogleAuth({ credentials, scopes });
+}
+
+async function obtenerPrecios(medida, marca, incluirRunFlat = false, minStock = 4, incluirNieve = false) {
+  const auth = getGoogleAuth(['https://www.googleapis.com/auth/spreadsheets.readonly']);
   const sheets = google.sheets({ version: 'v4', auth });
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: process.env.GOOGLE_SHEET_ID,

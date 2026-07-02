@@ -8,10 +8,28 @@ const SHEET_ID = '160e1dKlTch9gzOOxjhz7hKJKfbrMifAyTXE10aZRbgw';
 const DESCUENTOS = { giti: 0.33, gtradial: 0.33, yokohama: 0.32, michelin: 0.35, bfgoodrich: 0.35, nexen: 0.32, hankook: 0.28, linglong: 0.28 };
 const MARCAS = ['giti', 'gtradial', 'yokohama', 'michelin', 'bfgoodrich', 'nexen', 'hankook', 'linglong'];
 
-let promoInvierno = new Set();
+let promoInvierno = [];
 try {
-  promoInvierno = new Set(JSON.parse(require('fs').readFileSync(path.join(__dirname, 'promo-invierno.json'), 'utf8')));
+  promoInvierno = JSON.parse(require('fs').readFileSync(path.join(__dirname, 'promo-invierno.json'), 'utf8'));
 } catch (e) { /* sin promo invierno cargada */ }
+
+function extraerModelo(desc) {
+  const tokens = desc.toUpperCase().split(/[\s\-\/]+/);
+  return tokens.filter(t => /^[A-Z][A-Z0-9']{1,}$/.test(t) && !/^(YOKOHAMA|MICHELIN|NEXEN|HANKOOK|LINGLONG|BFGOODRICH|GITI|GTRADIAL|TL|XL|LT|ZR|SUV|AWD|DOT)$/.test(t));
+}
+
+function descMatch(desc1, desc2) {
+  const m1 = extraerModelo(desc1), m2 = extraerModelo(desc2);
+  if (m1.length === 0 || m2.length === 0) return false;
+  const set1 = new Set(m1), set2 = new Set(m2);
+  const interseccion = [...set1].filter(t => set2.has(t));
+  const union = new Set([...set1, ...set2]);
+  return (interseccion.length / union.size) >= 0.5;
+}
+
+function esPromoInvierno(medida, marca, desc) {
+  return promoInvierno.some(p => p.medida === medida && p.marca === marca.toUpperCase() && descMatch(p.desc, desc));
+}
 
 function formatStock(total) {
   if (total === 0) return 0;
@@ -48,6 +66,7 @@ async function main() {
     const marca = (row[3] || '').toLowerCase().trim();
     if (!MARCAS.includes(marca)) continue;
 
+    const sku      = row[1] || '';
     const desc     = row[2] || '';
     const medida   = row[5] || '';
     const sVic     = parseInt((row[6] || '0').toString().replace(/\D/g, '')) || 0;
@@ -58,12 +77,12 @@ async function main() {
     if (!precio) continue;
 
     const desc_pct = DESCUENTOS[marca];
-    const esPromoInvierno = promoInvierno.has(`${medida}|${marca.toUpperCase()}`);
-    const baseReventa = esPromoInvierno ? precio / 0.9 : precio;
+    const baseReventa = esPromoInvierno(medida, marca, desc) ? precio / 0.9 : precio;
     const precioRev = fmt(baseReventa * (1 - desc_pct));
     const stockTotal = sVic + sNor + sExpr;
 
     porMarca[marca].push({
+      SKU: sku,
       Descripción: desc,
       Medida: medida,
       'Precio lista (12p)': precio,
@@ -90,6 +109,7 @@ async function main() {
 
     // Ancho de columnas
     ws['!cols'] = [
+      { wch: 16 }, // SKU
       { wch: 45 }, // Descripción
       { wch: 14 }, // Medida
       { wch: 18 }, // Precio lista
@@ -104,7 +124,7 @@ async function main() {
   }
 
   const fecha = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  const archivo = path.join(__dirname, `../lista-revendedores-${fecha}.xlsx`);
+  const archivo = path.join('C:/Users/juani/Desktop', `lista-revendedores-${fecha}.xlsx`);
   XLSX.writeFile(wb, archivo);
   console.log('Archivo generado:', archivo);
 }

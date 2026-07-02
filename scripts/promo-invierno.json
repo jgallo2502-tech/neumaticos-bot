@@ -1,25 +1,152 @@
 [
-  "195/50R16|MICHELIN",
-  "195/55R16|MICHELIN",
-  "205/55R16|MICHELIN",
-  "215/65R16|MICHELIN",
-  "205/55R17|MICHELIN",
-  "215/50R17|MICHELIN",
-  "215/55R17|MICHELIN",
-  "225/45R17|MICHELIN",
-  "225/65R17|MICHELIN",
-  "265/65R17|MICHELIN",
-  "225/50R18|MICHELIN",
-  "225/55R18|MICHELIN",
-  "235/60R18|MICHELIN",
-  "255/60R18|MICHELIN",
-  "265/60R18|MICHELIN",
-  "235/50R19|MICHELIN",
-  "255/55R19|MICHELIN",
-  "255/50R20|MICHELIN",
-  "255/55R20|MICHELIN",
-  "265/65R17|BFGOODRICH",
-  "265/60R18|BFGOODRICH",
-  "255/55R19|BFGOODRICH",
-  "275/55R20|BFGOODRICH"
+  {
+    "medida": "195/50R16",
+    "marca": "MICHELIN",
+    "desc": "195/50 R16 PRIMACY 4+"
+  },
+  {
+    "medida": "195/55R16",
+    "marca": "MICHELIN",
+    "desc": "195/55 R16 PRIMACY 4"
+  },
+  {
+    "medida": "205/55R16",
+    "marca": "MICHELIN",
+    "desc": "205/55 R16 PRIMACY 5"
+  },
+  {
+    "medida": "215/65R16",
+    "marca": "MICHELIN",
+    "desc": "215/65 R16 XL LTX FORCE"
+  },
+  {
+    "medida": "205/55R17",
+    "marca": "MICHELIN",
+    "desc": "205/55 R17 XL PRIMACY 4+"
+  },
+  {
+    "medida": "215/50R17",
+    "marca": "MICHELIN",
+    "desc": "215/50 R17 XL PRIMACY 5"
+  },
+  {
+    "medida": "215/55R17",
+    "marca": "MICHELIN",
+    "desc": "215/55 R17 PRIMACY 5"
+  },
+  {
+    "medida": "225/45R17",
+    "marca": "MICHELIN",
+    "desc": "225/45 R17 XL PRIMACY 4+"
+  },
+  {
+    "medida": "225/45R17",
+    "marca": "MICHELIN",
+    "desc": "225/45 R17 XL PRIMACY 5"
+  },
+  {
+    "medida": "225/65R17",
+    "marca": "MICHELIN",
+    "desc": "225/65 R17  LTX FORCE"
+  },
+  {
+    "medida": "265/65R17",
+    "marca": "MICHELIN",
+    "desc": "265/65 R17  LTX TRAIL ST"
+  },
+  {
+    "medida": "225/50R18",
+    "marca": "MICHELIN",
+    "desc": "225/50 R18 XL PRIMACY 4+"
+  },
+  {
+    "medida": "225/55R18",
+    "marca": "MICHELIN",
+    "desc": "225/55 R18 PRIMACY 5"
+  },
+  {
+    "medida": "235/60R18",
+    "marca": "MICHELIN",
+    "desc": "235/60 R18 PRIMACY SUV+"
+  },
+  {
+    "medida": "255/60R18",
+    "marca": "MICHELIN",
+    "desc": "255/60 R18 XL PRIMACY SUV"
+  },
+  {
+    "medida": "265/60R18",
+    "marca": "MICHELIN",
+    "desc": "265/60 R18 XL LTX TRAIL ST"
+  },
+  {
+    "medida": "265/60R18",
+    "marca": "MICHELIN",
+    "desc": "265/60 R18 FRV PRIMACY SUV+"
+  },
+  {
+    "medida": "235/50R19",
+    "marca": "MICHELIN",
+    "desc": "235/50 R19 XL  PILOT SPORT 4 SUV"
+  },
+  {
+    "medida": "235/50R19",
+    "marca": "MICHELIN",
+    "desc": "235/50 R19 PRIMACY 5"
+  },
+  {
+    "medida": "255/55R19",
+    "marca": "MICHELIN",
+    "desc": "255/55 R19 XL LTX FORCE"
+  },
+  {
+    "medida": "255/55R19",
+    "marca": "MICHELIN",
+    "desc": "255/55 R19 XL PRIMACY SUV+"
+  },
+  {
+    "medida": "255/50R20",
+    "marca": "MICHELIN",
+    "desc": "255/50 R20 XL PILOT SPORT 4 SUV"
+  },
+  {
+    "medida": "255/50R20",
+    "marca": "MICHELIN",
+    "desc": "255/50 R20 XL PRIMACY SUV+"
+  },
+  {
+    "medida": "255/55R20",
+    "marca": "MICHELIN",
+    "desc": "255/55 R20 PILOT SPORT 4 SUV"
+  },
+  {
+    "medida": "265/65R17",
+    "marca": "BFGOODRICH",
+    "desc": "LT265/65R17 LRD RWL ALL-TERRAIN T/A KO3"
+  },
+  {
+    "medida": "265/60R18",
+    "marca": "BFGOODRICH",
+    "desc": "LT265/60R18 LRD ALL-TERRAIN T/A KO3"
+  },
+  {
+    "medida": "265/60R18",
+    "marca": "BFGOODRICH",
+    "desc": "LT265/60R18 LRD ALL-TERRAIN T/A KO3"
+  },
+  {
+    "medida": "255/55R19",
+    "marca": "BFGOODRICH",
+    "desc": "255/55 R19 XL ORBL TRAIL-TERRAIN T/A"
+  },
+  {
+    "medida": "275/55R20",
+    "marca": "BFGOODRICH",
+    "desc": "275/55 R20 ORWL TRAIL-TERRAIN T/A"
+  },
+  {
+    "medida": "275/55R20",
+    "marca": "BFGOODRICH",
+    "desc": "LT275/55R20 LRD ALL-TERRAIN T/A KO3"
+  }
 ]

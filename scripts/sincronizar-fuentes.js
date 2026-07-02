@@ -42,6 +42,15 @@ function normalizarMedida(texto) {
   return null;
 }
 
+function normalizarCodAlt(codAlt) {
+  if (!codAlt) return '';
+  let s = codAlt.toString().trim().toUpperCase().replace(/\s+/g, '');
+  if (/^YO(?=\d)/.test(s)) s = s.slice(2);
+  if (/^HA(?=\d)/.test(s)) s = s.slice(2);
+  if (/^NE(?=\d)/.test(s)) s = s.slice(2);
+  return s;
+}
+
 // Devuelve cantidad real para la columna StockExpr.
 // stockDesconocido: qué poner cuando el valor es undefined/null/vacío (99 = disponible a pedir, 0 = no disponible)
 function stockExterno(val, stockDesconocido = 0) {
@@ -168,16 +177,25 @@ function leerMichelinPrecios(wb) {
   for (const sheetName of wb.SheetNames) {
     if (sheetName.toLowerCase() === 'glosario') continue;
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1 });
-    // Header está en fila 3 (índice 3)
-    const header = rows[3] || [];
-    const pmgCol = header.findIndex(h => /precio mostrador gallo/i.test((h || '').toString()));
-    if (pmgCol === -1) {
+    // Buscar fila de header (la que contiene "Precio Mostrador Gallo")
+    let headerIdx = -1;
+    for (let i = 0; i < Math.min(10, rows.length); i++) {
+      if (rows[i].some(h => /precio mostrador gallo/i.test((h || '').toString()))) {
+        headerIdx = i;
+        break;
+      }
+    }
+    if (headerIdx === -1) {
       console.log(`  ⚠️  Sin columna "Precio Mostrador Gallo" en hoja: ${sheetName}`);
       continue;
     }
-    for (let i = 4; i < rows.length; i++) {
+    const header = rows[headerIdx];
+    const pmgCol = header.findIndex(h => /precio mostrador gallo/i.test((h || '').toString()));
+    const caiCol = header.findIndex(h => /^cai$/i.test((h || '').toString().trim()));
+    const caiColFinal = caiCol !== -1 ? caiCol : 3; // fallback col 3
+    for (let i = headerIdx + 1; i < rows.length; i++) {
       const r = rows[i];
-      const cai   = r[3] ? r[3].toString().trim() : null;
+      const cai   = r[caiColFinal] ? r[caiColFinal].toString().trim() : null;
       const precio = r[pmgCol];
       if (cai && typeof precio === 'number' && precio > 0) {
         caiMap[cai] = precio;
@@ -234,7 +252,8 @@ function leerYokohama(wb) {
 
 // ─── Leer Linglong — match por SKU (CodAlt = MATERIAL directamente) ──────────
 function leerLinglong(wb) {
-  const rows = XLSX.utils.sheet_to_json(wb.Sheets['Lista'], { header: 1 });
+  const sheetName = wb.SheetNames.find(s => /lista/i.test(s)) || wb.SheetNames[0];
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1 });
   const skuMap    = {};
   const medidaMap = {};
   for (let i = 2; i < rows.length; i++) {
@@ -286,7 +305,9 @@ async function main() {
   const archivoInventario = encontrarArchivo(archivos, ['inv', 'gallo'])
     || encontrarArchivo(archivos, ['inventario'])
     || encontrarArchivo(archivos, ['gallo'], ['michelin', 'lista', 'precio']);
-  const archivoCelsur     = encontrarArchivo(archivos, ['celsur']);
+  const archivoCelsur     = encontrarArchivo(archivos, ['celsur'])
+    || encontrarArchivo(archivos, ['stock_disponible'])
+    || encontrarArchivo(archivos, ['stock'], ['inv', 'gallo', 'hankook', 'yokohama', 'ling', 'nexen', 'neumasur', 'michelin']);
   const archivoMichelin   = encontrarArchivo(archivos, ['michelin', 'bfgoodrich']);
   const archivoHankook    = encontrarArchivo(archivos, ['hankook']);
   const archivoYokohama   = encontrarArchivo(archivos, ['yokohama']);
@@ -300,21 +321,21 @@ async function main() {
     ['Hankook', archivoHankook],
     ['Yokohama', archivoYokohama],
     ['Linglong', archivoLinglong],
-    ['Neumasur', archivoNeumasur],
   ]) {
     if (!archivo) { console.error(`❌ No se encontró archivo: ${nombre}`); process.exit(1); }
   }
+  if (!archivoNeumasur) console.log('⚠️  Neumasur no encontrado — Nexen sin actualizar');
 
   console.log('📥 Descargando archivos...');
-  const [wbInv, wbCelsur, wbMich, wbHank, wbYoko, wbLL, wbNex] = await Promise.all([
+  const [wbInv, wbCelsur, wbMich, wbHank, wbYoko, wbLL] = await Promise.all([
     descargarXlsx(drive, archivoInventario.id),
     descargarXlsx(drive, archivoCelsur.id),
     descargarXlsx(drive, archivoMichelin.id),
     descargarXlsx(drive, archivoHankook.id),
     descargarXlsx(drive, archivoYokohama.id),
     descargarXlsx(drive, archivoLinglong.id),
-    descargarXlsx(drive, archivoNeumasur.id),
   ]);
+  const wbNex = archivoNeumasur ? await descargarXlsx(drive, archivoNeumasur.id) : null;
 
   console.log('🔄 Procesando fuentes...');
   const { vicMap, norMap, precioMap, productos } = leerInventarioGallo(wbInv);
@@ -323,7 +344,7 @@ async function main() {
   const hankookData        = leerHankook(wbHank);
   const yokoData           = leerYokohama(wbYoko);
   const llData             = leerLinglong(wbLL);
-  const nexenData          = leerNeumasur(wbNex);
+  const nexenData          = wbNex ? leerNeumasur(wbNex) : { skuMap: {}, medidaMap: {} };
 
   console.log(`  Gallo Victoria: ${Object.keys(vicMap).length} productos`);
   console.log(`  Gallo Nordelta: ${Object.keys(norMap).length} productos`);
@@ -332,14 +353,14 @@ async function main() {
   console.log(`  Hankook: ${Object.keys(hankookData.skuMap).length} SKUs`);
   console.log(`  Yokohama: ${Object.keys(yokoData.skuMap).length} SKUs`);
   console.log(`  Linglong: ${Object.keys(llData.skuMap).length} SKUs`);
-  console.log(`  Nexen: ${Object.keys(nexenData.skuMap).length} SKUs`);
+  console.log(`  Nexen: ${Object.keys(nexenData.skuMap).length} SKUs (${wbNex ? 'actualizado' : 'sin archivo'})`);
 
   console.log('📊 Leyendo hoja Bot WhatsApp...');
   const sheetRes = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
     range: 'Bot WhatsApp!A:K',
   });
-  const sheetRows = sheetRes.data.values || [];
+  let sheetRows = sheetRes.data.values || [];
 
   const updates = [];
   let sinPrecio = 0, sinStock = 0;
@@ -367,33 +388,63 @@ async function main() {
       stockExpr = calsurStockPorCAI(celsurStock, codAlt);
       // Lista oficial solo si Gallo no tiene stock propio
       const pMich = michelinPrecios[codAlt];
-      if (pMich && !precio) precio = pMich;
-      else if (!precio) sinPrecio++;
+      if (pMich && precio === null) {
+        precio = pMich;
+      } else if (precio === null) {
+        precio = 0;
+        sinPrecio++;
+      }
 
     } else if (marca === 'HANKOOK') {
       const skuKey = codAlt.replace(/^HA/i, '');
-      const d = hankookData.skuMap[skuKey] || hankookData.medidaMap[medida];
-      if (d) { stockExpr = d.stock; if (!precio) precio = d.precio; }
-      else { stockExpr = 0; sinStock++; }
+      const dSku = hankookData.skuMap[skuKey];
+      const d = dSku || (!codArt ? hankookData.medidaMap[medida] : null);
+      if (d) {
+        stockExpr = d.stock;
+        if (precio === null) precio = d.precio || 0;
+      } else {
+        stockExpr = 0;
+        if (precio === null) precio = 0;
+        sinStock++;
+      }
 
     } else if (marca === 'YOKOHAMA') {
       const skuKey = codAlt.replace(/^YO/i, '');
-      const d = yokoData.skuMap[skuKey] || yokoData.medidaMap[medida];
-      if (d) { stockExpr = d.stock; if (!precio) precio = d.precio; }
-      else { stockExpr = 0; sinStock++; }
+      const dSku = yokoData.skuMap[skuKey];
+      const d = dSku || (!codArt ? yokoData.medidaMap[medida] : null);
+      if (d) {
+        stockExpr = d.stock;
+        if (precio === null) precio = d.precio || 0;
+      } else {
+        stockExpr = 0;
+        if (precio === null) precio = 0;
+        sinStock++;
+      }
 
     } else if (marca === 'LINGLONG') {
-      const d = llData.skuMap[codAlt] || llData.medidaMap[medida];
-      if (d) { stockExpr = d.stock; if (!precio) precio = d.precio; }
-      else { stockExpr = 0; sinStock++; }
+      const dSku = llData.skuMap[codAlt];
+      const d = dSku || (!codArt ? llData.medidaMap[medida] : null);
+      if (d) {
+        stockExpr = d.stock;
+        if (precio === null) precio = d.precio || 0;
+      } else {
+        stockExpr = 0;
+        if (precio === null) precio = 0;
+        sinStock++;
+      }
 
     } else if (marca === 'NEXEN') {
       const skuKey = codAlt.replace(/^NE/i, '');
-      const d = nexenData.skuMap[skuKey] || nexenData.medidaMap[medida];
+      const dSku = nexenData.skuMap[skuKey];
+      const d = dSku || (!codArt ? nexenData.medidaMap[medida] : null);
       if (d) {
         stockExpr = d.stock;
-        if (!precio) precio = d.precio;
-      } else { stockExpr = 0; sinStock++; }
+        if (precio === null) precio = d.precio || 0;
+      } else {
+        stockExpr = 0;
+        if (precio === null) precio = 0;
+        sinStock++;
+      }
     }
     // Otras marcas (Giti, GTRadial, etc.): stock propio + precio del inventario Gallo
 
@@ -415,7 +466,7 @@ async function main() {
 
   // ─── Detectar productos nuevos que no están en la hoja ───────────────────────
   const codArtsEnHoja  = new Set(sheetRows.slice(1).map(r => (r[0] || '').toString().trim()).filter(Boolean));
-  const codAltsEnHoja  = new Set(sheetRows.slice(1).map(r => (r[1] || '').toString().trim()).filter(Boolean));
+  const codAltsEnHoja  = new Set(sheetRows.slice(1).map(r => normalizarCodAlt(r[1] || '')).filter(Boolean));
   const nuevos = [];
 
   function agregarNuevo(codArt, codAlt, desc, stockVic, stockNor, stockExpr, precio, marcaOverride = '') {
@@ -481,6 +532,11 @@ async function main() {
       insertDataOption: 'INSERT_ROWS',
       requestBody: { values: nuevos },
     });
+    const refreshed = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: 'Bot WhatsApp!A:K',
+    });
+    sheetRows = refreshed.data.values || [];
   }
 
   console.log(`\n📝 Enviando ${updates.length} actualizaciones...`);
@@ -497,6 +553,52 @@ async function main() {
       },
     });
     process.stdout.write(`  ${Math.min(i + BATCH, updates.length)}/${updates.length}\r`);
+  }
+
+  // Limpiar duplicados por CodAlt para que el archivo quede depurado
+  const filasDuplicadas = [];
+  const keep = new Map();
+  for (let i = 1; i < sheetRows.length; i++) {
+    const fila = i + 1;
+    const codArt = (sheetRows[i][0] || '').toString().trim();
+    const codAltRaw = (sheetRows[i][1] || '').toString().trim();
+    const codAlt = normalizarCodAlt(codAltRaw);
+    if (!codAlt) continue;
+    const tieneCodArt = Boolean(codArt);
+    if (!keep.has(codAlt)) {
+      keep.set(codAlt, { fila, tieneCodArt });
+      continue;
+    }
+    const existente = keep.get(codAlt);
+    if (!existente.tieneCodArt && tieneCodArt) {
+      filasDuplicadas.push(existente.fila);
+      keep.set(codAlt, { fila, tieneCodArt });
+    } else {
+      filasDuplicadas.push(fila);
+    }
+  }
+
+  if (filasDuplicadas.length > 0) {
+    console.log(`\n🧹 Eliminando ${filasDuplicadas.length} filas duplicadas por CodAlt...`);
+    const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID });
+    const sheet = meta.data.sheets.find(s => s.properties.title === 'Bot WhatsApp');
+    const sheetId = sheet.properties.sheetId;
+    const requests = filasDuplicadas
+      .sort((a, b) => b - a)
+      .map(fila => ({
+        deleteDimension: {
+          range: { sheetId, dimension: 'ROWS', startIndex: fila - 1, endIndex: fila },
+        },
+      }));
+
+    for (let i = 0; i < requests.length; i += 100) {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: SHEET_ID,
+        requestBody: { requests: requests.slice(i, i + 100) },
+      });
+      process.stdout.write(`  ${Math.min(i + 100, requests.length)}/${requests.length} filas eliminadas\r`);
+    }
+    console.log('\n✅ Duplicados eliminados.');
   }
 
   console.log('\n✅ Sincronización completa.');

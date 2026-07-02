@@ -58,6 +58,7 @@ function leerVictoriaNordelta() {
     const deposito = (row[0] || '').toString().trim();
     if (!['Suc. Victoria', 'Suc. Nordelta'].includes(deposito)) continue;
     const codArt   = (row[2] || '').toString().trim();
+    const codAlt   = (row[24] || '').toString().trim();
     const cantidad = parseInt(row[6]) || 0;
     const precio   = parseFloat(row[12]) || 0;
     const desc     = (row[36] || '').toString().replace(/^N\.\s*/i, '').trim();
@@ -65,7 +66,7 @@ function leerVictoriaNordelta() {
 
     if (!productos.has(codArt)) {
       productos.set(codArt, {
-        codArt, desc,
+        codArt, codAlt, desc,
         marca:  parseMarca(desc),
         medida: extraerMedida(desc),
         victoria: 0, nordelta: 0,
@@ -101,6 +102,7 @@ function leerNexen() {
       medida:  extraerMedida(desc),
       marca:   'Nexen',
       desc,
+      sku: (row[0] || '').toString().trim(),
       express: stockNum > 0 ? stockNum : (verdes.has(i) ? 99 : 0),
       precio:  Math.round(parseFloat(row[3]) * MARKUP),
     };
@@ -117,7 +119,8 @@ function leerHankook() {
     const p = row[2], t = row[3], r = row[4];
     const medida = (p && t && r) ? normalizarMedida(`${p}/${t}R${r}`) : '';
     const desc = (row[6] || '').trim();
-    return { medida, marca: 'Hankook', desc, express: parseStock(row[10]), precio: Math.round(volumen * MARKUP) };
+    const sku = (row[1] || '').toString().trim();
+    return { medida, marca: 'Hankook', desc, sku, express: parseStock(row[10]), precio: Math.round(volumen * MARKUP) };
   }).filter(Boolean);
 }
 
@@ -130,7 +133,8 @@ function leerLinglong() {
     if (!volumen) return null;
     if ((row[6] || '').toString() === 'STOCK') return null;
     const desc = (row[1] || '').trim();
-    return { medida: extraerMedida(desc), marca: 'Linglong', desc, express: parseStock(row[6]), precio: Math.round(volumen * MARKUP) };
+    const sku = (row[0] || '').toString().trim();
+    return { medida: extraerMedida(desc), marca: 'Linglong', desc, sku, express: parseStock(row[6]), precio: Math.round(volumen * MARKUP) };
   }).filter(Boolean);
 }
 
@@ -138,36 +142,37 @@ function leerMichelinBFGoodrich() {
   // 1. Mapa de precios desde lista de referencia
   // Precio mostrador = Precio Referencia con IVA / 0.8 (normal) o / 0.9 (promo invierno, ya tiene 20% off)
   const wbP = XLSX.readFile('C:/Users/juani/Desktop/PC Anterior Backup/Google Drive/Documents/Listas de Precio/202606/Lista de Referencia Auto y Camioneta - 15 Junio 2026 (1).xlsx');
-  // columnas: [dimensión, refIVA, observación] por hoja (difieren por la col extra "MARCA/SEGMENTO")
+  // columnas: [dimensión, modelo, refIVA, observación] por hoja (difieren por la col extra "MARCA/SEGMENTO")
   const sheetsConfig = {
-    'Turismo y Camioneta Michelin': { marca: 'Michelin',   dim: 4,  refIVA: 10, obs: 11 },
-    'Camioneta BFG':                { marca: 'Bfgoodrich', dim: 4,  refIVA: 10, obs: 11 },
-    'Michelin R14':                 { marca: 'Michelin',   dim: 4,  refIVA: 11, obs: 12 },
-    'BFGoodrich Auto':              { marca: 'Bfgoodrich', dim: 4,  refIVA: 11, obs: 12 },
-    'Invierno Michelin':            { marca: 'Michelin',   dim: 4,  refIVA: 10, obs: 11 },
+    'Turismo y Camioneta Michelin': { marca: 'Michelin',   dim: 4, modelo: 5, refIVA: 10, obs: 11 },
+    'Camioneta BFG':                { marca: 'Bfgoodrich', dim: 4, modelo: 5, refIVA: 10, obs: 11 },
+    'Michelin R14':                 { marca: 'Michelin',   dim: 4, modelo: 6, refIVA: 11, obs: 12 },
+    'BFGoodrich Auto':              { marca: 'Bfgoodrich', dim: 4, modelo: 6, refIVA: 11, obs: 12 },
+    'Invierno Michelin':            { marca: 'Michelin',   dim: 4, modelo: 5, refIVA: 10, obs: 11 },
   };
-  const precioMap = new Map();
-  const promoInvierno = new Set(); // claves medida|marca con descuento adicional para reventa
+  const listaPrecios = []; // { medida, marca, desc, precio }
+  const promoInvierno = []; // { medida, marca, desc } con descuento adicional para reventa
   for (const [sheetName, cfg] of Object.entries(sheetsConfig)) {
     if (!wbP.SheetNames.includes(sheetName)) continue;
     const rows = XLSX.utils.sheet_to_json(wbP.Sheets[sheetName], { header: 1 }).slice(4);
     for (const row of rows) {
-      const medida = extraerMedida((row[cfg.dim] || '').toString());
+      const dim = (row[cfg.dim] || '').toString();
+      const medida = extraerMedida(dim);
       if (!medida) continue;
       const refIVA = parseFloat(row[cfg.refIVA]);
       if (!refIVA) continue;
       const precio = Math.round(refIVA / 0.8); // precio de lista: siempre /0.8
-      const key = `${medida}|${cfg.marca.toUpperCase()}`;
-      if (!precioMap.has(key)) precioMap.set(key, precio);
+      const modeloDesc = `${dim} ${(row[cfg.modelo] || '').toString()}`.trim();
+      listaPrecios.push({ medida, marca: cfg.marca.toUpperCase(), desc: modeloDesc, precio });
       const obs = (row[cfg.obs] || '').toString().toUpperCase();
-      if (obs.includes('PROMO INVIERNO')) promoInvierno.add(key);
+      if (obs.includes('PROMO INVIERNO')) promoInvierno.push({ medida, marca: cfg.marca.toUpperCase(), desc: modeloDesc });
     }
   }
   require('fs').writeFileSync(
     path.join(__dirname, 'promo-invierno.json'),
-    JSON.stringify([...promoInvierno], null, 2)
+    JSON.stringify(promoInvierno, null, 2)
   );
-  console.log(`Promo invierno: ${promoInvierno.size} medidas marcadas`);
+  console.log(`Promo invierno: ${promoInvierno.length} modelos marcados`);
 
   // 2. Stock express
   const wbS = XLSX.readFile('C:/Users/juani/Downloads/Stock_Disponible_2026-06-12_17-42-31.xlsx');
@@ -184,8 +189,16 @@ function leerMichelinBFGoodrich() {
     if (!medida) return null;
     const marcaNorm = marca.charAt(0) + marca.slice(1).toLowerCase();
     const express = stock >= 8 ? 99 : stock;
-    const precio = precioMap.get(`${medida}|${marca}`) || 0;
-    return { medida, marca: marcaNorm, desc, express, precio };
+    // Buscar precio por modelo exacto (no solo medida+marca) para evitar mezclar modelos distintos
+    const candidatos = listaPrecios.filter(e => e.medida === medida && e.marca === marca);
+    let mejor = null, mejorScore = 0;
+    for (const c of candidatos) {
+      const score = jaccardModelo(c.desc, desc);
+      if (score > mejorScore) { mejorScore = score; mejor = c; }
+    }
+    const precio = (mejor && mejorScore >= 0.3) ? mejor.precio : 0;
+    const sku = (row[0] || '').toString().trim();
+    return { medida, marca: marcaNorm, desc, sku, express, precio };
   }).filter(Boolean);
 }
 
@@ -202,7 +215,8 @@ function leerYokohama() {
     const express = stockRaw >= 8 ? 99 : stockRaw;
     const precio  = Math.round(promoClub * 1.8);
     const desc    = (row[4] || '').toString().trim();
-    return { medida, marca: 'Yokohama', desc, express, precio };
+    const sku     = (row[7] || '').toString().trim();
+    return { medida, marca: 'Yokohama', desc, sku, express, precio };
   }).filter(Boolean);
 }
 
@@ -213,10 +227,18 @@ function extraerModelo(desc) {
   return tokens.filter(t => /^[A-Z][A-Z0-9']{1,}$/.test(t) && !/^(YOKOHAMA|MICHELIN|NEXEN|HANKOOK|LINGLONG|BFGOODRICH|GITI|GTRADIAL|TL|XL|LT|ZR|SUV|AWD|DOT)$/.test(t));
 }
 
-function descMatch(desc1, desc2) {
+function jaccardModelo(desc1, desc2) {
   const m1 = extraerModelo(desc1);
   const m2 = extraerModelo(desc2);
-  return m1.some(t => m2.includes(t));
+  if (m1.length === 0 || m2.length === 0) return 0;
+  const set1 = new Set(m1), set2 = new Set(m2);
+  const interseccion = [...set1].filter(t => set2.has(t));
+  const union = new Set([...set1, ...set2]);
+  return interseccion.length / union.size;
+}
+
+function descMatch(desc1, desc2) {
+  return jaccardModelo(desc1, desc2) >= 0.5; // requiere que la mitad de las palabras del modelo coincidan
 }
 
 // ── 3. MERGE ─────────────────────────────────────────────────────────────────
@@ -242,10 +264,16 @@ function merge(productos, distribuidores) {
       // Tiene stock propio: solo agregar express si el modelo coincide
       if (descMatch(existente.desc, d.desc)) {
         existente.express = d.express;
+        if (!existente.codAlt && d.sku) existente.codAlt = d.sku;
+        // Michelin/BFGoodrich: el precio de lista del distribuidor manda siempre, aunque haya stock propio
+        const marcaUp = d.marca.toUpperCase();
+        if ((marcaUp === 'MICHELIN' || marcaUp === 'BFGOODRICH') && d.precio > 0) {
+          existente.precio = d.precio;
+        }
       } else {
         // Modelo distinto: crear entrada nueva para este producto del distribuidor
         if (d.precio > 0) {
-          const nuevo = { codArt: '', desc: d.desc, marca: d.marca, medida: d.medida, victoria: 0, nordelta: 0, express: d.express, precio: d.precio };
+          const nuevo = { codArt: '', codAlt: d.sku || '', desc: d.desc, marca: d.marca, medida: d.medida, victoria: 0, nordelta: 0, express: d.express, precio: d.precio };
           productos.set(`dist_${key}_${d.desc.slice(0, 20)}`, nuevo);
           porMedidaMarca.get(key).push(nuevo);
         }
@@ -255,9 +283,10 @@ function merge(productos, distribuidores) {
       existente.express = d.express;
       if (d.precio > 0) existente.precio = d.precio;
       existente.desc = d.desc;
+      if (!existente.codAlt && d.sku) existente.codAlt = d.sku;
     } else if (!existente && d.precio > 0) {
       // Producto nuevo del distribuidor (solo si tiene precio)
-      const nuevo = { codArt: '', desc: d.desc, marca: d.marca, medida: d.medida, victoria: 0, nordelta: 0, express: d.express, precio: d.precio };
+      const nuevo = { codArt: '', codAlt: d.sku || '', desc: d.desc, marca: d.marca, medida: d.medida, victoria: 0, nordelta: 0, express: d.express, precio: d.precio };
       productos.set(`dist_${key}_${d.desc.slice(0, 20)}`, nuevo);
       if (!porMedidaMarca.has(key)) porMedidaMarca.set(key, []);
       porMedidaMarca.get(key).push(nuevo);
@@ -290,7 +319,7 @@ async function main() {
     // Si tiene stock propio, usar precio propio; si no, usar precio del distribuidor
     filas.push([
       p.codArt || '',
-      '',
+      p.codAlt || '',
       p.desc,
       p.marca,
       '',

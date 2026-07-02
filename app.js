@@ -3,13 +3,15 @@ const jwt = require('jsonwebtoken');
 const path = require('path');
 const { google } = require('googleapis');
 
-// Fix private_key newlines en GOOGLE_CREDENTIALS (Railway guarda \n literal)
-if (process.env.GOOGLE_CREDENTIALS) {
-  try {
-    const creds = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-    if (creds.private_key) creds.private_key = creds.private_key.replace(/\\n/g, '\n');
-    process.env.GOOGLE_CREDENTIALS = JSON.stringify(creds);
-  } catch(e) {}
+// Parsear credenciales Google UNA sola vez y corregir private_key
+let GOOGLE_CREDS;
+try {
+  GOOGLE_CREDS = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+  if (GOOGLE_CREDS && GOOGLE_CREDS.private_key) {
+    GOOGLE_CREDS.private_key = GOOGLE_CREDS.private_key.replace(/\\n/g, '\n');
+  }
+} catch(e) {
+  console.error('app.js ERROR al parsear GOOGLE_CREDENTIALS:', e.message);
 }
 
 const router = express.Router();
@@ -95,7 +97,7 @@ router.get('/imagenes', authMiddleware, async (req, res) => {
     }
     const auth = new google.auth.GoogleAuth({
       ...(process.env.GOOGLE_CREDENTIALS
-        ? { credentials: JSON.parse(process.env.GOOGLE_CREDENTIALS) }
+        ? { credentials: GOOGLE_CREDS }
         : { keyFile: path.join(__dirname, 'credentials.json') }),
       scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
     });
@@ -123,8 +125,7 @@ router.get('/imagenes', authMiddleware, async (req, res) => {
 // --- Resumen de vendedores (solo admin) ---
 router.get('/stats-vendedores', authMiddleware, async (req, res) => {
   try {
-    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
     const sheets = google.sheets({ version: 'v4', auth });
     const result = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GOOGLE_SHEET_ID,
@@ -165,8 +166,7 @@ router.get('/stats-vendedores', authMiddleware, async (req, res) => {
 router.get('/mis-stats', authMiddleware, async (req, res) => {
   try {
     const vendedor = req.user.nombre;
-    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
     const sheets = google.sheets({ version: 'v4', auth });
     const result = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GOOGLE_SHEET_ID,
@@ -214,8 +214,7 @@ router.post('/guardar-presupuesto', express.json(), authMiddleware, async (req, 
   try {
     const { cliente, tel, num, fecha, items } = req.body;
     const vendedor = req.user.nombre;
-    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
     const sheets = google.sheets({ version: 'v4', auth });
 
     const productos = items.map(i => i.descripcion).join(' | ');
@@ -421,8 +420,7 @@ function renderPresupuestoPage(res, row, autoPrint) {
 router.get('/ver/:token', async (req, res) => {
   try {
     const { token } = req.params;
-    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
     const sheets = google.sheets({ version: 'v4', auth });
     const result = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GOOGLE_SHEET_ID,
@@ -441,8 +439,7 @@ router.get('/ver/fila/:fila', async (req, res) => {
   try {
     const fila = parseInt(req.params.fila, 10);
     if (Number.isNaN(fila) || fila < 2) return res.status(404).send('<h2>Presupuesto no encontrado</h2>');
-    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
     const sheets = google.sheets({ version: 'v4', auth });
     const result = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GOOGLE_SHEET_ID,
@@ -515,8 +512,7 @@ router.post('/enviar-presupuesto', express.json(), authMiddleware, async (req, r
 // --- Seguimiento: leer presupuestos ---
 router.get('/seguimiento/presupuestos', authMiddleware, async (req, res) => {
   try {
-    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
     const sheets = google.sheets({ version: 'v4', auth });
     const result = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GOOGLE_SHEET_ID,
@@ -554,8 +550,7 @@ router.get('/seguimiento/presupuestos', authMiddleware, async (req, res) => {
 router.post('/seguimiento/actualizar', express.json(), authMiddleware, async (req, res) => {
   try {
     const { fila, estado } = req.body;
-    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
     const sheets = google.sheets({ version: 'v4', auth });
     await sheets.spreadsheets.values.update({
       spreadsheetId: process.env.GOOGLE_SHEET_ID,
@@ -572,8 +567,7 @@ router.post('/seguimiento/actualizar', express.json(), authMiddleware, async (re
 // --- Reporte diario ---
 async function generarReporteDiario(fechaParam) {
   try {
-    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
     const sheets = google.sheets({ version: 'v4', auth });
     const result = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GOOGLE_SHEET_ID,
@@ -701,8 +695,7 @@ router.get('/broadcast/plantillas', authMiddleware, async (req, res) => {
 // --- Broadcast: cantidad de revendedores ---
 router.get('/broadcast/revendedores', authMiddleware, async (req, res) => {
   try {
-    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
     const sheets = google.sheets({ version: 'v4', auth });
     const result = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GOOGLE_SHEET_ID,
@@ -722,8 +715,7 @@ router.post('/broadcast/enviar', express.json(), authMiddleware, async (req, res
 
   let numeros = [];
   if (tipo === 'revendedores') {
-    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
     const sheets = google.sheets({ version: 'v4', auth });
     const result = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GOOGLE_SHEET_ID,
@@ -805,8 +797,7 @@ router.get('/tiendanube/callback', async (req, res) => {
 // --- Conversaciones del bot ---
 router.get('/conversaciones/mensajes', authMiddleware, async (req, res) => {
   try {
-    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
     const sheets = google.sheets({ version: 'v4', auth });
     const result = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GOOGLE_SHEET_ID,
@@ -839,8 +830,7 @@ router.get('/conversaciones/mensajes', authMiddleware, async (req, res) => {
 // --- Seguimiento Bot ---
 router.get('/bot/seguimiento', authMiddleware, async (req, res) => {
   try {
-    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
     const sheets = google.sheets({ version: 'v4', auth });
     const result = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GOOGLE_SHEET_ID,
@@ -869,8 +859,7 @@ router.get('/bot/seguimiento', authMiddleware, async (req, res) => {
 router.post('/bot/seguimiento/actualizar', express.json(), authMiddleware, async (req, res) => {
   const { fila, estado } = req.body;
   try {
-    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
     const sheets = google.sheets({ version: 'v4', auth });
     await sheets.spreadsheets.values.update({
       spreadsheetId: process.env.GOOGLE_SHEET_ID,
@@ -887,8 +876,7 @@ router.post('/bot/seguimiento/actualizar', express.json(), authMiddleware, async
 // --- Alertas de ayuda humana ---
 router.get('/conversaciones/alertas', authMiddleware, async (req, res) => {
   try {
-    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
     const sheets = google.sheets({ version: 'v4', auth });
     const result = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GOOGLE_SHEET_ID,
@@ -907,8 +895,7 @@ router.get('/conversaciones/alertas', authMiddleware, async (req, res) => {
 router.post('/conversaciones/alertas/atender', express.json(), authMiddleware, async (req, res) => {
   const { fila } = req.body;
   try {
-    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
     const sheets = google.sheets({ version: 'v4', auth });
     await sheets.spreadsheets.values.update({
       spreadsheetId: process.env.GOOGLE_SHEET_ID,

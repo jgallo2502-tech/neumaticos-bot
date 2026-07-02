@@ -1,12 +1,17 @@
 require('dotenv').config();
 
-// Fix private_key newlines en GOOGLE_CREDENTIALS (Railway guarda \n literal)
-if (process.env.GOOGLE_CREDENTIALS) {
-  try {
-    const creds = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-    if (creds.private_key) creds.private_key = creds.private_key.replace(/\\n/g, '\n');
-    process.env.GOOGLE_CREDENTIALS = JSON.stringify(creds);
-  } catch(e) {}
+// Parsear credenciales Google UNA sola vez y corregir private_key
+// Railway guarda los \n como literales en env vars
+let GOOGLE_CREDS;
+try {
+  GOOGLE_CREDS = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+  if (GOOGLE_CREDS.private_key) {
+    GOOGLE_CREDS.private_key = GOOGLE_CREDS.private_key.replace(/\\n/g, '\n');
+  }
+  console.log('Google credentials cargadas. client_email:', GOOGLE_CREDS.client_email);
+  console.log('private_key starts with:', GOOGLE_CREDS.private_key ? GOOGLE_CREDS.private_key.substring(0, 40) : 'NULL');
+} catch(e) {
+  console.error('ERROR al parsear GOOGLE_CREDENTIALS:', e.message);
 }
 
 const express = require('express');
@@ -48,8 +53,7 @@ function registrarMensajeSesion(numero, rol, texto) {
 }
 
 async function guardarAlerta(numero, mensaje) {
-  const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-  const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+  const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
   const sheets = google.sheets({ version: 'v4', auth });
   const ahora = new Date(Date.now() - 3 * 60 * 60 * 1000);
   const fecha = ahora.toISOString().slice(0, 10).split('-').reverse().join('/');
@@ -68,8 +72,7 @@ async function guardarMensaje(numero, rol, texto) {
 
 async function guardarMensajes(lista) {
   // lista = [[numero, rol, texto], ...]
-  const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-  const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+  const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
   const sheets = google.sheets({ version: 'v4', auth });
   const ahora = new Date(Date.now() - 3 * 60 * 60 * 1000);
   const fecha = ahora.toISOString().slice(0, 10).split('-').reverse().join('/');
@@ -125,8 +128,7 @@ function generarResumen(mensajes, inicio) {
 
 async function guardarResumenSesion(numero, inicio, resumen) {
   try {
-    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
     const sheets = google.sheets({ version: 'v4', auth });
     const ahora = new Date(Date.now() - 3 * 60 * 60 * 1000);
     const fecha = ahora.toISOString().slice(0, 10).split('-').reverse().join('/');
@@ -205,8 +207,7 @@ async function esRevendedor(numero) {
     const ahora = Date.now();
     // Refrescar cache cada 5 minutos
     if (!revendedoresCache || ahora - revendedoresCacheTime > 5 * 60 * 1000) {
-      const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-      const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+      const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
       const sheets = google.sheets({ version: 'v4', auth });
       const res = await sheets.spreadsheets.values.get({
         spreadsheetId: process.env.GOOGLE_SHEET_ID,
@@ -228,9 +229,8 @@ async function esRevendedor(numero) {
 // --- Registrar consulta en Google Sheets ---
 async function registrarConsulta(numero, medida, marca, productos) {
   try {
-    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
     const auth = new google.auth.GoogleAuth({
-      credentials,
+      credentials: GOOGLE_CREDS,
       scopes: ['https://www.googleapis.com/auth/spreadsheets'],
     });
     const sheets = google.sheets({ version: 'v4', auth });
@@ -266,11 +266,7 @@ async function registrarConsulta(numero, medida, marca, productos) {
 // Columnas: A=Cod.Art | B=Cod.Alt | C=Descripción | D=Marca | E=Modelo | F=Medida
 //           G=Victoria | H=Nordelta | I=Pedido Express 48hs | J=Precio | K=Promoción
 function getGoogleAuth(scopes) {
-  const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-  if (credentials.private_key) {
-    credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
-  }
-  return new google.auth.GoogleAuth({ credentials, scopes });
+  return new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes });
 }
 
 async function obtenerPrecios(medida, marca, incluirRunFlat = false, minStock = 4, incluirNieve = false) {

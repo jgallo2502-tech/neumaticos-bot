@@ -609,7 +609,7 @@ app.post('/webhook', async (req, res) => {
       registrarMensajeSesion(fromNumber, 'bot', respuesta);
     }
   } catch (err) {
-    console.error('Error:', err.message);
+    console.error('Error completo:', err.message, err.stack);
     twiml.message('❌ Hubo un error. Por favor intentá de nuevo o escribí *"hablar con alguien"*.');
   }
 

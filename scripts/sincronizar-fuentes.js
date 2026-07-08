@@ -205,23 +205,58 @@ function leerMichelinPrecios(wb) {
   return caiMap;
 }
 
+// ─── Helper: encontrar columna por nombre de header ──────────────────────────
+// Busca en las primeras 'maxRows' filas la que tenga un header que matchee algún
+// patrón. Devuelve { headerIdx, colIdx } o null si no encuentra.
+function encontrarColumna(rows, patronesHeader, maxRows = 10) {
+  for (let i = 0; i < Math.min(maxRows, rows.length); i++) {
+    const idx = rows[i].findIndex(h => patronesHeader.some(p => p.test((h || '').toString())));
+    if (idx !== -1) return { headerIdx: i, colIdx: idx };
+  }
+  return null;
+}
+
 // ─── Leer Hankook — match por SKU (CodAlt del sheet = "HA" + Cod. producto) ──
-// Columnas: r[1]=Cod.producto r[2]=Pisada r[3]=Talon r[4]=Rodado r[5]=Desc.Corta
-//           r[7]=Desc.Larga r[8]=Diseño r[11]=Stock r[16]=PMG
 function leerHankook(wb) {
-  const rows = XLSX.utils.sheet_to_json(wb.Sheets['Lista Precios Hankook'], { header: 1 });
-  const skuMap   = {};
-  const medidaMap = {};
-  for (let i = 2; i < rows.length; i++) {
+  const sheetName = wb.SheetNames.find(s => /hankook|lista/i.test(s)) || wb.SheetNames[0];
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1 });
+
+  // Encontrar fila de header buscando columna PMG
+  const pmgInfo = encontrarColumna(rows, [/^pmg$/i, /precio mostrador gallo/i]);
+  if (!pmgInfo) { console.error('❌ Hankook: no se encontró columna PMG'); return { skuMap: {}, medidaMap: {} }; }
+
+  const header = rows[pmgInfo.headerIdx];
+  const col = nombre => header.findIndex(h => nombre.test((h || '').toString()));
+
+  const colPMG   = pmgInfo.colIdx;
+  const colStock = col(/^stock$/i);
+  const colCod   = col(/cod\.?\s*producto/i);
+  const colDesc  = col(/descripci[oó]n\s*larga/i);
+  const colPisada = col(/^pisada$/i);
+  const colTalon  = col(/^tal[oó]n$/i);
+  const colRodado = col(/^rodado$/i);
+  const colDiseno = col(/^dise[nñ]o$/i);
+
+  if (colStock === -1) console.warn('⚠️  Hankook: columna Stock no encontrada, usando 0');
+  if (colCod === -1)   { console.error('❌ Hankook: columna Cod. producto no encontrada'); return { skuMap: {}, medidaMap: {} }; }
+
+  console.log(`  Hankook cols — PMG:${colPMG} Stock:${colStock} Cod:${colCod} Desc:${colDesc} Pisada:${colPisada}`);
+
+  const skuMap = {}, medidaMap = {};
+  for (let i = pmgInfo.headerIdx + 1; i < rows.length; i++) {
     const r = rows[i];
-    if (!r[2] && !r[3] && !r[4]) continue;
-    const cod    = (r[1] || '').toString().trim();
-    const pisada = r[2], talon = r[3], rodado = r[4];
-    const stock  = r[11];
-    const precio = r[16];
+    const cod = colCod !== -1 ? (r[colCod] || '').toString().trim() : '';
+    if (!cod || /^cod/i.test(cod)) continue;
+    const precio = r[colPMG];
     if (typeof precio !== 'number' || precio <= 0) continue;
+    const stock = colStock !== -1 ? r[colStock] : undefined;
+    const pisada = colPisada !== -1 ? r[colPisada] : '';
+    const talon  = colTalon  !== -1 ? r[colTalon]  : '';
+    const rodado = colRodado !== -1 ? r[colRodado] : '';
     const medida = normalizarMedida(`${pisada}/${talon}R${rodado}`) || '';
-    const desc = (r[7] || '').toString().trim() || `HANKOOK ${medida} ${r[8] || ''}`.trim();
+    const descLarga = colDesc !== -1 ? (r[colDesc] || '').toString().trim() : '';
+    const diseño    = colDiseno !== -1 ? (r[colDiseno] || '').toString().trim() : '';
+    const desc = descLarga || (medida && diseño ? `HANKOOK ${medida} ${diseño}` : '');
     const entry = { stock: stockExterno(stock), precio, desc, medida };
     if (cod) skuMap[cod] = entry;
     if (medida) medidaMap[medida] = entry;
@@ -230,23 +265,40 @@ function leerHankook(wb) {
 }
 
 // ─── Leer Yokohama — match por SKU (CodAlt = "YO" + CODIGO) ──────────────────
-// Columnas: r[3]=Medida r[4]=Desc.Larga r[7]=CODIGO r[11]=Stock r[12]=PMG
 function leerYokohama(wb) {
-  const rows = XLSX.utils.sheet_to_json(wb.Sheets['Hoja1'], { header: 1 });
-  const skuMap    = {};
-  const medidaMap = {};
-  for (let i = 3; i < rows.length; i++) {
+  const sheetName = wb.SheetNames.find(s => /hoja1/i.test(s)) || wb.SheetNames[0];
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1 });
+
+  const pmgInfo = encontrarColumna(rows, [/^pmg$/i, /precio mostrador gallo/i]);
+  if (!pmgInfo) { console.error('❌ Yokohama: no se encontró columna PMG'); return { skuMap: {}, medidaMap: {} }; }
+
+  const header = rows[pmgInfo.headerIdx];
+  const col = patron => header.findIndex(h => patron.test((h || '').toString()));
+
+  const colPMG    = pmgInfo.colIdx;
+  const colStock  = col(/^stock$/i);
+  const colCod    = col(/^c[oó]digo$|^cod\.?$|^codigo$/i);
+  const colDesc   = col(/descripci[oó]n\s*larga/i);
+  const colMedida = col(/^medida$/i);
+
+  if (colStock === -1) console.warn('⚠️  Yokohama: columna Stock no encontrada, usando 0');
+  if (colCod === -1)   { console.error('❌ Yokohama: columna Código no encontrada'); return { skuMap: {}, medidaMap: {} }; }
+
+  console.log(`  Yokohama cols — PMG:${colPMG} Stock:${colStock} Cod:${colCod} Desc:${colDesc} Medida:${colMedida}`);
+
+  const skuMap = {}, medidaMap = {};
+  for (let i = pmgInfo.headerIdx + 1; i < rows.length; i++) {
     const r = rows[i];
-    const cod = (r[7] || '').toString().trim();
-    if (!cod) continue;
-    const precio = r[12];
-    const stock  = r[11];
+    const cod = colCod !== -1 ? (r[colCod] || '').toString().trim() : '';
+    if (!cod || /^c[oó]d/i.test(cod)) continue;
+    const precio = r[colPMG];
     if (typeof precio !== 'number' || precio <= 0) continue;
-    const medidaRaw = (r[3] || '').toString();
+    const stock = colStock !== -1 ? r[colStock] : undefined;
+    const medidaRaw = colMedida !== -1 ? (r[colMedida] || '').toString() : '';
     const medida = normalizarMedida(medidaRaw) || '';
-    const desc = (r[4] || '').toString().trim();
+    const desc = colDesc !== -1 ? (r[colDesc] || '').toString().trim() : '';
     const entry = { stock: stockExterno(stock), precio, desc, medida };
-    skuMap[cod] = entry;
+    if (cod) skuMap[cod] = entry;
     if (medida) medidaMap[medida] = entry;
   }
   return { skuMap, medidaMap };
@@ -256,18 +308,38 @@ function leerYokohama(wb) {
 function leerLinglong(wb) {
   const sheetName = wb.SheetNames.find(s => /lista/i.test(s)) || wb.SheetNames[0];
   const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1 });
-  const skuMap    = {};
-  const medidaMap = {};
-  for (let i = 2; i < rows.length; i++) {
+
+  // Linglong: buscar columna PMG (col con nombre "PMG" o "Precio Mostrador Gallo")
+  const pmgInfo = encontrarColumna(rows, [/^pmg$/i, /precio mostrador gallo/i]);
+  if (!pmgInfo) { console.error('❌ Linglong: no se encontró columna PMG'); return { skuMap: {}, medidaMap: {} }; }
+
+  const header = rows[pmgInfo.headerIdx];
+  const col = patron => header.findIndex(h => patron.test((h || '').toString()));
+
+  const colPMG   = pmgInfo.colIdx;
+  const colStock = col(/^stock$/i);
+  const colCod   = col(/^material$|^c[oó]d/i);
+  const colDesc  = col(/^descripci[oó]n$|^desc/i);
+
+  // Fallback: si no hay header claro, usar posiciones conocidas del formato actual
+  const colCodFinal  = colCod  !== -1 ? colCod  : 0;
+  const colDescFinal = colDesc !== -1 ? colDesc : 1;
+  const colStockFinal = colStock !== -1 ? colStock : -1;
+
+  if (colStockFinal === -1) console.warn('⚠️  Linglong: columna Stock no encontrada, usando 0');
+  console.log(`  Linglong cols — PMG:${colPMG} Stock:${colStockFinal} Cod:${colCodFinal} Desc:${colDescFinal}`);
+
+  const skuMap = {}, medidaMap = {};
+  for (let i = pmgInfo.headerIdx + 1; i < rows.length; i++) {
     const r = rows[i];
-    if ((r[0] || '').toString() === 'MATERIAL') continue;
-    if (!r[1] || typeof r[7] !== 'number' || r[7] <= 0) continue;
-    const cod    = (r[0] || '').toString().trim();
-    const desc   = r[1].toString();
-    const precio = r[7];
-    const stock  = r[6];
+    if ((r[colCodFinal] || '').toString() === 'MATERIAL') continue;
+    const precio = r[colPMG];
+    if (!r[colDescFinal] || typeof precio !== 'number' || precio <= 0) continue;
+    const cod   = (r[colCodFinal] || '').toString().trim();
+    const desc  = r[colDescFinal].toString().trim();
+    const stock = colStockFinal !== -1 ? r[colStockFinal] : undefined;
     const medida = normalizarMedida(desc) || '';
-    const entry  = { stock: stockExterno(stock), precio, desc, medida };
+    const entry = { stock: stockExterno(stock), precio, desc, medida };
     if (cod) skuMap[cod] = entry;
     if (medida) medidaMap[medida] = entry;
   }
@@ -276,15 +348,34 @@ function leerLinglong(wb) {
 
 // ─── Leer Neumasur (Nexen) — match por SKU (CodAlt = "NE" + codigo) ──────────
 function leerNeumasur(wb) {
-  const rows = XLSX.utils.sheet_to_json(wb.Sheets['Nexen'], { header: 1 });
-  const skuMap    = {};
-  const medidaMap = {};
-  for (let i = 1; i < rows.length; i++) {
+  const sheetName = wb.SheetNames.find(s => /nexen/i.test(s)) || wb.SheetNames[0];
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1 });
+
+  // Buscar header por columna PMG
+  const pmgInfo = encontrarColumna(rows, [/^pmg$/i, /precio mostrador gallo/i]);
+  if (!pmgInfo) { console.error('❌ Neumasur: no se encontró columna PMG'); return { skuMap: {}, medidaMap: {} }; }
+
+  const header = rows[pmgInfo.headerIdx];
+  const col = patron => header.findIndex(h => patron.test((h || '').toString()));
+
+  const colPMG   = pmgInfo.colIdx;
+  const colStock = col(/^stock$/i);
+  const colCod   = col(/^c[oó]d|^material/i);
+  const colDesc  = col(/^descripci[oó]n|^desc/i);
+
+  const colCodFinal  = colCod  !== -1 ? colCod  : 0;
+  const colDescFinal = colDesc !== -1 ? colDesc : 1;
+
+  if (colStock === -1) console.warn('⚠️  Neumasur: columna Stock no encontrada, usando 0');
+  console.log(`  Neumasur cols — PMG:${colPMG} Stock:${colStock} Cod:${colCodFinal} Desc:${colDescFinal}`);
+
+  const skuMap = {}, medidaMap = {};
+  for (let i = pmgInfo.headerIdx + 1; i < rows.length; i++) {
     const r = rows[i];
-    const cod    = r[0] ? r[0].toString().trim() : null;
-    const desc   = (r[1] || '').toString();
-    const stock  = r[2];
-    const precio = r[4];
+    const cod   = r[colCodFinal] ? r[colCodFinal].toString().trim() : null;
+    const desc  = (r[colDescFinal] || '').toString();
+    const stock = colStock !== -1 ? r[colStock] : undefined;
+    const precio = r[colPMG];
     if (typeof precio !== 'number' || precio <= 0) continue;
     const medida = normalizarMedida(desc) || '';
     const entry = { stock: stockExterno(stock), precio, desc, medida };

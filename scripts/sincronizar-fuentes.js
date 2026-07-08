@@ -206,20 +206,22 @@ function leerMichelinPrecios(wb) {
 }
 
 // ─── Leer Hankook — match por SKU (CodAlt del sheet = "HA" + Cod. producto) ──
+// Columnas: r[1]=Cod.producto r[2]=Pisada r[3]=Talon r[4]=Rodado r[5]=Desc.Corta
+//           r[7]=Desc.Larga r[8]=Diseño r[11]=Stock r[16]=PMG
 function leerHankook(wb) {
   const rows = XLSX.utils.sheet_to_json(wb.Sheets['Lista Precios Hankook'], { header: 1 });
-  const skuMap   = {};  // cod. producto → datos
-  const medidaMap = {}; // fallback por medida
+  const skuMap   = {};
+  const medidaMap = {};
   for (let i = 2; i < rows.length; i++) {
     const r = rows[i];
     if (!r[2] && !r[3] && !r[4]) continue;
     const cod    = (r[1] || '').toString().trim();
     const pisada = r[2], talon = r[3], rodado = r[4];
-    const stock  = r[10];
-    const precio = r[15];
+    const stock  = r[11];
+    const precio = r[16];
     if (typeof precio !== 'number' || precio <= 0) continue;
     const medida = normalizarMedida(`${pisada}/${talon}R${rodado}`) || '';
-    const desc = `HANKOOK ${medida} ${r[5] || ''} ${r[6] || ''}`.trim();
+    const desc = (r[7] || '').toString().trim() || `HANKOOK ${medida} ${r[8] || ''}`.trim();
     const entry = { stock: stockExterno(stock), precio, desc, medida };
     if (cod) skuMap[cod] = entry;
     if (medida) medidaMap[medida] = entry;
@@ -228,21 +230,21 @@ function leerHankook(wb) {
 }
 
 // ─── Leer Yokohama — match por SKU (CodAlt = "YO" + CODIGO) ──────────────────
+// Columnas: r[3]=Medida r[4]=Desc.Larga r[7]=CODIGO r[11]=Stock r[12]=PMG
 function leerYokohama(wb) {
   const rows = XLSX.utils.sheet_to_json(wb.Sheets['Hoja1'], { header: 1 });
   const skuMap    = {};
   const medidaMap = {};
   for (let i = 3; i < rows.length; i++) {
     const r = rows[i];
-    const cod       = (r[7] || '').toString().trim();
+    const cod = (r[7] || '').toString().trim();
     if (!cod) continue;
-    const medidaRaw = (r[3] || '').toString();
-    const precio    = r[12];
-    const stock     = r[11];
-    const modelo    = (r[4] || '').toString().trim();
+    const precio = r[12];
+    const stock  = r[11];
     if (typeof precio !== 'number' || precio <= 0) continue;
+    const medidaRaw = (r[3] || '').toString();
     const medida = normalizarMedida(medidaRaw) || '';
-    const desc = `YOKOHAMA ${medidaRaw} ${modelo}`.trim();
+    const desc = (r[4] || '').toString().trim();
     const entry = { stock: stockExterno(stock), precio, desc, medida };
     skuMap[cod] = entry;
     if (medida) medidaMap[medida] = entry;
@@ -452,6 +454,28 @@ async function main() {
     const modeloActual = (r[4] || '').toString().trim();
     if (!modeloActual && codArt && productos[codArt] && productos[codArt].modelo) {
       updates.push({ range: `Bot WhatsApp!E${fila}`, values: [[productos[codArt].modelo]] });
+    }
+
+    // ─── Chequeo y corrección de descripción (col C) desde archivo fuente ────────
+    {
+      const descHoja = (r[2] || '').toString().trim();
+      let descFuente = null;
+      if (marca === 'LINGLONG') {
+        const d = llData.skuMap[codAlt]; if (d) descFuente = d.desc;
+      } else if (marca === 'HANKOOK') {
+        const key = codAlt.replace(/^HA/i, '');
+        const d = hankookData.skuMap[key]; if (d) descFuente = d.desc;
+      } else if (marca === 'YOKOHAMA') {
+        const key = codAlt.replace(/^YO/i, '');
+        const d = yokoData.skuMap[key]; if (d) descFuente = d.desc;
+      }
+      if (descFuente) {
+        const normD = s => s.toLowerCase().replace(/green[- ]?max/g,'greenmax').replace(/sport[- ]?master/g,'sportmaster').replace(/grip[- ]?master/g,'gripmaster').replace(/\s+/g,' ').replace(/[-]/g,'').trim();
+        if (normD(descFuente) !== normD(descHoja)) {
+          updates.push({ range: `Bot WhatsApp!C${fila}`, values: [[descFuente]] });
+          console.log(`  📝 Desc corregida fila ${fila}: ${descHoja} → ${descFuente}`);
+        }
+      }
     }
 
     // Armar actualización como rango continuo G:J para evitar updates parciales

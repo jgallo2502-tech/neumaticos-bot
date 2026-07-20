@@ -78,7 +78,8 @@ function parseNum(val) {
 // ─── Descargar archivo de Drive ───────────────────────────────────────────────
 async function descargarXlsx(drive, fileId) {
   const res = await drive.files.get({ fileId, alt: 'media' }, { responseType: 'arraybuffer' });
-  return XLSX.read(Buffer.from(res.data));
+  const buf = Buffer.from(res.data);
+  return XLSX.read(buf, { type: 'buffer', cellDates: true, raw: false });
 }
 
 // ─── Listar archivos en carpeta ───────────────────────────────────────────────
@@ -173,11 +174,10 @@ function leerCelsur(wb) {
 
 // ─── Leer lista Michelin/BFG (precio por CAI, PMG buscado por nombre de columna) ─
 function leerMichelinPrecios(wb) {
-  const caiMap = {};
+  const caiMap = {}; // cai → { precio, desc }
   for (const sheetName of wb.SheetNames) {
     if (sheetName.toLowerCase() === 'glosario') continue;
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1 });
-    // Buscar fila de header (la que contiene "Precio Mostrador Gallo")
     let headerIdx = -1;
     for (let i = 0; i < Math.min(10, rows.length); i++) {
       if (rows[i].some(h => /precio mostrador gallo/i.test((h || '').toString()))) {
@@ -190,15 +190,17 @@ function leerMichelinPrecios(wb) {
       continue;
     }
     const header = rows[headerIdx];
-    const pmgCol = header.findIndex(h => /precio mostrador gallo/i.test((h || '').toString()));
-    const caiCol = header.findIndex(h => /^cai$/i.test((h || '').toString().trim()));
-    const caiColFinal = caiCol !== -1 ? caiCol : 3; // fallback col 3
+    const pmgCol  = header.findIndex(h => /precio mostrador gallo/i.test((h || '').toString()));
+    const caiCol  = header.findIndex(h => /^cai$/i.test((h || '').toString().trim()));
+    const descCol = header.findIndex(h => /^descripci[oó]n$/i.test((h || '').toString().trim()));
+    const caiColFinal = caiCol !== -1 ? caiCol : 0;
     for (let i = headerIdx + 1; i < rows.length; i++) {
       const r = rows[i];
-      const cai   = r[caiColFinal] ? r[caiColFinal].toString().trim() : null;
+      const cai    = r[caiColFinal] ? r[caiColFinal].toString().trim() : null;
       const precio = r[pmgCol];
       if (cai && typeof precio === 'number' && precio > 0) {
-        caiMap[cai] = precio;
+        const descBase = descCol !== -1 ? (r[descCol] || '').toString().trim() : '';
+        caiMap[cai] = { precio, descBase };
       }
     }
   }
@@ -401,7 +403,8 @@ async function main() {
   const archivoCelsur     = encontrarArchivo(archivos, ['celsur'])
     || encontrarArchivo(archivos, ['stock_disponible'])
     || encontrarArchivo(archivos, ['stock'], ['inv', 'gallo', 'hankook', 'yokohama', 'ling', 'nexen', 'neumasur', 'michelin']);
-  const archivoMichelin   = encontrarArchivo(archivos, ['michelin', 'bfgoodrich']);
+  const archivoMichelin   = encontrarArchivo(archivos, ['michelin', 'con descripcion'])
+    || encontrarArchivo(archivos, ['michelin', 'bfgoodrich']);
   const archivoHankook    = encontrarArchivo(archivos, ['hankook']);
   const archivoYokohama   = encontrarArchivo(archivos, ['yokohama']);
   const archivoLinglong   = encontrarArchivo(archivos, ['ling']);
@@ -480,9 +483,12 @@ async function main() {
     if (marca === 'MICHELIN' || marca === 'BFGOODRICH') {
       stockExpr = calsurStockPorCAI(celsurStock, codAlt);
       // Lista oficial solo si Gallo no tiene stock propio
-      const pMich = michelinPrecios[codAlt];
-      if (pMich && precio === null) {
-        precio = pMich;
+      const mEntry = michelinPrecios[codAlt];
+      if (mEntry && mEntry.descBase && !mEntry.desc) {
+        mEntry.desc = mEntry.descBase; // descripción ya viene completa del archivo
+      }
+      if (mEntry && precio === null) {
+        precio = mEntry.precio;
       } else if (precio === null) {
         precio = 0;
         sinPrecio++;
@@ -559,6 +565,8 @@ async function main() {
       } else if (marca === 'YOKOHAMA') {
         const key = codAlt.replace(/^YO/i, '');
         const d = yokoData.skuMap[key]; if (d) descFuente = d.desc;
+      } else if (marca === 'MICHELIN' || marca === 'BFGOODRICH') {
+        const mEntry = michelinPrecios[codAlt]; if (mEntry && mEntry.desc) descFuente = mEntry.desc;
       }
       if (descFuente) {
         const normD = s => s.toLowerCase().replace(/green[- ]?max/g,'greenmax').replace(/sport[- ]?master/g,'sportmaster').replace(/grip[- ]?master/g,'gripmaster').replace(/\s+/g,' ').replace(/[-]/g,'').trim();
@@ -603,11 +611,11 @@ async function main() {
   // 2. Celsur: Michelin/BFG con stock express no están en la hoja
   for (const [cai, stock] of Object.entries(celsurStock)) {
     if (codAltsEnHoja.has(cai) || stock <= 0) continue;
-    const desc   = celsurDesc[cai] || '';
-    const precio = michelinPrecios[cai];
-    if (!precio) continue;
-    const marca  = celsurMarca[cai] || '';
-    agregarNuevo('', cai, desc, 0, 0, Math.round(stock), precio, marca);
+    const mEntry = michelinPrecios[cai];
+    if (!mEntry) continue;
+    const marcaCai = (celsurMarca[cai] || '').toUpperCase();
+    const desc     = mEntry.descBase || celsurDesc[cai] || '';
+    agregarNuevo('', cai, desc, 0, 0, Math.round(stock), mEntry.precio, marcaCai || 'MICHELIN');
   }
 
   // 3. Hankook: SKUs con stock no están en la hoja

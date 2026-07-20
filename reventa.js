@@ -145,7 +145,10 @@ router.get('/', authMiddleware, (req, res) => {
     button.buscar { padding: 12px 22px; background: #e63946; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 700; cursor: pointer; }
     .tip { font-size: 12px; color: #888; margin-top: 8px; }
     .resultado { margin-top: 6px; }
-    .prod { border: 1px solid #eee; border-radius: 8px; padding: 14px 16px; margin-bottom: 10px; }
+    .prod { border: 1.5px solid #eee; border-radius: 8px; padding: 14px 16px; margin-bottom: 10px; cursor: pointer; transition: border-color .15s; }
+    .prod.selected { border-color: #e63946; background: #fff8f8; }
+    .prod-header { display: flex; align-items: flex-start; gap: 10px; }
+    .prod-check { width: 20px; height: 20px; accent-color: #e63946; flex-shrink: 0; margin-top: 2px; cursor: pointer; }
     .prod-desc { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
     .prod-precio { font-size: 22px; font-weight: 800; color: #e63946; }
     .prod-meta { font-size: 12px; color: #888; margin-top: 4px; }
@@ -155,6 +158,10 @@ router.get('/', authMiddleware, (req, res) => {
     .dl-btn:hover { background: #2a2a4e; }
     #loading { display: none; text-align: center; padding: 20px; color: #888; }
     .marca-tag { display: inline-block; background: #f0f0f0; border-radius: 4px; padding: 2px 8px; font-size: 11px; color: #555; margin-left: 8px; }
+    .copiar-bar { position: sticky; bottom: 16px; text-align: center; margin-top: 10px; }
+    .copiar-btn { padding: 13px 28px; background: #e63946; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 16px rgba(230,57,70,0.35); }
+    .copiar-btn:disabled { background: #ccc; box-shadow: none; cursor: default; }
+    .copiado { background: #2a9d5c !important; }
   </style>
 </head>
 <body>
@@ -175,6 +182,9 @@ router.get('/', authMiddleware, (req, res) => {
       <div class="tip">Ingresá la medida del neumático (ej: 185/65R15, 225/45R17)</div>
       <div id="loading">Buscando...</div>
       <div class="resultado" id="resultado"></div>
+      <div class="copiar-bar" id="copiarBar" style="display:none">
+        <button class="copiar-btn" id="copiarBtn" onclick="copiarSeleccionados()">📋 Copiar seleccionados</button>
+      </div>
     </div>
     <div class="card">
       <h2>Lista de precios completa</h2>
@@ -183,12 +193,17 @@ router.get('/', authMiddleware, (req, res) => {
     </div>
   </div>
   <script>
+    let productosActuales = [];
+
     document.getElementById('medida').addEventListener('keydown', e => { if (e.key === 'Enter') buscar(); });
+
     async function buscar() {
       const medida = document.getElementById('medida').value.trim();
       if (!medida) return;
       document.getElementById('loading').style.display = 'block';
       document.getElementById('resultado').innerHTML = '';
+      document.getElementById('copiarBar').style.display = 'none';
+      productosActuales = [];
       try {
         const r = await fetch('/reventa/buscar', {
           method: 'POST',
@@ -201,24 +216,72 @@ router.get('/', authMiddleware, (req, res) => {
           document.getElementById('resultado').innerHTML = '<div class="empty">No se encontraron productos para esa medida.</div>';
           return;
         }
+        productosActuales = data.productos;
         let html = '';
-        for (const p of data.productos) {
+        data.productos.forEach((p, i) => {
           const stockParts = [];
           if (p.stockVic > 0) stockParts.push('Victoria: ' + p.stockVic);
           if (p.stockNor > 0) stockParts.push('Nordelta: ' + p.stockNor);
-          if (p.stockExpr > 0) stockParts.push('Express: ' + p.stockExpr);
-          html += \`<div class="prod">
-            <div class="prod-desc">\${p.descripcion}<span class="marca-tag">\${p.marca}</span></div>
-            <div class="prod-precio">\${p.precioReventa}</div>
-            <div class="prod-meta">Precio de lista: \${p.precioLista} · Descuento: \${p.descuento}%</div>
-            \${stockParts.length ? '<div class="stock-row">Stock: ' + stockParts.join(' | ') + '</div>' : ''}
+          if (p.stockExpr > 0) stockParts.push('Express (' + p.stockExpr + ')');
+          const stockStr = stockParts.length ? stockParts.join(' | ') : 'Sin stock local';
+          html += \`<div class="prod" id="prod-\${i}" onclick="toggleProd(\${i})">
+            <div class="prod-header">
+              <input type="checkbox" class="prod-check" id="chk-\${i}" onclick="event.stopPropagation();toggleProd(\${i})">
+              <div style="flex:1">
+                <div class="prod-desc">\${p.descripcion}<span class="marca-tag">\${p.marca}</span></div>
+                <div class="prod-precio">\${p.precioReventa}</div>
+                <div class="prod-meta">Precio de lista: \${p.precioLista} · Descuento: \${p.descuento}%</div>
+                <div class="stock-row">Stock: \${stockStr}</div>
+              </div>
+            </div>
           </div>\`;
-        }
+        });
         document.getElementById('resultado').innerHTML = html;
+        document.getElementById('copiarBar').style.display = 'block';
       } catch(e) {
         document.getElementById('loading').style.display = 'none';
         document.getElementById('resultado').innerHTML = '<div class="empty">Error al buscar. Intentá de nuevo.</div>';
       }
+    }
+
+    function toggleProd(i) {
+      const el = document.getElementById('prod-' + i);
+      const chk = document.getElementById('chk-' + i);
+      chk.checked = !chk.checked;
+      el.classList.toggle('selected', chk.checked);
+      const alguno = productosActuales.some((_, j) => document.getElementById('chk-' + j)?.checked);
+      document.getElementById('copiarBtn').disabled = !alguno;
+    }
+
+    function copiarSeleccionados() {
+      const medida = document.getElementById('medida').value.trim();
+      const seleccionados = productosActuales.filter((_, i) => document.getElementById('chk-' + i)?.checked);
+      if (!seleccionados.length) return;
+
+      let texto = '🔴 *Neumáticos Gallo — Precios Reventa*\\n';
+      if (medida) texto += '📐 Medida: ' + medida + '\\n';
+      texto += '\\n';
+
+      for (const p of seleccionados) {
+        texto += '🔹 *' + p.descripcion + '*\\n';
+        texto += '   💲 Precio reventa: ' + p.precioReventa + '\\n';
+        const stockParts = [];
+        if (p.stockVic > 0) stockParts.push('Victoria: ' + p.stockVic);
+        if (p.stockNor > 0) stockParts.push('Nordelta: ' + p.stockNor);
+        if (p.stockExpr > 0) stockParts.push('Express: ' + p.stockExpr + ' unid. (48-72 hs hábiles)');
+        if (stockParts.length) texto += '   📦 Stock: ' + stockParts.join(' | ') + '\\n';
+        texto += '\\n';
+      }
+
+      navigator.clipboard.writeText(texto).then(() => {
+        const btn = document.getElementById('copiarBtn');
+        btn.textContent = '✅ ¡Copiado!';
+        btn.classList.add('copiado');
+        setTimeout(() => {
+          btn.textContent = '📋 Copiar seleccionados';
+          btn.classList.remove('copiado');
+        }, 2500);
+      });
     }
   </script>
 </body>

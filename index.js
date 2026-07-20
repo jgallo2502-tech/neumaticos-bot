@@ -19,6 +19,7 @@ const twilio = require('twilio');
 const { google } = require('googleapis');
 const Anthropic = require('@anthropic-ai/sdk');
 const appRouter = require('./app');
+const reventaRouter = require('./reventa');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -27,6 +28,9 @@ app.use(express.urlencoded({ extended: false }));
 
 // --- App de presupuestos ---
 app.use('/app', appRouter);
+
+// --- Portal de reventa ---
+app.use('/reventa', reventaRouter);
 
 // --- Historial de conversaciones ---
 // Guarda mensajes por número y cierra la sesión tras 30 min de inactividad

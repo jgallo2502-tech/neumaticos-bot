@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Órdenes de Servicio — Neumáticos Gallo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #f5f5f5; color: #222; }
+    header { background: #1a1a2e; color: white; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; }
+    header h1 { font-size: 18px; }
+    .nav a { color: white; font-size: 13px; opacity: 0.8; text-decoration: none; margin-left: 14px; }
+    .container { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+    .card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .filtros { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+    .filtros input, .filtros select { padding: 8px 12px; border: 2px solid #e8e8e8; border-radius: 8px; font-size: 14px; outline: none; }
+    .filtros input:focus, .filtros select:focus { border-color: #e63946; }
+    .filtros input { flex: 1; min-width: 200px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { background: #1a1a2e; color: white; padding: 10px 12px; text-align: left; font-size: 12px; white-space: nowrap; }
+    td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+    tr:hover td { background: #fafafa; }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+    .estado-ingresada  { background: #dbeafe; color: #1d4ed8; }
+    .estado-proceso    { background: #fed7aa; color: #c2410c; }
+    .estado-lista      { background: #dcfce7; color: #166534; }
+    .estado-entregada  { background: #e5e7eb; color: #374151; }
+    .btn-ver { background: #1a1a2e; color: white; border: none; padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+    .btn-ver:hover { background: #2a2a4e; }
+    .loading { text-align: center; padding: 40px; color: #888; }
+    .empty { text-align: center; padding: 40px; color: #888; }
+    .patente { font-weight: 700; letter-spacing: 1px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🔴 Neumáticos Gallo — Órdenes de Servicio</h1>
+    <div class="nav">
+      <a href="/app/dashboard.html">🏠 Dashboard</a>
+      <a href="/app/seguimiento.html">📋 Presupuestos</a>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="card">
+      <div class="filtros">
+        <input type="text" id="buscar" placeholder="🔍 Buscar por cliente, patente, OS..." oninput="filtrar()">
+        <select id="filtro-estado" onchange="filtrar()">
+          <option value="">Todos los estados</option>
+          <option>Ingresada</option>
+          <option>En proceso</option>
+          <option>Lista para retirar</option>
+          <option>Entregada</option>
+        </select>
+      </div>
+      <div id="tabla-container"><div class="loading">⏳ Cargando...</div></div>
+    </div>
+  </div>
+
+  <script>
+    const token = localStorage.getItem('token');
+    if (!token) window.location.href = '/app/login.html';
+
+    let todasLasOrdenes = [];
+
+    function badgeClass(e) {
+      if (e === 'Ingresada')          return 'estado-ingresada';
+      if (e === 'En proceso')         return 'estado-proceso';
+      if (e === 'Lista para retirar') return 'estado-lista';
+      if (e === 'Entregada')          return 'estado-entregada';
+      return 'estado-ingresada';
+    }
+
+    async function cargar() {
+      const r = await fetch('/app/ordenes/listar', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      const data = await r.json();
+      todasLasOrdenes = data.ordenes || [];
+      filtrar();
+    }
+
+    function filtrar() {
+      const busq  = document.getElementById('buscar').value.toLowerCase();
+      const estado = document.getElementById('filtro-estado').value;
+      const lista = todasLasOrdenes.filter(o => {
+        if (estado && o.estado !== estado) return false;
+        if (busq) {
+          const txt = [o.numero, o.clienteNombre, o.patente, o.marcaVeh, o.modeloVeh, o.doc].join(' ').toLowerCase();
+          if (!txt.includes(busq)) return false;
+        }
+        return true;
+      });
+      renderTabla(lista);
+    }
+
+    function renderTabla(lista) {
+      if (lista.length === 0) {
+        document.getElementById('tabla-container').innerHTML = '<div class="empty">No hay órdenes que coincidan.</div>';
+        return;
+      }
+      let html = `<table><thead><tr>
+        <th>N° OS</th><th>Fecha</th><th>Cliente</th><th>Patente</th><th>Vehículo</th><th>Total</th><th>Estado</th><th></th>
+      </tr></thead><tbody>`;
+      for (const o of lista) {
+        html += `<tr>
+          <td style="font-weight:700">OS ${o.numero}</td>
+          <td>${o.fecha}</td>
+          <td>${o.clienteNombre || '—'}</td>
+          <td class="patente">${o.patente || '—'}</td>
+          <td style="font-size:12px">${[o.marcaVeh, o.modeloVeh, o.anio].filter(Boolean).join(' ')}</td>
+          <td style="font-weight:600">${o.total ? '$' + parseInt(o.total).toLocaleString('es-AR') : '—'}</td>
+          <td><span class="badge ${badgeClass(o.estado)}">${o.estado}</span></td>
+          <td><button class="btn-ver" onclick="window.location.href='/app/orden-ver.html?id=${o.numero}'">Ver →</button></td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+      document.getElementById('tabla-container').innerHTML = html;
+    }
+
+    cargar();
+  </script>
+</body>
+</html>

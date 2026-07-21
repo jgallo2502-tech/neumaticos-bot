@@ -915,6 +915,184 @@ router.get('/tiendanube/auth', (req, res) => {
 });
 
 // ============================================================
+// ÓRDENES DE SERVICIO
+// ============================================================
+
+function googleAuth(scopes) {
+  return new google.auth.GoogleAuth({
+    ...(process.env.GOOGLE_CREDENTIALS ? { credentials: GOOGLE_CREDS } : { keyFile: require('path').join(__dirname, 'credentials.json') }),
+    scopes,
+  });
+}
+
+// Generar número de OS: OS-YYYYMM-NNN
+async function generarNumeroOS(sheets) {
+  const now = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const prefix = `OS-${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}-`;
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: process.env.GOOGLE_SHEET_ID, range: 'Ordenes!A:A' });
+  const rows = (res.data.values || []).slice(1).map(r => r[0] || '');
+  const nums = rows.filter(n => n.startsWith(prefix)).map(n => parseInt(n.replace(prefix,''))||0);
+  const next = nums.length ? Math.max(...nums) + 1 : 1;
+  return prefix + String(next).padStart(3,'0');
+}
+
+// Buscar cliente por DNI/CUIT
+router.get('/orden/cliente', authMiddleware, async (req, res) => {
+  const doc = (req.query.doc || '').replace(/\D/g,'');
+  if (!doc) return res.json({ encontrado: false });
+  try {
+    const sheets = google.sheets({ version: 'v4', auth: googleAuth(['https://www.googleapis.com/auth/spreadsheets.readonly']) });
+    const r = await sheets.spreadsheets.values.get({ spreadsheetId: process.env.GOOGLE_SHEET_ID, range: 'Clientes!A:H' });
+    const fila = (r.data.values || []).slice(1).find(row => (row[0]||'').replace(/\D/g,'') === doc);
+    if (!fila) return res.json({ encontrado: false });
+    res.json({ encontrado: true, doc: fila[0], nombre: fila[1], apellido: fila[2], direccion: fila[3], localidad: fila[4], provincia: fila[5], tel: fila[6], mail: fila[7] });
+  } catch(e) { res.json({ encontrado: false }); }
+});
+
+// Consulta AFIP por CUIT
+router.get('/orden/afip', authMiddleware, async (req, res) => {
+  const cuit = (req.query.cuit || '').replace(/\D/g,'');
+  if (!cuit || cuit.length !== 11) return res.json({});
+  try {
+    const fetch = (...args) => import('node-fetch').then(({default: f}) => f(...args));
+    const r = await fetch(`https://afip.tangofactura.com/Rest/GetContribuyenteFull?cuit=${cuit}`, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    const d = await r.json();
+    const c = d.Contribuyente || d.contribuyente || {};
+    const domicilio = c.domicilioFiscal || c.DomicilioFiscal || {};
+    res.json({
+      razonSocial: c.razonSocial || c.RazonSocial || '',
+      domicilio: [domicilio.direccion || domicilio.Direccion, domicilio.localidad || domicilio.Localidad].filter(Boolean).join(', '),
+      localidad: domicilio.localidad || domicilio.Localidad || '',
+      provincia: domicilio.descripcionProvincia || domicilio.DescripcionProvincia || '',
+    });
+  } catch(e) { res.json({}); }
+});
+
+// Buscar vehículo por patente
+router.get('/orden/vehiculo', authMiddleware, async (req, res) => {
+  const patente = (req.query.patente || '').toUpperCase().replace(/\s/g,'');
+  if (!patente) return res.json({ encontrado: false });
+  try {
+    const sheets = google.sheets({ version: 'v4', auth: googleAuth(['https://www.googleapis.com/auth/spreadsheets.readonly']) });
+    const r = await sheets.spreadsheets.values.get({ spreadsheetId: process.env.GOOGLE_SHEET_ID, range: 'Vehiculos!A:E' });
+    const fila = (r.data.values || []).slice(1).find(row => (row[0]||'').toUpperCase() === patente);
+    if (!fila) return res.json({ encontrado: false });
+    res.json({ encontrado: true, patente: fila[0], doc: fila[1], marca: fila[2], modelo: fila[3], anio: fila[4] });
+  } catch(e) { res.json({ encontrado: false }); }
+});
+
+// Guardar orden
+router.post('/orden/guardar', express.json(), authMiddleware, async (req, res) => {
+  try {
+    const { doc, nombre, apellido, tel, mail, direccion, localidad, provincia,
+            patente, marcaVeh, modeloVeh, anio, km, trabajos,
+            total, formaPago, observaciones, pToken, pNumero } = req.body;
+    const vendedor = req.user.nombre;
+    const now = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    const fecha = `${now.getDate()}/${now.getMonth()+1}/${now.getFullYear()}`;
+    const clienteNombre = [nombre, apellido].filter(Boolean).join(' ');
+
+    const auth = googleAuth(['https://www.googleapis.com/auth/spreadsheets']);
+    const sheets = google.sheets({ version: 'v4', auth });
+    const numero = await generarNumeroOS(sheets);
+
+    // Guardar/actualizar cliente
+    if (doc) {
+      const rc = await sheets.spreadsheets.values.get({ spreadsheetId: process.env.GOOGLE_SHEET_ID, range: 'Clientes!A:A' });
+      const docs = (rc.data.values || []).slice(1).map(r => (r[0]||'').replace(/\D/g,''));
+      const idx = docs.indexOf(doc.replace(/\D/g,''));
+      if (idx === -1) {
+        await sheets.spreadsheets.values.append({ spreadsheetId: process.env.GOOGLE_SHEET_ID, range: 'Clientes!A:H', valueInputOption: 'RAW',
+          requestBody: { values: [[doc, nombre, apellido, direccion, localidad, provincia, tel, mail]] } });
+      } else {
+        const fila = idx + 2;
+        await sheets.spreadsheets.values.update({ spreadsheetId: process.env.GOOGLE_SHEET_ID, range: `Clientes!A${fila}:H${fila}`, valueInputOption: 'RAW',
+          requestBody: { values: [[doc, nombre, apellido, direccion, localidad, provincia, tel, mail]] } });
+      }
+    }
+
+    // Guardar/actualizar vehículo
+    if (patente) {
+      const rv = await sheets.spreadsheets.values.get({ spreadsheetId: process.env.GOOGLE_SHEET_ID, range: 'Vehiculos!A:A' });
+      const pats = (rv.data.values || []).slice(1).map(r => (r[0]||'').toUpperCase());
+      const idx = pats.indexOf(patente.toUpperCase());
+      if (idx === -1) {
+        await sheets.spreadsheets.values.append({ spreadsheetId: process.env.GOOGLE_SHEET_ID, range: 'Vehiculos!A:E', valueInputOption: 'RAW',
+          requestBody: { values: [[patente, doc||'', marcaVeh, modeloVeh, anio||'']] } });
+      } else {
+        const fila = idx + 2;
+        await sheets.spreadsheets.values.update({ spreadsheetId: process.env.GOOGLE_SHEET_ID, range: `Vehiculos!A${fila}:E${fila}`, valueInputOption: 'RAW',
+          requestBody: { values: [[patente, doc||'', marcaVeh, modeloVeh, anio||'']] } });
+      }
+    }
+
+    // Guardar orden — A=Numero B=Fecha C=Vendedor D=PToken E=PNumero F=Doc G=ClienteNombre H=Tel I=Mail J=Direccion K=Localidad L=Provincia M=Patente N=MarcaVeh O=ModeloVeh P=Anio Q=KM R=Trabajos S=Total T=FormaPago U=Observaciones V=Estado
+    await sheets.spreadsheets.values.append({ spreadsheetId: process.env.GOOGLE_SHEET_ID, range: 'Ordenes!A:V', valueInputOption: 'RAW',
+      requestBody: { values: [[numero, fecha, vendedor, pToken||'', pNumero||'', doc||'', clienteNombre, tel||'', mail||'', direccion||'', localidad||'', provincia||'', patente||'', marcaVeh||'', modeloVeh||'', anio||'', km||'', JSON.stringify(trabajos), total||0, formaPago||'', observaciones||'', 'Ingresada']] } });
+
+    res.json({ ok: true, id: numero });
+  } catch(e) {
+    console.error('Error guardar orden:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Ver orden
+router.get('/orden/ver', authMiddleware, async (req, res) => {
+  const id = (req.query.id || '').trim();
+  if (!id) return res.json({ ok: false });
+  try {
+    const sheets = google.sheets({ version: 'v4', auth: googleAuth(['https://www.googleapis.com/auth/spreadsheets.readonly']) });
+    const r = await sheets.spreadsheets.values.get({ spreadsheetId: process.env.GOOGLE_SHEET_ID, range: 'Ordenes!A:V' });
+    const fila = (r.data.values || []).slice(1).find(row => row[0] === id);
+    if (!fila) return res.json({ ok: false });
+    let trabajos = [];
+    try { trabajos = JSON.parse(fila[17] || '[]'); } catch(e) { trabajos = [fila[17]]; }
+    res.json({ ok: true, orden: {
+      numero: fila[0], fecha: fila[1], vendedor: fila[2], presupuestoToken: fila[3], presupuestoNum: fila[4],
+      doc: fila[5], clienteNombre: fila[6], tel: fila[7], mail: fila[8],
+      direccion: fila[9], localidad: fila[10], provincia: fila[11],
+      patente: fila[12], marcaVeh: fila[13], modeloVeh: fila[14], anio: fila[15], km: fila[16],
+      trabajos, total: fila[18], formaPago: fila[19], observaciones: fila[20], estado: fila[21] || 'Ingresada'
+    }});
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Actualizar estado de orden
+router.post('/orden/estado', express.json(), authMiddleware, async (req, res) => {
+  const { id, estado } = req.body;
+  try {
+    const sheets = google.sheets({ version: 'v4', auth: googleAuth(['https://www.googleapis.com/auth/spreadsheets']) });
+    const r = await sheets.spreadsheets.values.get({ spreadsheetId: process.env.GOOGLE_SHEET_ID, range: 'Ordenes!A:A' });
+    const idx = (r.data.values || []).findIndex(row => row[0] === id);
+    if (idx === -1) return res.json({ ok: false });
+    await sheets.spreadsheets.values.update({ spreadsheetId: process.env.GOOGLE_SHEET_ID, range: `Ordenes!V${idx+1}`, valueInputOption: 'RAW', requestBody: { values: [[estado]] } });
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Listar órdenes
+router.get('/ordenes/listar', authMiddleware, async (req, res) => {
+  try {
+    const sheets = google.sheets({ version: 'v4', auth: googleAuth(['https://www.googleapis.com/auth/spreadsheets.readonly']) });
+    const r = await sheets.spreadsheets.values.get({ spreadsheetId: process.env.GOOGLE_SHEET_ID, range: 'Ordenes!A:V' });
+    const rows = (r.data.values || []).slice(1);
+    const esAdmin = req.user.rol === 'admin';
+    const vendedor = req.user.nombre;
+    const ordenes = rows
+      .filter(row => row[0] && (esAdmin || row[2] === vendedor))
+      .map(row => ({
+        numero: row[0], fecha: row[1], vendedor: row[2],
+        doc: row[5], clienteNombre: row[6], tel: row[7],
+        patente: row[12], marcaVeh: row[13], modeloVeh: row[14], anio: row[15],
+        total: row[18], formaPago: row[19], estado: row[21] || 'Ingresada'
+      }))
+      .reverse();
+    res.json({ ordenes });
+  } catch(e) { res.status(500).json({ ordenes: [] }); }
+});
+
+// ============================================================
 // PORTAL DE REVENTA
 // ============================================================
 

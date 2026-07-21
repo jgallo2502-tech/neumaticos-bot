@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nueva Orden de Servicio — Neumáticos Gallo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #f5f5f5; color: #222; }
+    header { background: #1a1a2e; color: white; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; }
+    header h1 { font-size: 17px; }
+    .nav a { color: white; font-size: 13px; opacity: 0.8; text-decoration: none; margin-left: 14px; }
+    .container { max-width: 860px; margin: 24px auto; padding: 0 16px; }
+    .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .card-title { font-size: 15px; font-weight: 700; color: #1a1a2e; margin-bottom: 18px; padding-bottom: 10px; border-bottom: 2px solid #f0f0f0; display: flex; align-items: center; gap: 8px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+    @media(max-width:600px) { .grid2,.grid3 { grid-template-columns: 1fr; } }
+    label { font-size: 12px; font-weight: 600; color: #555; display: block; margin-bottom: 5px; }
+    input, select, textarea { width: 100%; padding: 10px 12px; border: 1.5px solid #ddd; border-radius: 8px; font-size: 14px; font-family: inherit; outline: none; transition: border-color .2s; background: white; }
+    input:focus, select:focus, textarea:focus { border-color: #e63946; }
+    input:read-only { background: #f9f9f9; color: #666; }
+    .field { margin-bottom: 0; }
+    .search-row { display: flex; gap: 8px; }
+    .search-row input { flex: 1; }
+    .btn-buscar { padding: 10px 16px; background: #1a1a2e; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; white-space: nowrap; }
+    .btn-buscar:hover { background: #2a2a4e; }
+    .btn-primary { padding: 13px 32px; background: #e63946; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 700; cursor: pointer; }
+    .btn-primary:hover { background: #c62d3a; }
+    .info-box { background: #f0f7ff; border-radius: 8px; padding: 12px 16px; font-size: 13px; color: #1a1a2e; margin-bottom: 14px; }
+    .trabajo-item { border: 1px solid #eee; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
+    .trabajo-item input { flex: 1; }
+    .btn-remove { background: none; border: none; color: #ccc; cursor: pointer; font-size: 18px; padding: 0 4px; }
+    .btn-remove:hover { color: #e63946; }
+    .btn-add { background: none; border: 1.5px dashed #ccc; color: #888; border-radius: 8px; padding: 9px 16px; font-size: 13px; cursor: pointer; width: 100%; margin-top: 8px; }
+    .btn-add:hover { border-color: #e63946; color: #e63946; }
+    .footer-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 8px; }
+    .btn-secondary { padding: 13px 24px; background: white; color: #1a1a2e; border: 1.5px solid #ddd; border-radius: 8px; font-size: 14px; cursor: pointer; }
+    .msg { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-top: 12px; display: none; }
+    .msg.ok { background: #dcfce7; color: #166534; display: block; }
+    .msg.err { background: #fee2e2; color: #991b1b; display: block; }
+    .tag { display: inline-block; background: #f0f0f0; border-radius: 4px; padding: 2px 8px; font-size: 11px; color: #555; margin-left: 6px; }
+    #loading-cliente, #loading-vehiculo { font-size: 12px; color: #888; display: none; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🔴 Neumáticos Gallo — Nueva Orden de Servicio</h1>
+    <div class="nav">
+      <a href="/app/seguimiento.html">← Volver a seguimiento</a>
+    </div>
+  </header>
+
+  <div class="container">
+
+    <!-- Info presupuesto -->
+    <div class="card" id="card-presupuesto" style="display:none">
+      <div class="card-title">📋 Presupuesto vinculado</div>
+      <div class="info-box" id="info-presupuesto">-</div>
+    </div>
+
+    <!-- Cliente -->
+    <div class="card">
+      <div class="card-title">👤 Datos del cliente</div>
+      <div class="field" style="margin-bottom:14px">
+        <label>DNI / CUIT <span style="font-weight:400;color:#888">(buscá para autocompletar)</span></label>
+        <div class="search-row">
+          <input type="text" id="doc" placeholder="DNI o CUIT sin puntos ni guiones" inputmode="numeric">
+          <button class="btn-buscar" onclick="buscarCliente()">Buscar</button>
+        </div>
+        <div id="loading-cliente">Buscando...</div>
+      </div>
+      <div class="grid2" style="gap:14px;row-gap:14px">
+        <div class="field"><label>Nombre</label><input type="text" id="nombre" placeholder="Nombre"></div>
+        <div class="field"><label>Apellido / Razón social</label><input type="text" id="apellido" placeholder="Apellido o razón social"></div>
+        <div class="field"><label>Teléfono</label><input type="tel" id="tel-cliente" placeholder="11 1234-5678"></div>
+        <div class="field"><label>Mail</label><input type="email" id="mail" placeholder="mail@ejemplo.com"></div>
+        <div class="field" style="grid-column:1/-1"><label>Dirección</label><input type="text" id="direccion" placeholder="Calle y número"></div>
+        <div class="field"><label>Localidad</label><input type="text" id="localidad" placeholder="Localidad"></div>
+        <div class="field"><label>Provincia</label>
+          <select id="provincia">
+            <option value="">— Provincia —</option>
+            <option>Buenos Aires</option><option>CABA</option><option>Catamarca</option>
+            <option>Chaco</option><option>Chubut</option><option>Córdoba</option>
+            <option>Corrientes</option><option>Entre Ríos</option><option>Formosa</option>
+            <option>Jujuy</option><option>La Pampa</option><option>La Rioja</option>
+            <option>Mendoza</option><option>Misiones</option><option>Neuquén</option>
+            <option>Río Negro</option><option>Salta</option><option>San Juan</option>
+            <option>San Luis</option><option>Santa Cruz</option><option>Santa Fe</option>
+            <option>Santiago del Estero</option><option>Tierra del Fuego</option><option>Tucumán</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Vehículo -->
+    <div class="card">
+      <div class="card-title">🚗 Datos del vehículo</div>
+      <div class="field" style="margin-bottom:14px">
+        <label>Patente <span style="font-weight:400;color:#888">(buscá para autocompletar si ya tiene historial)</span></label>
+        <div class="search-row">
+          <input type="text" id="patente" placeholder="ABC123 o AB123CD" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
+          <button class="btn-buscar" onclick="buscarVehiculo()">Buscar</button>
+        </div>
+        <div id="loading-vehiculo">Buscando...</div>
+      </div>
+      <div class="grid3" style="gap:14px;row-gap:14px">
+        <div class="field">
+          <label>Marca</label>
+          <select id="marca-veh" onchange="actualizarModelos()">
+            <option value="">— Marca —</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Modelo</label>
+          <select id="modelo-veh">
+            <option value="">— Modelo —</option>
+          </select>
+        </div>
+        <div class="field"><label>Año</label><input type="number" id="anio" placeholder="2020" min="1980" max="2026"></div>
+        <div class="field"><label>KM actuales</label><input type="number" id="km" placeholder="85000"></div>
+      </div>
+    </div>
+
+    <!-- Trabajos -->
+    <div class="card">
+      <div class="card-title">🔧 Trabajos a realizar</div>
+      <div id="trabajos-list"></div>
+      <button class="btn-add" onclick="agregarTrabajo()">+ Agregar trabajo / ítem</button>
+    </div>
+
+    <!-- Totales y pago -->
+    <div class="card">
+      <div class="card-title">💰 Total y forma de pago</div>
+      <div class="grid2" style="gap:14px">
+        <div class="field">
+          <label>Total</label>
+          <input type="number" id="total" placeholder="0">
+        </div>
+        <div class="field">
+          <label>Forma de pago</label>
+          <select id="forma-pago">
+            <option value="">— Seleccioná —</option>
+            <option>Contado efectivo</option>
+            <option>Transferencia</option>
+            <option>3 cuotas</option>
+            <option>6 cuotas</option>
+            <option>12 cuotas (lista)</option>
+            <option>Cuenta corriente</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Observaciones -->
+    <div class="card">
+      <div class="card-title">📝 Observaciones del cliente</div>
+      <div class="field">
+        <textarea id="observaciones" rows="3" placeholder="Aclaraciones, pedidos especiales, o notas del cliente..."></textarea>
+      </div>
+    </div>
+
+    <div class="footer-actions">
+      <button class="btn-secondary" onclick="history.back()">Cancelar</button>
+      <button class="btn-primary" onclick="guardarOrden()">💾 Guardar orden de servicio</button>
+    </div>
+    <div class="msg" id="msg"></div>
+    <div style="height:40px"></div>
+  </div>
+
+  <script>
+    const token = localStorage.getItem('token');
+    if (!token) window.location.href = '/app/login.html';
+
+    const AUTOS = {
+      'Toyota':      ['Corolla','Hilux','RAV4','Yaris','Etios','SW4','Land Cruiser','Prado','Camry','GR86','C-HR','Fortuner'],
+      'Volkswagen':  ['Gol','Polo','Vento','Amarok','T-Cross','Tiguan','Golf','Passat','Virtus','Nivus','Taos','Touareg'],
+      'Ford':        ['Ranger','Ka','EcoSport','Focus','Fiesta','Territory','F-150','Fusion','Edge','Bronco','Maverick'],
+      'Chevrolet':   ['Onix','Cruze','S10','Tracker','Spin','Montana','Equinox','Captiva','Blazer','Colorado'],
+      'Renault':     ['Sandero','Logan','Duster','Kangoo','Kwid','Stepway','Fluence','Koleos','Captur','Megane','Clio'],
+      'Peugeot':     ['208','308','408','2008','3008','5008','Partner','Expert','Boxer','301','508'],
+      'Citroën':     ['C3','C4','C5 X','Berlingo','Jumpy','Jumper','Xsara','Picasso'],
+      'Fiat':        ['Cronos','Pulse','Strada','Ducato','Mobi','Toro','500','Bravo','Palio','Siena','Uno'],
+      'Honda':       ['Civic','CR-V','HR-V','WR-V','City','Fit','Accord','Pilot','Ridgeline','Jazz'],
+      'Nissan':      ['Frontier','Kicks','March','Note','Sentra','X-Trail','Murano','Pathfinder','Versa'],
+      'Hyundai':     ['Tucson','Santa Fe','Elantra','i30','Accent','Creta','HB20','Ioniq','Venue','Kona'],
+      'Kia':         ['Sportage','Sorento','Rio','Cerato','Seltos','Picanto','Stonic','Carnival','EV6'],
+      'Jeep':        ['Compass','Renegade','Cherokee','Grand Cherokee','Wrangler','Gladiator'],
+      'Mitsubishi':  ['L200','Outlander','ASX','Eclipse Cross','Montero','Pajero','Galant'],
+      'Suzuki':      ['Vitara','Swift','Jimny','S-Cross','Dzire','Baleno','Grand Vitara'],
+      'Subaru':      ['Impreza','Legacy','Forester','Outback','XV','BRZ','Crosstrek'],
+      'BMW':         ['116i','118i','320i','328i','330i','520i','M3','M5','X1','X3','X5','X6','Z4'],
+      'Mercedes-Benz':['A200','C200','C300','E200','E300','GLA','GLC','GLE','CLA','Sprinter','Vito','Actros'],
+      'Audi':        ['A1','A3','A4','A5','A6','Q3','Q5','Q7','TT','e-tron'],
+      'Volvo':       ['XC40','XC60','XC90','S60','V60','S90'],
+      'Land Rover':  ['Defender','Discovery','Range Rover','Range Rover Sport','Freelander','Evoque'],
+      'Porsche':     ['Cayenne','Macan','911','Panamera','Taycan','Boxster','Cayman'],
+      'Dodge':       ['Ram 700','Ram 1500','Journey','Durango','Challenger','Charger'],
+      'Mazda':       ['CX-3','CX-5','CX-30','3','6','MX-5'],
+      'Chery':       ['Tiggo 2','Tiggo 4','Tiggo 7','Tiggo 8','Arrizo 5','Arrizo 6'],
+      'BAIC':        ['X25','X35','X55','BJ20','BJ40'],
+      'JAC':         ['S2','S3','S4','S7','E10X'],
+      'Otro':        ['Otro'],
+    };
+
+    // Poblar marcas
+    const selectMarca = document.getElementById('marca-veh');
+    Object.keys(AUTOS).sort().forEach(m => {
+      const o = document.createElement('option'); o.value = m; o.textContent = m;
+      selectMarca.appendChild(o);
+    });
+
+    function actualizarModelos() {
+      const marca = document.getElementById('marca-veh').value;
+      const sel = document.getElementById('modelo-veh');
+      sel.innerHTML = '<option value="">— Modelo —</option>';
+      if (marca && AUTOS[marca]) {
+        AUTOS[marca].forEach(mod => {
+          const o = document.createElement('option'); o.value = mod; o.textContent = mod;
+          sel.appendChild(o);
+        });
+      }
+    }
+
+    // Leer parámetros del presupuesto
+    const params = new URLSearchParams(location.search);
+    const pToken    = params.get('token') || '';
+    const pNumero   = params.get('numero') || '';
+    const pCliente  = params.get('cliente') || '';
+    const pTel      = params.get('tel') || '';
+    const pProductos = params.get('productos') || '';
+    const pTotal    = params.get('total') || '';
+
+    if (pNumero) {
+      document.getElementById('card-presupuesto').style.display = 'block';
+      document.getElementById('info-presupuesto').textContent =
+        `N° ${pNumero} — ${pCliente} — ${pProductos} — Total: $${parseInt(pTotal||0).toLocaleString('es-AR')}`;
+    }
+
+    // Pre-completar teléfono del presupuesto
+    if (pTel) document.getElementById('tel-cliente').value = pTel;
+
+    // Pre-completar trabajos desde los productos del presupuesto
+    if (pProductos) {
+      pProductos.split(' | ').filter(Boolean).forEach(p => agregarTrabajo(p));
+    } else {
+      agregarTrabajo();
+    }
+
+    // Pre-completar total
+    if (pTotal) document.getElementById('total').value = pTotal;
+
+    // Buscar cliente por DNI/CUIT en el Sheet
+    async function buscarCliente() {
+      const doc = document.getElementById('doc').value.trim().replace(/\D/g,'');
+      if (!doc) return;
+      document.getElementById('loading-cliente').style.display = 'block';
+      try {
+        // 1. Buscar en hoja Clientes
+        const r = await fetch('/app/orden/cliente?doc=' + doc, {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await r.json();
+        if (data.encontrado) {
+          llenarCliente(data);
+        } else if (doc.length === 11) {
+          // Es CUIT — consultar AFIP
+          const afip = await fetch('/app/orden/afip?cuit=' + doc, {
+            headers: { 'Authorization': 'Bearer ' + token }
+          });
+          const af = await afip.json();
+          if (af.razonSocial) {
+            document.getElementById('apellido').value = af.razonSocial;
+            document.getElementById('nombre').value = '';
+            if (af.domicilio) document.getElementById('direccion').value = af.domicilio;
+            if (af.localidad) document.getElementById('localidad').value = af.localidad;
+            if (af.provincia) {
+              document.getElementById('provincia').value = af.provincia;
+            }
+          }
+        }
+      } catch(e) { console.error(e); }
+      document.getElementById('loading-cliente').style.display = 'none';
+    }
+
+    function llenarCliente(d) {
+      if (d.nombre)    document.getElementById('nombre').value    = d.nombre;
+      if (d.apellido)  document.getElementById('apellido').value  = d.apellido;
+      if (d.tel)       document.getElementById('tel-cliente').value = d.tel;
+      if (d.mail)      document.getElementById('mail').value      = d.mail;
+      if (d.direccion) document.getElementById('direccion').value = d.direccion;
+      if (d.localidad) document.getElementById('localidad').value = d.localidad;
+      if (d.provincia) document.getElementById('provincia').value = d.provincia;
+    }
+
+    async function buscarVehiculo() {
+      const pat = document.getElementById('patente').value.trim().replace(/\s/g,'').toUpperCase();
+      if (!pat) return;
+      document.getElementById('patente').value = pat;
+      document.getElementById('loading-vehiculo').style.display = 'block';
+      try {
+        const r = await fetch('/app/orden/vehiculo?patente=' + pat, {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await r.json();
+        if (data.encontrado) {
+          if (data.marca) {
+            document.getElementById('marca-veh').value = data.marca;
+            actualizarModelos();
+            if (data.modelo) document.getElementById('modelo-veh').value = data.modelo;
+          }
+          if (data.anio) document.getElementById('anio').value = data.anio;
+        }
+      } catch(e) { console.error(e); }
+      document.getElementById('loading-vehiculo').style.display = 'none';
+    }
+
+    let trabajoCount = 0;
+    function agregarTrabajo(texto = '') {
+      trabajoCount++;
+      const id = 'trab-' + trabajoCount;
+      const div = document.createElement('div');
+      div.className = 'trabajo-item';
+      div.id = id;
+      div.innerHTML = `<input type="text" placeholder="Descripción del trabajo o producto" value="${texto.replace(/"/g,'&quot;')}">
+        <button class="btn-remove" onclick="document.getElementById('${id}').remove()" title="Eliminar">✕</button>`;
+      document.getElementById('trabajos-list').appendChild(div);
+    }
+
+    async function guardarOrden() {
+      const doc       = document.getElementById('doc').value.trim().replace(/\D/g,'');
+      const nombre    = document.getElementById('nombre').value.trim();
+      const apellido  = document.getElementById('apellido').value.trim();
+      const tel       = document.getElementById('tel-cliente').value.trim();
+      const mail      = document.getElementById('mail').value.trim();
+      const direccion = document.getElementById('direccion').value.trim();
+      const localidad = document.getElementById('localidad').value.trim();
+      const provincia = document.getElementById('provincia').value;
+      const patente   = document.getElementById('patente').value.trim().toUpperCase();
+      const marcaVeh  = document.getElementById('marca-veh').value;
+      const modeloVeh = document.getElementById('modelo-veh').value;
+      const anio      = document.getElementById('anio').value;
+      const km        = document.getElementById('km').value;
+      const total     = document.getElementById('total').value;
+      const formaPago = document.getElementById('forma-pago').value;
+      const obs       = document.getElementById('observaciones').value.trim();
+
+      const trabajos = [...document.querySelectorAll('#trabajos-list .trabajo-item input')]
+        .map(i => i.value.trim()).filter(Boolean);
+
+      if (!patente) { mostrarMsg('Ingresá la patente del vehículo.', 'err'); return; }
+      if (!apellido && !nombre) { mostrarMsg('Ingresá al menos el nombre o apellido del cliente.', 'err'); return; }
+      if (trabajos.length === 0) { mostrarMsg('Agregá al menos un trabajo.', 'err'); return; }
+
+      const body = {
+        pToken, pNumero,
+        doc, nombre, apellido, tel, mail, direccion, localidad, provincia,
+        patente, marcaVeh, modeloVeh, anio: parseInt(anio)||null, km: parseInt(km)||null,
+        trabajos, total: parseInt(total)||0, formaPago, observaciones: obs
+      };
+
+      try {
+        const r = await fetch('/app/orden/guardar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          body: JSON.stringify(body)
+        });
+        const data = await r.json();
+        if (data.ok) {
+          mostrarMsg('Orden guardada correctamente. Redirigiendo...', 'ok');
+          setTimeout(() => window.location.href = '/app/orden-ver.html?id=' + data.id, 1200);
+        } else {
+          mostrarMsg('Error: ' + (data.error || 'desconocido'), 'err');
+        }
+      } catch(e) {
+        mostrarMsg('Error de conexión.', 'err');
+      }
+    }
+
+    function mostrarMsg(txt, tipo) {
+      const el = document.getElementById('msg');
+      el.textContent = txt;
+      el.className = 'msg ' + tipo;
+      el.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // Enter en patente lanza búsqueda
+    document.getElementById('patente').addEventListener('keydown', e => { if (e.key==='Enter') buscarVehiculo(); });
+    document.getElementById('doc').addEventListener('keydown', e => { if (e.key==='Enter') buscarCliente(); });
+  </script>
+</body>
+</html>

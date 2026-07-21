@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Orden de Servicio — Neumáticos Gallo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #f5f5f5; color: #222; }
+    .no-print { }
+    @media print {
+      .no-print { display: none !important; }
+      body { background: white; }
+      .hoja { box-shadow: none !important; margin: 0 !important; border-radius: 0 !important; }
+    }
+    .topbar { background: #1a1a2e; color: white; padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; }
+    .topbar a { color: white; text-decoration: none; font-size: 13px; opacity: 0.8; }
+    .topbar-actions { display: flex; gap: 10px; }
+    .btn { padding: 8px 18px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; }
+    .btn-print { background: #e63946; color: white; }
+    .btn-back  { background: rgba(255,255,255,0.15); color: white; }
+    .hoja { background: white; max-width: 800px; margin: 24px auto; padding: 32px; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #e63946; padding-bottom: 16px; margin-bottom: 20px; }
+    .logo { font-size: 20px; font-weight: 800; color: #1a1a2e; }
+    .logo span { color: #e63946; }
+    .logo-sub { font-size: 11px; color: #666; margin-top: 4px; line-height: 1.6; }
+    .os-info { text-align: right; }
+    .os-num { font-size: 24px; font-weight: 800; color: #1a1a2e; }
+    .os-fecha { font-size: 12px; color: #666; margin-top: 2px; }
+    .os-estado { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; margin-top: 6px; }
+    .estado-ingresada   { background: #dbeafe; color: #1d4ed8; }
+    .estado-proceso     { background: #fed7aa; color: #c2410c; }
+    .estado-lista       { background: #dcfce7; color: #166534; }
+    .estado-entregada   { background: #e5e7eb; color: #374151; }
+
+    .seccion { margin-bottom: 20px; }
+    .seccion-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #888; margin-bottom: 10px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+    .campo { }
+    .campo-label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: .3px; }
+    .campo-val { font-size: 14px; font-weight: 600; color: #1a1a2e; margin-top: 1px; }
+    .campo-val.empty { color: #bbb; font-weight: 400; font-style: italic; }
+    hr { border: none; border-top: 1px solid #eee; margin: 16px 0; }
+
+    .trabajos-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+    .trabajos-table th { background: #1a1a2e; color: white; padding: 8px 12px; text-align: left; font-size: 11px; }
+    .trabajos-table td { padding: 9px 12px; border-bottom: 1px solid #f0f0f0; }
+    .trabajos-table tr:last-child td { border-bottom: none; }
+
+    .total-box { background: #f9f9f9; border-radius: 8px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
+    .total-label { font-size: 13px; color: #555; }
+    .total-val { font-size: 22px; font-weight: 800; color: #e63946; }
+    .fp-val { font-size: 13px; color: #444; margin-left: 16px; }
+
+    .obs-box { background: #fffbeb; border-left: 3px solid #f59e0b; padding: 12px 16px; border-radius: 0 8px 8px 0; font-size: 13px; color: #444; margin-top: 8px; }
+
+    .firma-box { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 32px; }
+    .firma-linea { border-top: 1px solid #bbb; padding-top: 6px; font-size: 11px; color: #888; text-align: center; }
+
+    .pres-ref { font-size: 12px; color: #888; }
+
+    /* Estado selector (no print) */
+    .estado-edit { display: flex; align-items: center; gap: 10px; margin: 12px 0; }
+    .estado-edit select { padding: 8px 12px; border: 1.5px solid #ddd; border-radius: 8px; font-size: 14px; }
+    .btn-estado { padding: 8px 16px; background: #1a1a2e; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; }
+
+    .loading { text-align: center; padding: 60px; color: #888; }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <div class="topbar">
+      <a href="/app/seguimiento.html">← Volver a seguimiento</a>
+      <div class="topbar-actions">
+        <button class="btn btn-back" onclick="window.location.href='/app/ordenes.html'">📋 Ver todas las órdenes</button>
+        <button class="btn btn-print" onclick="window.print()">🖨️ Imprimir / PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="contenido"><div class="loading">⏳ Cargando orden...</div></div>
+
+  <script>
+    const token = localStorage.getItem('token');
+    if (!token) window.location.href = '/app/login.html';
+
+    const params = new URLSearchParams(location.search);
+    const id = params.get('id');
+    if (!id) window.location.href = '/app/seguimiento.html';
+
+    function estadoClass(e) {
+      if (e === 'Ingresada')           return 'estado-ingresada';
+      if (e === 'En proceso')          return 'estado-proceso';
+      if (e === 'Lista para retirar')  return 'estado-lista';
+      if (e === 'Entregada')           return 'estado-entregada';
+      return 'estado-ingresada';
+    }
+
+    function v(val, fallback='—') { return val || fallback; }
+    function fmt(n) { return n ? '$' + parseInt(n).toLocaleString('es-AR') : '—'; }
+
+    async function cargar() {
+      const r = await fetch('/app/orden/ver?id=' + encodeURIComponent(id), {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      const d = await r.json();
+      if (!d.ok) { document.getElementById('contenido').innerHTML = '<div class="loading">Orden no encontrada.</div>'; return; }
+      const o = d.orden;
+      const trabajos = (o.trabajos || []);
+
+      document.title = `OS ${o.numero} — ${o.clienteNombre}`;
+
+      const estadoCls = estadoClass(o.estado);
+
+      document.getElementById('contenido').innerHTML = `
+        <div class="hoja">
+          <div class="header">
+            <div>
+              <div class="logo">Neumáticos <span>Gallo</span></div>
+              <div class="logo-sub">
+                Suc. Victoria: Pres. Perón 3479 — 11-3773-5246<br>
+                Suc. Nordelta: Agustín García 6318, Tigre — 11-5734-7692
+              </div>
+            </div>
+            <div class="os-info">
+              <div class="os-num">OS ${o.numero}</div>
+              <div class="os-fecha">${o.fecha} — ${v(o.vendedor)}</div>
+              <div><span class="os-estado ${estadoCls}">${o.estado}</span></div>
+              ${o.presupuestoNum ? `<div class="pres-ref" style="margin-top:6px">Presupuesto: N° ${o.presupuestoNum}</div>` : ''}
+            </div>
+          </div>
+
+          <!-- Cambio de estado (no print) -->
+          <div class="no-print estado-edit">
+            <span style="font-size:13px;color:#555">Estado:</span>
+            <select id="sel-estado">
+              <option ${o.estado==='Ingresada'?'selected':''}>Ingresada</option>
+              <option ${o.estado==='En proceso'?'selected':''}>En proceso</option>
+              <option ${o.estado==='Lista para retirar'?'selected':''}>Lista para retirar</option>
+              <option ${o.estado==='Entregada'?'selected':''}>Entregada</option>
+            </select>
+            <button class="btn-estado" onclick="cambiarEstado('${id}')">Actualizar</button>
+            <span id="msg-estado" style="font-size:12px;color:#888"></span>
+          </div>
+
+          <hr>
+
+          <!-- Cliente -->
+          <div class="seccion">
+            <div class="seccion-title">👤 Cliente</div>
+            <div class="grid2">
+              <div class="campo"><div class="campo-label">Nombre</div><div class="campo-val">${v(o.clienteNombre)}</div></div>
+              <div class="campo"><div class="campo-label">DNI / CUIT</div><div class="campo-val">${v(o.doc)}</div></div>
+              <div class="campo"><div class="campo-label">Teléfono</div><div class="campo-val">${v(o.tel)}</div></div>
+              <div class="campo"><div class="campo-label">Mail</div><div class="campo-val">${v(o.mail)}</div></div>
+              <div class="campo" style="grid-column:1/-1"><div class="campo-label">Dirección</div>
+                <div class="campo-val">${[o.direccion, o.localidad, o.provincia].filter(Boolean).join(', ') || '—'}</div>
+              </div>
+            </div>
+          </div>
+
+          <hr>
+
+          <!-- Vehículo -->
+          <div class="seccion">
+            <div class="seccion-title">🚗 Vehículo</div>
+            <div class="grid3">
+              <div class="campo"><div class="campo-label">Patente</div><div class="campo-val" style="font-size:18px;letter-spacing:2px">${v(o.patente)}</div></div>
+              <div class="campo"><div class="campo-label">Marca</div><div class="campo-val">${v(o.marcaVeh)}</div></div>
+              <div class="campo"><div class="campo-label">Modelo</div><div class="campo-val">${v(o.modeloVeh)}</div></div>
+              <div class="campo"><div class="campo-label">Año</div><div class="campo-val">${v(o.anio)}</div></div>
+              <div class="campo"><div class="campo-label">KM ingreso</div><div class="campo-val">${o.km ? parseInt(o.km).toLocaleString('es-AR') + ' km' : '—'}</div></div>
+            </div>
+          </div>
+
+          <hr>
+
+          <!-- Trabajos -->
+          <div class="seccion">
+            <div class="seccion-title">🔧 Trabajos</div>
+            <table class="trabajos-table">
+              <thead><tr><th>#</th><th>Descripción</th></tr></thead>
+              <tbody>
+                ${trabajos.map((t,i) => `<tr><td style="color:#888;width:40px">${i+1}</td><td>${t}</td></tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Total y pago -->
+          <div class="total-box">
+            <div>
+              <div class="total-label">Total</div>
+              <div class="total-val">${fmt(o.total)}</div>
+            </div>
+            <div class="fp-val">💳 ${v(o.formaPago, 'Sin especificar')}</div>
+          </div>
+
+          ${o.observaciones ? `
+          <div class="seccion" style="margin-top:16px">
+            <div class="seccion-title">📝 Observaciones del cliente</div>
+            <div class="obs-box">${o.observaciones}</div>
+          </div>` : ''}
+
+          <!-- Firmas -->
+          <div class="firma-box">
+            <div class="firma-linea">Firma y aclaración del cliente</div>
+            <div class="firma-linea">Firma y aclaración del encargado</div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function cambiarEstado(id) {
+      const estado = document.getElementById('sel-estado').value;
+      const r = await fetch('/app/orden/estado', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ id, estado })
+      });
+      const d = await r.json();
+      document.getElementById('msg-estado').textContent = d.ok ? '✅ Actualizado' : '❌ Error';
+      setTimeout(() => { if (document.getElementById('msg-estado')) document.getElementById('msg-estado').textContent = ''; }, 2000);
+    }
+
+    cargar();
+  </script>
+</body>
+</html>

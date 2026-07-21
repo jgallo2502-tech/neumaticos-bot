@@ -50,6 +50,8 @@
     .btn-wa:hover { background: #1da851; }
     .btn-print { background: #1a1a2e; color: white; border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; margin-left: 6px; }
     .btn-print:hover { background: #161621; }
+    .btn-os { background: #e63946; color: white; border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; margin-left: 6px; }
+    .btn-os:hover { background: #c62d3a; }
     .loading { text-align: center; padding: 40px; color: #888; }
     .empty { text-align: center; padding: 40px; color: #888; }
     .tel-link { color: #1a1a2e; text-decoration: none; font-weight: 500; }
@@ -64,6 +66,7 @@
       <a href="/app/dashboard.html">🏠 Dashboard</a>
       <a href="/app/presupuesto.html">📋 Nuevo presupuesto</a>
       <a href="/app/conversaciones.html">💬 Conversaciones</a>
+      <a href="/app/ordenes.html">🔧 Órdenes</a>
       <a href="/app/broadcast.html" id="nav-broadcast" style="display:none">📢 Broadcast</a>
       <span id="vendedor-nombre" style="font-size:13px;opacity:0.7"></span>
       <span id="admin-label" style="font-size:12px;opacity:0.7;margin-left:12px"></span>
@@ -225,6 +228,9 @@
           telWA = tel.startsWith('549') ? tel : tel.startsWith('54') ? '549'+tel.slice(2) : '549'+tel;
         }
         const reprintButton = p.fila ? `<button class="btn-print" title="Reimprimir presupuesto" onclick="reimprimir('${p.token || ''}', ${p.fila})">🖨️ Reimprimir</button>` : '';
+        const osButton = p.estado === 'Vendido'
+          ? `<button class="btn-os" title="Crear orden de servicio" onclick="crearOrden(${JSON.stringify(p).replace(/"/g,'&quot;')})">🔧 Orden</button>`
+          : '';
         html += '<tr>' +
           `<td>${p.fecha}</td>` +
           `<td style="font-weight:600">${p.numero}</td>` +
@@ -239,7 +245,7 @@
             `<option ${p.estado==='Vendido'?'selected':''}>Vendido</option>` +
             `<option ${p.estado==='Perdido'?'selected':''}>Perdido</option>` +
           `</select></td>` +
-          `<td>${tel ? `<button class="btn-wa" onclick="seguimiento('${telWA}','${p.cliente}','${p.numero}','${p.productos.replace(/'/g,'')}')">💬</button>` : ''}${reprintButton}</td>` +
+          `<td>${tel ? `<button class="btn-wa" onclick="seguimiento('${telWA}','${p.cliente}','${p.numero}','${p.productos.replace(/'/g,'')}')">💬</button>` : ''}${reprintButton}${osButton}</td>` +
           '</tr>';
       }
 
@@ -280,6 +286,18 @@
       const vendedor = (localStorage.getItem('vendedor') || '').split(' ')[0];
       const msg = `Hola ${cliente} cómo estás? Soy ${vendedor} de Neumáticos Gallo, quería saber qué te había parecido el presupuesto que te pasamos, a ver si tenías alguna duda o algo en lo que te podamos ayudar 😊`;
       window.open('https://wa.me/' + telWA + '?text=' + encodeURIComponent(msg), '_blank');
+    }
+
+    function crearOrden(p) {
+      const params = new URLSearchParams({
+        token:    p.token    || '',
+        numero:   p.numero   || '',
+        cliente:  p.cliente  || '',
+        tel:      p.tel      || '',
+        productos: p.productos || '',
+        total:    p.total    || '',
+      });
+      window.location.href = '/app/orden.html?' + params.toString();
     }
 
     function logout() { localStorage.clear(); window.location.href = '/app/login.html'; }

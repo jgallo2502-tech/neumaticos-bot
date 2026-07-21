@@ -28,15 +28,23 @@
     .btn-primary { padding: 13px 32px; background: #e63946; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 700; cursor: pointer; }
     .btn-primary:hover { background: #c62d3a; }
     .info-box { background: #f0f7ff; border-radius: 8px; padding: 12px 16px; font-size: 13px; color: #1a1a2e; margin-bottom: 14px; }
-    .trabajo-item { border: 1px solid #eee; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; display: grid; grid-template-columns: 1fr 160px auto; gap: 10px; align-items: center; }
-    @media(max-width:600px) { .trabajo-item { grid-template-columns: 1fr auto; } .trabajo-precio { display: none; } }
-    .trabajo-item input { width: 100%; }
-    .trabajo-precio { }
-    .btn-remove { background: none; border: none; color: #ccc; cursor: pointer; font-size: 18px; padding: 0 4px; }
+    .trabajo-item { border: 1.5px solid #eee; border-radius: 10px; padding: 14px; margin-bottom: 10px; }
+    .trabajo-item.neumatico { border-color: #dbeafe; background: #f8fbff; }
+    .trab-row1 { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+    .trab-row1 input { flex: 1; }
+    .trab-row2 { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+    .trab-campo { display: flex; flex-direction: column; gap: 4px; }
+    .trab-campo label { font-size: 10px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: .3px; }
+    .trab-campo input, .trab-campo select { padding: 7px 10px; border: 1.5px solid #ddd; border-radius: 7px; font-size: 13px; background: white; }
+    .trab-campo input:focus, .trab-campo select:focus { border-color: #e63946; outline: none; }
+    .trab-campo .trab-calc { font-size: 15px; font-weight: 700; color: #1a1a2e; padding: 7px 0; min-width: 90px; }
+    .trab-campo .trab-total-val { color: #e63946; }
+    .trab-tipo-badge { font-size: 10px; background: #dbeafe; color: #1d4ed8; padding: 2px 7px; border-radius: 10px; font-weight: 700; }
+    .trab-tipo-badge.serv { background: #dcfce7; color: #166534; }
+    .btn-remove { background: none; border: none; color: #ccc; cursor: pointer; font-size: 18px; padding: 0 4px; flex-shrink: 0; }
     .btn-remove:hover { color: #e63946; }
     .btn-add { background: none; border: 1.5px dashed #ccc; color: #888; border-radius: 8px; padding: 9px 16px; font-size: 13px; cursor: pointer; width: 100%; margin-top: 8px; }
     .btn-add:hover { border-color: #e63946; color: #e63946; }
-    .col-header { display: grid; grid-template-columns: 1fr 160px auto; gap: 10px; font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; margin-bottom: 6px; padding: 0 14px; }
     .footer-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 8px; }
     .btn-secondary { padding: 13px 24px; background: white; color: #1a1a2e; border: 1.5px solid #ddd; border-radius: 8px; font-size: 14px; cursor: pointer; }
     .msg { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-top: 12px; display: none; }
@@ -128,9 +136,8 @@
     <!-- Trabajos -->
     <div class="card">
       <div class="card-title">🔧 Trabajos a realizar</div>
-      <div class="col-header"><span>Descripción</span><span>Precio unit.</span><span></span></div>
       <div id="trabajos-list"></div>
-      <button class="btn-add" onclick="agregarTrabajo()">+ Agregar trabajo / ítem</button>
+      <button class="btn-add" onclick="agregarServicio()">+ Agregar servicio / ítem</button>
     </div>
 
     <!-- Totales y pago -->
@@ -246,32 +253,33 @@
 
     // Cargar items reales del presupuesto desde el backend
     async function cargarItemsPresupuesto() {
-      if (!pToken) { agregarTrabajo(); return; }
+      if (!pToken) { agregarServicio(); return; }
       try {
         const r = await fetch('/app/orden/presupuesto?token=' + pToken, {
           headers: { 'Authorization': 'Bearer ' + token }
         });
         const d = await r.json();
         if (d.ok && d.datos && d.datos.items && d.datos.items.length > 0) {
+          const cantPreso = d.datos.cant || 4;
           for (const item of d.datos.items) {
-            agregarTrabajo(item.descripcion || '', item.precio || '');
+            agregarNeumatico(item.descripcion || '', item.precio || 0, cantPreso);
           }
-          // Servicios como ítem extra si existen
           if (d.datos.servicios && d.datos.servicios.resumen) {
-            agregarTrabajo(d.datos.servicios.resumen, '');
-          }
-          // Total desde presupuesto (contado -20%)
-          if (!document.getElementById('total').value && d.total) {
-            document.getElementById('total').value = parseInt(d.total) || '';
+            // Extraer precio del resumen si viene con formato "... — $140.000 aprox."
+            const matchPrecio = d.datos.servicios.resumen.match(/\$([0-9.]+)/);
+            const precioServ = matchPrecio ? parseInt(matchPrecio[1].replace(/\./g,'')) : '0';
+            // Extraer descripción sin el precio
+            const descServ = d.datos.servicios.resumen.replace(/ — \$.*$/, '').trim();
+            agregarServicio(descServ, precioServ.toString());
           }
         } else if (pProductos) {
-          pProductos.split(' | ').filter(Boolean).forEach(p => agregarTrabajo(p, ''));
+          pProductos.split(' | ').filter(Boolean).forEach(p => agregarNeumatico(p, 0, 4));
         } else {
-          agregarTrabajo();
+          agregarServicio();
         }
       } catch(e) {
-        if (pProductos) pProductos.split(' | ').filter(Boolean).forEach(p => agregarTrabajo(p, ''));
-        else agregarTrabajo();
+        if (pProductos) pProductos.split(' | ').filter(Boolean).forEach(p => agregarNeumatico(p, 0, 4));
+        else agregarServicio();
       }
     }
     cargarItemsPresupuesto();
@@ -333,18 +341,131 @@
       document.getElementById('loading-vehiculo').style.display = 'none';
     }
 
+    const PRECIOS_SERVICIO = [10000,15000,20000,25000,30000,35000,40000,45000,50000,60000,70000,80000,90000,100000,110000,120000,130000,140000,150000,160000,170000,180000,200000];
+    const FP_FACTORES = { '12': 1, '6': 0.90, '3': 0.85, '1': 0.80 };
+    const FP_LABELS   = { '12': '12 cuotas (lista)', '6': '6 cuotas (-10%)', '3': '3 cuotas (-15%)', '1': 'Contado (-20%)' };
     let trabajoCount = 0;
-    function agregarTrabajo(desc = '', precio = '') {
+
+    function precioOptsServicio(selVal = '0') {
+      let html = '<option value="0">— Sin precio —</option>';
+      for (const v of PRECIOS_SERVICIO) {
+        const label = '$' + v.toLocaleString('es-AR');
+        html += `<option value="${v}" ${selVal==v?'selected':''}>${label}</option>`;
+      }
+      html += `<option value="manual" ${selVal==='manual'?'selected':''}>Ingresar otro valor...</option>`;
+      return html;
+    }
+
+    function agregarNeumatico(desc, precioBase, cantDefault) {
       trabajoCount++;
-      const id = 'trab-' + trabajoCount;
+      const n = trabajoCount;
+      const div = document.createElement('div');
+      div.className = 'trabajo-item neumatico';
+      div.id = 'trab-' + n;
+      div.dataset.precioBase = precioBase || 0;
+      div.dataset.tipo = 'neumatico';
+
+      const cantOpts = [1,2,3,4,5,6,8].map(v =>
+        `<option value="${v}" ${v == cantDefault ? 'selected' : ''}>${v}</option>`).join('');
+      const fpOpts = Object.entries(FP_LABELS).map(([k,l]) =>
+        `<option value="${k}">${l}</option>`).join('');
+
+      div.innerHTML = `
+        <div class="trab-row1">
+          <span class="trab-tipo-badge">Neumático</span>
+          <input type="text" class="trab-desc" value="${(desc+'').replace(/"/g,'&quot;')}" placeholder="Descripción">
+          <button class="btn-remove" onclick="document.getElementById('trab-${n}').remove(); recalcTotal()" title="Quitar">✕</button>
+        </div>
+        <div class="trab-row2">
+          <div class="trab-campo">
+            <label>Cantidad</label>
+            <select class="trab-cant" onchange="calcTrab(${n})" style="width:80px">${cantOpts}</select>
+          </div>
+          <div class="trab-campo">
+            <label>Forma de pago</label>
+            <select class="trab-fp" onchange="calcTrab(${n})">${fpOpts}</select>
+          </div>
+          <div class="trab-campo">
+            <label>Precio unit.</label>
+            <div class="trab-calc" id="punit-${n}">—</div>
+          </div>
+          <div class="trab-campo">
+            <label>Total</label>
+            <div class="trab-calc trab-total-val" id="ptot-${n}">—</div>
+          </div>
+        </div>`;
+      document.getElementById('trabajos-list').appendChild(div);
+      calcTrab(n);
+    }
+
+    function agregarServicio(desc = '', precioVal = '0') {
+      trabajoCount++;
+      const n = trabajoCount;
       const div = document.createElement('div');
       div.className = 'trabajo-item';
-      div.id = id;
+      div.id = 'trab-' + n;
+      div.dataset.tipo = 'servicio';
       div.innerHTML = `
-        <input type="text" class="trab-desc" placeholder="Descripción del trabajo o producto" value="${(desc+'').replace(/"/g,'&quot;')}">
-        <div class="trabajo-precio"><input type="number" class="trab-precio" placeholder="Precio" value="${precio||''}" min="0"></div>
-        <button class="btn-remove" onclick="document.getElementById('${id}').remove()" title="Eliminar">✕</button>`;
+        <div class="trab-row1">
+          <span class="trab-tipo-badge serv">Servicio</span>
+          <input type="text" class="trab-desc" value="${(desc+'').replace(/"/g,'&quot;')}" placeholder="Descripción del servicio">
+          <button class="btn-remove" onclick="document.getElementById('trab-${n}').remove(); recalcTotal()" title="Quitar">✕</button>
+        </div>
+        <div class="trab-row2">
+          <div class="trab-campo">
+            <label>Precio</label>
+            <select class="trab-precio-sel" onchange="toggleManualServicio(${n}); recalcTotal()">${precioOptsServicio(precioVal)}</select>
+            <input type="number" class="trab-precio-manual" placeholder="Ingresá el monto" min="0"
+              style="display:none;margin-top:6px;width:160px" oninput="recalcTotal()">
+          </div>
+        </div>`;
       document.getElementById('trabajos-list').appendChild(div);
+    }
+
+    function calcTrab(n) {
+      const div = document.getElementById('trab-' + n);
+      if (!div) return;
+      const base = parseFloat(div.dataset.precioBase) || 0;
+      const cant = parseInt(div.querySelector('.trab-cant')?.value) || 1;
+      const fp   = div.querySelector('.trab-fp')?.value || '12';
+      const factor = FP_FACTORES[fp] || 1;
+      const unit = Math.round(base * factor);
+      const total = unit * cant;
+      const el_unit  = document.getElementById('punit-' + n);
+      const el_total = document.getElementById('ptot-' + n);
+      if (el_unit)  el_unit.textContent  = base ? '$' + unit.toLocaleString('es-AR') : '—';
+      if (el_total) el_total.textContent = base ? '$' + total.toLocaleString('es-AR') : '—';
+      recalcTotal();
+    }
+
+    function toggleManualServicio(n) {
+      const div = document.getElementById('trab-' + n);
+      const sel = div?.querySelector('.trab-precio-sel');
+      const manual = div?.querySelector('.trab-precio-manual');
+      if (!sel || !manual) return;
+      manual.style.display = sel.value === 'manual' ? 'block' : 'none';
+    }
+
+    function getPrecioServicio(div) {
+      const sel = div.querySelector('.trab-precio-sel');
+      if (!sel) return 0;
+      if (sel.value === 'manual') return parseInt(div.querySelector('.trab-precio-manual')?.value) || 0;
+      return parseInt(sel.value) || 0;
+    }
+
+    function recalcTotal() {
+      let sum = 0;
+      document.querySelectorAll('#trabajos-list .trabajo-item').forEach(div => {
+        if (div.dataset.tipo === 'neumatico') {
+          const base = parseFloat(div.dataset.precioBase) || 0;
+          const cant = parseInt(div.querySelector('.trab-cant')?.value) || 1;
+          const fp   = div.querySelector('.trab-fp')?.value || '12';
+          sum += Math.round(base * (FP_FACTORES[fp] || 1)) * cant;
+        } else {
+          sum += getPrecioServicio(div);
+        }
+      });
+      if (sum > 0) document.getElementById('total').value = sum;
     }
 
     async function guardarOrden() {
@@ -365,10 +486,21 @@
       const formaPago = document.getElementById('forma-pago').value;
       const obs       = document.getElementById('observaciones').value.trim();
 
-      const trabajos = [...document.querySelectorAll('#trabajos-list .trabajo-item')].map(el => ({
-        descripcion: el.querySelector('.trab-desc')?.value.trim() || '',
-        precio: parseFloat(el.querySelector('.trab-precio')?.value) || 0,
-      })).filter(t => t.descripcion);
+      const trabajos = [...document.querySelectorAll('#trabajos-list .trabajo-item')].map(el => {
+        const desc = el.querySelector('.trab-desc')?.value.trim() || '';
+        if (!desc) return null;
+        if (el.dataset.tipo === 'neumatico') {
+          const base   = parseFloat(el.dataset.precioBase) || 0;
+          const cant   = parseInt(el.querySelector('.trab-cant')?.value) || 1;
+          const fp     = el.querySelector('.trab-fp')?.value || '12';
+          const factor = FP_FACTORES[fp] || 1;
+          const unit   = Math.round(base * factor);
+          return { descripcion: desc, tipo: 'neumatico', precioBase: base, cantidad: cant, formaPago: FP_LABELS[fp] || fp, precioUnit: unit, precio: unit * cant };
+        } else {
+          const precio = getPrecioServicio(el);
+          return { descripcion: desc, tipo: 'servicio', precio };
+        }
+      }).filter(Boolean);
 
       if (!patente) { mostrarMsg('Ingresá la patente del vehículo.', 'err'); return; }
       if (!apellido && !nombre) { mostrarMsg('Ingresá al menos el nombre o apellido del cliente.', 'err'); return; }

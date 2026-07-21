@@ -277,8 +277,16 @@
 
           <div>
             <label>Precio total servicios (aprox.)</label>
-            <select id="ss-precio" onchange="recalcular()">
+            <select id="ss-precio" onchange="toggleSsPrecioManual(); recalcular()">
               <option value="0">-</option>
+              <option value="10000">$10.000</option>
+              <option value="15000">$15.000</option>
+              <option value="20000">$20.000</option>
+              <option value="25000">$25.000</option>
+              <option value="30000">$30.000</option>
+              <option value="35000">$35.000</option>
+              <option value="40000">$40.000</option>
+              <option value="45000">$45.000</option>
               <option value="50000">$50.000</option>
               <option value="60000">$60.000</option>
               <option value="70000">$70.000</option>
@@ -294,9 +302,9 @@
               <option value="170000">$170.000</option>
               <option value="180000">$180.000</option>
               <option value="200000">$200.000</option>
-              <option value="220000">$220.000</option>
-              <option value="250000">$250.000</option>
+              <option value="manual">Ingresar otro valor...</option>
             </select>
+            <input type="number" id="ss-precio-manual" placeholder="Ingresá el monto" style="display:none;margin-top:6px" oninput="recalcular()">
           </div>
 
           <div>
@@ -428,6 +436,18 @@
       return imagenesPromise;
     }
     cargarImagenes();
+
+    function getSsPrecio() {
+      const sel = document.getElementById('ss-precio')?.value || '0';
+      if (sel === 'manual') return parseInt(document.getElementById('ss-precio-manual')?.value || 0) || 0;
+      return parseInt(sel) || 0;
+    }
+
+    function toggleSsPrecioManual() {
+      const sel = document.getElementById('ss-precio')?.value;
+      const manual = document.getElementById('ss-precio-manual');
+      if (manual) manual.style.display = sel === 'manual' ? 'block' : 'none';
+    }
 
     function fmt(n) {
       return '$' + Math.round(n).toLocaleString('es-AR');
@@ -590,7 +610,7 @@
       const svCant   = parseInt(document.getElementById('sv-cant')?.value || 0);
       const sbCant   = parseInt(document.getElementById('sb-cant')?.value || 0);
       const saTipo   = document.getElementById('sa-tipo')?.value || '';
-      const ssPrecio = parseInt(document.getElementById('ss-precio')?.value || 0);
+      const ssPrecio = getSsPrecio();
       const ssPago   = document.getElementById('ss-pago')?.value || '';
       const sPartes  = [];
       if (svCant > 0) sPartes.push(svCant + ' válvula' + (svCant > 1 ? 's' : ''));
@@ -702,7 +722,7 @@
       const svCant  = parseInt(document.getElementById('sv-cant')?.value || 0);
       const sbCant  = parseInt(document.getElementById('sb-cant')?.value || 0);
       const saTipo  = document.getElementById('sa-tipo')?.value || '';
-      const ssPrecio = parseInt(document.getElementById('ss-precio')?.value || 0);
+      const ssPrecio = getSsPrecio();
       const ssPago  = document.getElementById('ss-pago')?.value || 'Contado o 3 pagos sin interés';
 
       const partes = [];
@@ -756,7 +776,7 @@
       const svCant  = parseInt(document.getElementById('sv-cant')?.value || 0);
       const sbCant  = parseInt(document.getElementById('sb-cant')?.value || 0);
       const saTipo  = document.getElementById('sa-tipo')?.value || '';
-      const ssPrecio = parseInt(document.getElementById('ss-precio')?.value || 0);
+      const ssPrecio = getSsPrecio();
       const ssPago  = document.getElementById('ss-pago')?.value || '';
 
       const vendedor = localStorage.getItem('vendedor') || '';
@@ -839,7 +859,7 @@
       const svCant  = parseInt(document.getElementById('sv-cant')?.value || 0);
       const sbCant  = parseInt(document.getElementById('sb-cant')?.value || 0);
       const saTipo  = document.getElementById('sa-tipo')?.value || '';
-      const ssPrecio = parseInt(document.getElementById('ss-precio')?.value || 0);
+      const ssPrecio = getSsPrecio();
       const ssPago  = document.getElementById('ss-pago')?.value || '';
 
       const vendedor = localStorage.getItem('vendedor') || '';

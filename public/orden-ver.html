@@ -180,12 +180,24 @@
           <div class="seccion">
             <div class="seccion-title">🔧 Trabajos</div>
             <table class="trabajos-table">
-              <thead><tr><th>#</th><th>Descripción</th><th style="text-align:right">Precio unit.</th></tr></thead>
+              <thead><tr><th>#</th><th>Descripción</th><th>Cant.</th><th>F. Pago</th><th style="text-align:right">Precio unit.</th><th style="text-align:right">Total</th></tr></thead>
               <tbody>
                 ${trabajos.map((t,i) => {
-                  const desc  = typeof t === 'object' ? (t.descripcion || '') : t;
-                  const precio = typeof t === 'object' && t.precio ? '$' + parseInt(t.precio).toLocaleString('es-AR') : '';
-                  return `<tr><td style="color:#888;width:36px">${i+1}</td><td>${desc}</td><td style="text-align:right;font-weight:600">${precio}</td></tr>`;
+                  const obj = typeof t === 'object' ? t : { descripcion: t };
+                  const desc = obj.descripcion || '';
+                  const esNeu = obj.tipo === 'neumatico';
+                  const cant  = esNeu ? (obj.cantidad || 1) : '';
+                  const fp    = esNeu ? (obj.formaPago || '') : '';
+                  const unit  = obj.precioUnit ? '$' + parseInt(obj.precioUnit).toLocaleString('es-AR') : (obj.precio && !esNeu ? '$' + parseInt(obj.precio).toLocaleString('es-AR') : '');
+                  const total = obj.precio ? '$' + parseInt(obj.precio).toLocaleString('es-AR') : '';
+                  return `<tr>
+                    <td style="color:#888;width:30px">${i+1}</td>
+                    <td>${desc}</td>
+                    <td style="text-align:center">${cant}</td>
+                    <td style="font-size:11px;color:#666">${fp}</td>
+                    <td style="text-align:right">${unit}</td>
+                    <td style="text-align:right;font-weight:700">${total}</td>
+                  </tr>`;
                 }).join('')}
               </tbody>
             </table>

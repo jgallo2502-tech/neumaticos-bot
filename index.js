@@ -421,6 +421,16 @@ function armarMensajes(productos, medidaOriginal, esRev = false) {
       if (p.promocion && !esRev && p.promocion.trim()) {
         msg += `\n🏷️ _Promo: ${p.promocion} (presencial, 2+ neumáticos)_`;
       }
+      if (esRev) {
+        const sv = p.stockVic > 0 ? (p.stockVic <= 7 ? p.stockVic : 'OK') : null;
+        const sn = p.stockNor > 0 ? (p.stockNor <= 7 ? p.stockNor : 'OK') : null;
+        const se = p.stockExpr > 0 ? p.stockExpr : null;
+        const parts = [];
+        if (sv) parts.push(`Victoria: ${sv}`);
+        if (sn) parts.push(`Nordelta: ${sn}`);
+        if (se) parts.push(`Express: ${se} (48-72 hs hábiles)`);
+        if (parts.length) msg += `\n📦 _Stock: ${parts.join(' | ')}_`;
+      }
       msg += express;
       msg += '\n';
     }

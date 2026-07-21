@@ -220,8 +220,8 @@ router.get('/', authMiddleware, (req, res) => {
         let html = '';
         data.productos.forEach((p, i) => {
           const stockParts = [];
-          if (p.stockVic > 0) stockParts.push('Victoria: ' + p.stockVic);
-          if (p.stockNor > 0) stockParts.push('Nordelta: ' + p.stockNor);
+          if (p.stockVic > 0) stockParts.push('Victoria: ' + (p.stockVic <= 7 ? p.stockVic : 'OK'));
+          if (p.stockNor > 0) stockParts.push('Nordelta: ' + (p.stockNor <= 7 ? p.stockNor : 'OK'));
           if (p.stockExpr > 0) stockParts.push('Express (' + p.stockExpr + ')');
           const stockStr = stockParts.length ? stockParts.join(' | ') : 'Sin stock local';
           html += \`<div class="prod" id="prod-\${i}" onclick="toggleProd(\${i})">
@@ -266,8 +266,8 @@ router.get('/', authMiddleware, (req, res) => {
         texto += '🔹 *' + p.descripcion + '*\\n';
         texto += '   💲 Precio reventa: ' + p.precioReventa + '\\n';
         const stockParts = [];
-        if (p.stockVic > 0) stockParts.push('Victoria: ' + p.stockVic);
-        if (p.stockNor > 0) stockParts.push('Nordelta: ' + p.stockNor);
+        if (p.stockVic > 0) stockParts.push('Victoria: ' + (p.stockVic <= 7 ? p.stockVic : 'OK'));
+        if (p.stockNor > 0) stockParts.push('Nordelta: ' + (p.stockNor <= 7 ? p.stockNor : 'OK'));
         if (p.stockExpr > 0) stockParts.push('Express: ' + p.stockExpr + ' unid. (48-72 hs hábiles)');
         if (stockParts.length) texto += '   📦 Stock: ' + stockParts.join(' | ') + '\\n';
         texto += '\\n';

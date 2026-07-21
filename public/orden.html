@@ -137,29 +137,9 @@
     <div class="card">
       <div class="card-title">🔧 Trabajos a realizar</div>
       <div id="trabajos-list"></div>
-      <button class="btn-add" onclick="agregarServicio()">+ Agregar servicio / ítem</button>
-    </div>
-
-    <!-- Totales y pago -->
-    <div class="card">
-      <div class="card-title">💰 Total y forma de pago</div>
-      <div class="grid2" style="gap:14px">
-        <div class="field">
-          <label>Total</label>
-          <input type="number" id="total" placeholder="0">
-        </div>
-        <div class="field">
-          <label>Forma de pago</label>
-          <select id="forma-pago">
-            <option value="">— Seleccioná —</option>
-            <option>Contado efectivo</option>
-            <option>Transferencia</option>
-            <option>3 cuotas</option>
-            <option>6 cuotas</option>
-            <option>12 cuotas (lista)</option>
-            <option>Cuenta corriente</option>
-          </select>
-        </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn-add" onclick="agregarNeumatico('',0,4)" style="flex:1">🔧 Agregar neumático</button>
+        <button class="btn-add" onclick="agregarServicio()" style="flex:1">+ Agregar servicio / ítem</button>
       </div>
     </div>
 
@@ -373,10 +353,15 @@
       div.innerHTML = `
         <div class="trab-row1">
           <span class="trab-tipo-badge">Neumático</span>
-          <input type="text" class="trab-desc" value="${(desc+'').replace(/"/g,'&quot;')}" placeholder="Descripción">
+          <input type="text" class="trab-desc" value="${(desc+'').replace(/"/g,'&quot;')}" placeholder="Descripción del neumático">
           <button class="btn-remove" onclick="document.getElementById('trab-${n}').remove(); recalcTotal()" title="Quitar">✕</button>
         </div>
         <div class="trab-row2">
+          ${precioBase == 0 ? `<div class="trab-campo">
+            <label>Precio lista</label>
+            <input type="number" class="trab-precio-base" placeholder="0" min="0" style="width:120px"
+              oninput="document.getElementById('trab-${n}').dataset.precioBase=this.value||0; calcTrab(${n})">
+          </div>` : ''}
           <div class="trab-campo">
             <label>Cantidad</label>
             <select class="trab-cant" onchange="calcTrab(${n})" style="width:80px">${cantOpts}</select>
@@ -465,7 +450,7 @@
           sum += getPrecioServicio(div);
         }
       });
-      if (sum > 0) document.getElementById('total').value = sum;
+      // total calculado desde items, no hay campo visible
     }
 
     async function guardarOrden() {
@@ -482,8 +467,6 @@
       const modeloVeh = document.getElementById('modelo-veh').value;
       const anio      = document.getElementById('anio').value;
       const km        = document.getElementById('km').value;
-      const total     = document.getElementById('total').value;
-      const formaPago = document.getElementById('forma-pago').value;
       const obs       = document.getElementById('observaciones').value.trim();
 
       const trabajos = [...document.querySelectorAll('#trabajos-list .trabajo-item')].map(el => {
@@ -510,7 +493,7 @@
         pToken, pNumero,
         doc, nombre, apellido, tel, mail, direccion, localidad, provincia,
         patente, marcaVeh, modeloVeh, anio: parseInt(anio)||null, km: parseInt(km)||null,
-        trabajos, total: parseInt(total)||0, formaPago, observaciones: obs
+        trabajos, total: trabajos.reduce((s,t) => s+(t.precio||0), 0), observaciones: obs
       };
 
       try {

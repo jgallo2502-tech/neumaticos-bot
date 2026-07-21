@@ -28,12 +28,15 @@
     .btn-primary { padding: 13px 32px; background: #e63946; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 700; cursor: pointer; }
     .btn-primary:hover { background: #c62d3a; }
     .info-box { background: #f0f7ff; border-radius: 8px; padding: 12px 16px; font-size: 13px; color: #1a1a2e; margin-bottom: 14px; }
-    .trabajo-item { border: 1px solid #eee; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
-    .trabajo-item input { flex: 1; }
+    .trabajo-item { border: 1px solid #eee; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; display: grid; grid-template-columns: 1fr 160px auto; gap: 10px; align-items: center; }
+    @media(max-width:600px) { .trabajo-item { grid-template-columns: 1fr auto; } .trabajo-precio { display: none; } }
+    .trabajo-item input { width: 100%; }
+    .trabajo-precio { }
     .btn-remove { background: none; border: none; color: #ccc; cursor: pointer; font-size: 18px; padding: 0 4px; }
     .btn-remove:hover { color: #e63946; }
     .btn-add { background: none; border: 1.5px dashed #ccc; color: #888; border-radius: 8px; padding: 9px 16px; font-size: 13px; cursor: pointer; width: 100%; margin-top: 8px; }
     .btn-add:hover { border-color: #e63946; color: #e63946; }
+    .col-header { display: grid; grid-template-columns: 1fr 160px auto; gap: 10px; font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; margin-bottom: 6px; padding: 0 14px; }
     .footer-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 8px; }
     .btn-secondary { padding: 13px 24px; background: white; color: #1a1a2e; border: 1.5px solid #ddd; border-radius: 8px; font-size: 14px; cursor: pointer; }
     .msg { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-top: 12px; display: none; }
@@ -125,6 +128,7 @@
     <!-- Trabajos -->
     <div class="card">
       <div class="card-title">🔧 Trabajos a realizar</div>
+      <div class="col-header"><span>Descripción</span><span>Precio unit.</span><span></span></div>
       <div id="trabajos-list"></div>
       <button class="btn-add" onclick="agregarTrabajo()">+ Agregar trabajo / ítem</button>
     </div>
@@ -240,47 +244,61 @@
     // Pre-completar teléfono del presupuesto
     if (pTel) document.getElementById('tel-cliente').value = pTel;
 
-    // Pre-completar trabajos desde los productos del presupuesto
-    if (pProductos) {
-      pProductos.split(' | ').filter(Boolean).forEach(p => agregarTrabajo(p));
-    } else {
-      agregarTrabajo();
+    // Cargar items reales del presupuesto desde el backend
+    async function cargarItemsPresupuesto() {
+      if (!pToken) { agregarTrabajo(); return; }
+      try {
+        const r = await fetch('/app/orden/presupuesto?token=' + pToken, {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const d = await r.json();
+        if (d.ok && d.datos && d.datos.items && d.datos.items.length > 0) {
+          for (const item of d.datos.items) {
+            agregarTrabajo(item.descripcion || '', item.precio || '');
+          }
+          // Servicios como ítem extra si existen
+          if (d.datos.servicios && d.datos.servicios.resumen) {
+            agregarTrabajo(d.datos.servicios.resumen, '');
+          }
+          // Total desde presupuesto (contado -20%)
+          if (!document.getElementById('total').value && d.total) {
+            document.getElementById('total').value = parseInt(d.total) || '';
+          }
+        } else if (pProductos) {
+          pProductos.split(' | ').filter(Boolean).forEach(p => agregarTrabajo(p, ''));
+        } else {
+          agregarTrabajo();
+        }
+      } catch(e) {
+        if (pProductos) pProductos.split(' | ').filter(Boolean).forEach(p => agregarTrabajo(p, ''));
+        else agregarTrabajo();
+      }
     }
+    cargarItemsPresupuesto();
 
     // Pre-completar total
-    if (pTotal) document.getElementById('total').value = pTotal;
+    if (pTotal && !document.getElementById('total').value) document.getElementById('total').value = pTotal;
 
     // Buscar cliente por DNI/CUIT en el Sheet
     async function buscarCliente() {
       const doc = document.getElementById('doc').value.trim().replace(/\D/g,'');
       if (!doc) return;
       document.getElementById('loading-cliente').style.display = 'block';
+      document.getElementById('loading-cliente').textContent = 'Buscando...';
       try {
-        // 1. Buscar en hoja Clientes
         const r = await fetch('/app/orden/cliente?doc=' + doc, {
           headers: { 'Authorization': 'Bearer ' + token }
         });
         const data = await r.json();
         if (data.encontrado) {
           llenarCliente(data);
-        } else if (doc.length === 11) {
-          // Es CUIT — consultar AFIP
-          const afip = await fetch('/app/orden/afip?cuit=' + doc, {
-            headers: { 'Authorization': 'Bearer ' + token }
-          });
-          const af = await afip.json();
-          if (af.razonSocial) {
-            document.getElementById('apellido').value = af.razonSocial;
-            document.getElementById('nombre').value = '';
-            if (af.domicilio) document.getElementById('direccion').value = af.domicilio;
-            if (af.localidad) document.getElementById('localidad').value = af.localidad;
-            if (af.provincia) {
-              document.getElementById('provincia').value = af.provincia;
-            }
-          }
+          document.getElementById('loading-cliente').textContent = '✅ Cliente encontrado';
+        } else {
+          document.getElementById('loading-cliente').textContent = 'No encontrado — completá los datos manualmente';
         }
-      } catch(e) { console.error(e); }
-      document.getElementById('loading-cliente').style.display = 'none';
+      } catch(e) {
+        document.getElementById('loading-cliente').textContent = 'Error al buscar';
+      }
     }
 
     function llenarCliente(d) {
@@ -316,13 +334,15 @@
     }
 
     let trabajoCount = 0;
-    function agregarTrabajo(texto = '') {
+    function agregarTrabajo(desc = '', precio = '') {
       trabajoCount++;
       const id = 'trab-' + trabajoCount;
       const div = document.createElement('div');
       div.className = 'trabajo-item';
       div.id = id;
-      div.innerHTML = `<input type="text" placeholder="Descripción del trabajo o producto" value="${texto.replace(/"/g,'&quot;')}">
+      div.innerHTML = `
+        <input type="text" class="trab-desc" placeholder="Descripción del trabajo o producto" value="${(desc+'').replace(/"/g,'&quot;')}">
+        <div class="trabajo-precio"><input type="number" class="trab-precio" placeholder="Precio" value="${precio||''}" min="0"></div>
         <button class="btn-remove" onclick="document.getElementById('${id}').remove()" title="Eliminar">✕</button>`;
       document.getElementById('trabajos-list').appendChild(div);
     }
@@ -345,8 +365,10 @@
       const formaPago = document.getElementById('forma-pago').value;
       const obs       = document.getElementById('observaciones').value.trim();
 
-      const trabajos = [...document.querySelectorAll('#trabajos-list .trabajo-item input')]
-        .map(i => i.value.trim()).filter(Boolean);
+      const trabajos = [...document.querySelectorAll('#trabajos-list .trabajo-item')].map(el => ({
+        descripcion: el.querySelector('.trab-desc')?.value.trim() || '',
+        precio: parseFloat(el.querySelector('.trab-precio')?.value) || 0,
+      })).filter(t => t.descripcion);
 
       if (!patente) { mostrarMsg('Ingresá la patente del vehículo.', 'err'); return; }
       if (!apellido && !nombre) { mostrarMsg('Ingresá al menos el nombre o apellido del cliente.', 'err'); return; }

@@ -936,6 +936,21 @@ async function generarNumeroOS(sheets) {
   return prefix + String(next).padStart(3,'0');
 }
 
+// Traer items de un presupuesto por token
+router.get('/orden/presupuesto', authMiddleware, async (req, res) => {
+  const ptoken = (req.query.token || '').trim();
+  if (!ptoken) return res.json({ ok: false });
+  try {
+    const sheets = google.sheets({ version: 'v4', auth: googleAuth(['https://www.googleapis.com/auth/spreadsheets.readonly']) });
+    const r = await sheets.spreadsheets.values.get({ spreadsheetId: process.env.GOOGLE_SHEET_ID, range: 'Presupuestos!A:J' });
+    const fila = (r.data.values || []).slice(1).find(row => row[8] === ptoken);
+    if (!fila) return res.json({ ok: false });
+    let datos = null;
+    try { datos = JSON.parse(fila[9] || 'null'); } catch(e) {}
+    res.json({ ok: true, datos, numero: fila[1], cliente: fila[3], tel: fila[4], total: fila[6] });
+  } catch(e) { res.json({ ok: false }); }
+});
+
 // Buscar cliente por DNI/CUIT
 router.get('/orden/cliente', authMiddleware, async (req, res) => {
   const doc = (req.query.doc || '').replace(/\D/g,'');
@@ -1026,9 +1041,12 @@ router.post('/orden/guardar', express.json(), authMiddleware, async (req, res) =
       }
     }
 
+    // Calcular total desde items si no se pasó
+    const totalFinal = parseInt(total) || trabajos.reduce((s, t) => s + (t.precio || 0), 0) || 0;
+
     // Guardar orden — A=Numero B=Fecha C=Vendedor D=PToken E=PNumero F=Doc G=ClienteNombre H=Tel I=Mail J=Direccion K=Localidad L=Provincia M=Patente N=MarcaVeh O=ModeloVeh P=Anio Q=KM R=Trabajos S=Total T=FormaPago U=Observaciones V=Estado
     await sheets.spreadsheets.values.append({ spreadsheetId: process.env.GOOGLE_SHEET_ID, range: 'Ordenes!A:V', valueInputOption: 'RAW',
-      requestBody: { values: [[numero, fecha, vendedor, pToken||'', pNumero||'', doc||'', clienteNombre, tel||'', mail||'', direccion||'', localidad||'', provincia||'', patente||'', marcaVeh||'', modeloVeh||'', anio||'', km||'', JSON.stringify(trabajos), total||0, formaPago||'', observaciones||'', 'Ingresada']] } });
+      requestBody: { values: [[numero, fecha, vendedor, pToken||'', pNumero||'', doc||'', clienteNombre, tel||'', mail||'', direccion||'', localidad||'', provincia||'', patente||'', marcaVeh||'', modeloVeh||'', anio||'', km||'', JSON.stringify(trabajos), totalFinal, formaPago||'', observaciones||'', 'Ingresada']] } });
 
     res.json({ ok: true, id: numero });
   } catch(e) {

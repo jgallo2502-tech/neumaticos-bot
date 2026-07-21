@@ -180,9 +180,13 @@
           <div class="seccion">
             <div class="seccion-title">🔧 Trabajos</div>
             <table class="trabajos-table">
-              <thead><tr><th>#</th><th>Descripción</th></tr></thead>
+              <thead><tr><th>#</th><th>Descripción</th><th style="text-align:right">Precio unit.</th></tr></thead>
               <tbody>
-                ${trabajos.map((t,i) => `<tr><td style="color:#888;width:40px">${i+1}</td><td>${t}</td></tr>`).join('')}
+                ${trabajos.map((t,i) => {
+                  const desc  = typeof t === 'object' ? (t.descripcion || '') : t;
+                  const precio = typeof t === 'object' && t.precio ? '$' + parseInt(t.precio).toLocaleString('es-AR') : '';
+                  return `<tr><td style="color:#888;width:36px">${i+1}</td><td>${desc}</td><td style="text-align:right;font-weight:600">${precio}</td></tr>`;
+                }).join('')}
               </tbody>
             </table>
           </div>

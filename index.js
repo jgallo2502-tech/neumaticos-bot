@@ -539,10 +539,29 @@ app.post('/webhook', async (req, res) => {
   const body = (req.body.Body || '').trim();
   const lower = body.toLowerCase();
   const fromNumber = (req.body.From || '').replace('whatsapp:', '');
+  const numMedia = parseInt(req.body.NumMedia || '0');
+  const mediaType = (req.body.MediaContentType0 || '').toLowerCase();
   console.log('Mensaje recibido:', body);
 
   // Registrar mensaje en sesión
-  registrarMensajeSesion(fromNumber, 'cliente', body);
+  registrarMensajeSesion(fromNumber, 'cliente', body || '[media]');
+
+  // Mensaje sin texto (audio, imagen, video, sticker, documento)
+  if (!body && numMedia === 0 && !req.body.Latitude) {
+    // sticker u otro tipo sin media reportada — ignorar silenciosamente
+    return res.sendStatus(200);
+  }
+  if (!body && (numMedia > 0 || mediaType)) {
+    let tipoMsg = 'ese archivo';
+    if (mediaType.startsWith('audio')) tipoMsg = 'audios';
+    else if (mediaType.startsWith('image')) tipoMsg = 'imágenes';
+    else if (mediaType.startsWith('video')) tipoMsg = 'videos';
+    const msg = `Hola! Por el momento solo puedo leer mensajes de texto. No puedo escuchar ${tipoMsg}.\n\n¿Qué medida de neumático necesitás? (ej: 205/55R16)`;
+    await client.messages.create({ from: `whatsapp:${process.env.TWILIO_PHONE}`, to: `whatsapp:${fromNumber}`, body: msg });
+    registrarMensajeSesion(fromNumber, 'bot', msg);
+    guardarMensaje(fromNumber, 'bot', msg).catch(() => {});
+    return res.sendStatus(200);
+  }
 
   // Detectar pedido de ayuda humana
   if (/hablar|persona|alguien|humano|asesor|vendedor|ayuda/i.test(lower)) {

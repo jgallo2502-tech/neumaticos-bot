@@ -35,7 +35,11 @@ app.use('/reventa', reventaRouter);
 // --- Historial de conversaciones ---
 // Guarda mensajes por número y cierra la sesión tras 30 min de inactividad
 const sesiones = new Map(); // numero -> { mensajes: [], timer, inicio }
-const INACTIVIDAD_MS = 2 * 60 * 1000; // 2 minutos (testing)
+const encuestasPendientes = new Set(); // numeros esperando respuesta de encuesta
+const INACTIVIDAD_ENCUESTA_MS = 25 * 60 * 1000; // 25 min de inactividad → enviar encuesta
+const INACTIVIDAD_CIERRE_MS   = 10 * 60 * 1000; // 10 min más sin respuesta → cerrar sesión
+
+const WA_SUCURSALES = `📍 *Neumáticos Gallo — Sucursales:*\n• *Victoria:* wa.me/541137735246\n• *Nordelta (Tigre):* wa.me/541157347692\n\nUn asesor te va a atender por ahí. 😊`;
 
 function registrarMensajeSesion(numero, rol, texto) {
   if (!sesiones.has(numero)) {
@@ -53,7 +57,7 @@ function registrarMensajeSesion(numero, rol, texto) {
 
   // Reiniciar timer de inactividad
   if (sesion.timer) clearTimeout(sesion.timer);
-  sesion.timer = setTimeout(() => cerrarSesion(numero), INACTIVIDAD_MS);
+  sesion.timer = setTimeout(() => enviarEncuesta(numero), INACTIVIDAD_ENCUESTA_MS);
 }
 
 async function guardarAlerta(numero, mensaje) {
@@ -89,14 +93,30 @@ async function guardarMensajes(lista) {
   });
 }
 
+async function enviarEncuesta(numero) {
+  const sesion = sesiones.get(numero);
+  if (!sesion || sesion.mensajes.length === 0) {
+    sesiones.delete(numero);
+    encuestasPendientes.delete(numero);
+    return;
+  }
+  encuestasPendientes.add(numero);
+  const msg = `¡Hola! Esperamos haber podido ayudarte 😊\n\n¿Cómo fue tu experiencia?\n\n1️⃣ Me sirvió la ayuda\n2️⃣ Quiero hablar con alguien\n3️⃣ No encontré lo que buscaba`;
+  try {
+    await client.messages.create({ from: `whatsapp:${process.env.TWILIO_PHONE}`, to: `whatsapp:${numero}`, body: msg });
+    guardarMensaje(numero, 'bot', msg).catch(() => {});
+  } catch(e) { console.error('Error enviando encuesta:', e.message); }
+  // Si no responden en 10 min, cerrar igual
+  if (sesion.timer) clearTimeout(sesion.timer);
+  sesion.timer = setTimeout(() => cerrarSesion(numero), INACTIVIDAD_CIERRE_MS);
+}
+
 async function cerrarSesion(numero) {
   const sesion = sesiones.get(numero);
   if (!sesion) return;
   sesiones.delete(numero);
-
+  encuestasPendientes.delete(numero);
   if (sesion.mensajes.length === 0) return;
-
-  // Generar resumen de la conversación
   const resumen = generarResumen(sesion.mensajes, sesion.inicio);
   await guardarResumenSesion(numero, sesion.inicio, resumen);
   console.log('Sesión cerrada para', numero, '| Resumen guardado');
@@ -378,12 +398,12 @@ const PIE = `📌 *Precio unitario. Promociones por compra de 2 o más neumátic
 📍 *Suc. Nordelta:* Agustín García 6318, Tigre — ☎️ 11-5734-7692
 🕐 Lun-Vie 8 a 19 hs | Sáb 8 a 16 hs
 
-🤖 _Soy un bot. Escribí *"hablar con alguien"* para atención humana._`;
+🤖 _Soy un asistente automático. Para hablar con una persona contactá nuestras sucursales._`;
 
 // --- Armar lista de mensajes (uno por categoría) ---
 function armarMensajes(productos, medidaOriginal, esRev = false) {
   if (productos.length === 0) {
-    return [`No encontré neumáticos *${medidaOriginal}* con stock disponible.\n\nEscribí "hablar con alguien" para consultar disponibilidad. 🙋`];
+    return [`No encontré neumáticos *${medidaOriginal}* con stock disponible.\n\nContactá nuestras sucursales para consultar disponibilidad:\n${WA_SUCURSALES}`];
   }
 
   const mensajes = [];
@@ -484,7 +504,7 @@ SUCURSALES (solo si preguntan):
 - Nordelta: Agustín García 6318, Tigre | 11-5734-7692 | Lun-Vie 8-19, Sáb 8-16
 
 SERVICIOS (si preguntan por mecánica, frenos, amortiguadores, baterías, etc.):
-También hacemos: frenos, amortiguadores, tren delantero, baterías, escobillas, antirrobos/bujes de seguridad y más. Si alguien pregunta por esto, respondé: "Sí, hacemos ese servicio! Un asesor te va a contactar en breve."
+También hacemos: frenos, amortiguadores, tren delantero, baterías, escobillas, antirrobos/bujes de seguridad y más. Si alguien pregunta por esto, respondé: "Sí, hacemos ese servicio! Contactá a la sucursal que te quede más cerca."
 
 Respondé en español argentino. Sin emojis excesivos. Máximo 3 líneas por respuesta salvo que sean precios.`;
 
@@ -563,16 +583,45 @@ app.post('/webhook', async (req, res) => {
     return res.sendStatus(200);
   }
 
-  // Detectar pedido de ayuda humana
-  if (/hablar|persona|alguien|humano|asesor|vendedor|ayuda/i.test(lower)) {
-    guardarAlerta(fromNumber, body).catch(() => {});
+  // Respuesta a encuesta de satisfacción
+  if (encuestasPendientes.has(fromNumber)) {
+    encuestasPendientes.delete(fromNumber);
+    let msg;
+    if (body === '1') {
+      msg = '¡Gracias por tu respuesta! Nos alegra haber podido ayudarte. 😊 ¡Hasta la próxima!';
+    } else if (body === '2') {
+      guardarAlerta(fromNumber, 'Quiere hablar con alguien (encuesta)').catch(() => {});
+      msg = `Claro, te pasamos los contactos de nuestras sucursales:\n\n${WA_SUCURSALES}`;
+    } else if (body === '3') {
+      guardarAlerta(fromNumber, 'No encontró lo que buscaba (encuesta)').catch(() => {});
+      msg = `Lamentamos que no hayas encontrado lo que buscabas.\n\n${WA_SUCURSALES}`;
+    } else {
+      // Respondió otra cosa — dejar continuar normalmente sin borrar la sesión
+      encuestasPendientes.delete(fromNumber);
+    }
+    if (msg) {
+      await client.messages.create({ from: `whatsapp:${process.env.TWILIO_PHONE}`, to: `whatsapp:${fromNumber}`, body: msg });
+      guardarMensaje(fromNumber, 'bot', msg).catch(() => {});
+      cerrarSesion(fromNumber);
+      return res.sendStatus(200);
+    }
   }
 
-  // Detectar consultas de servicios mecánicos → alertar y derivar a humano
+  // Detectar pedido de atención humana
+  if (/hablar|persona|alguien|humano|asesor|vendedor/i.test(lower)) {
+    guardarAlerta(fromNumber, body).catch(() => {});
+    const msg = `Te pasamos los contactos de nuestras sucursales para que te atiendan:\n\n${WA_SUCURSALES}`;
+    await client.messages.create({ from: `whatsapp:${process.env.TWILIO_PHONE}`, to: `whatsapp:${fromNumber}`, body: msg });
+    registrarMensajeSesion(fromNumber, 'bot', msg);
+    guardarMensaje(fromNumber, 'bot', msg).catch(() => {});
+    return res.sendStatus(200);
+  }
+
+  // Detectar consultas de servicios mecánicos → alertar y dar links directos
   const esMecanica = /freno|pastilla|disco de freno|amortiguador|buje|tren delantero|direcci[oó]n|suspensi[oó]n|batería|bateria|escobilla|limpiaparabrisas|antirrobo|bul[oó]n|tuerca de seguridad|reparaci[oó]n|taller|cambio de aceite|alineaci[oó]n|balanceo/i.test(body);
   if (esMecanica) {
     guardarAlerta(fromNumber, body).catch(() => {});
-    const msg = 'Sí, hacemos ese servicio! 🔧 Voy a pasarte con un asesor para coordinar. En breve te contactamos.';
+    const msg = `Sí, hacemos ese servicio! 🔧 Contactá directamente a la sucursal que te quede más cerca:\n\n${WA_SUCURSALES}`;
     await client.messages.create({ from: `whatsapp:${process.env.TWILIO_PHONE}`, to: `whatsapp:${fromNumber}`, body: msg });
     registrarMensajeSesion(fromNumber, 'bot', msg);
     guardarMensaje(fromNumber, 'bot', msg).catch(() => {});
@@ -653,7 +702,7 @@ app.post('/webhook', async (req, res) => {
     }
   } catch (err) {
     console.error('Error completo:', err.message, err.stack);
-    twiml.message('❌ Hubo un error. Por favor intentá de nuevo o escribí *"hablar con alguien"*.');
+    twiml.message('❌ Hubo un error. Por favor intentá de nuevo en unos segundos.');
   }
 
   console.log('Enviando respuesta TwiML...');

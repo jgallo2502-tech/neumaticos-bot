@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Presupuesto Baterías — Neumáticos Gallo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #f5f5f5; color: #222; }
+    header {
+      background: #1a1a2e;
+      color: white;
+      padding: 14px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    header h1 { font-size: 18px; }
+    .logout { background: none; border: 1px solid rgba(255,255,255,0.3); color: white; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .container { max-width: 900px; margin: 24px auto; padding: 0 16px; }
+    .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    h2 { font-size: 16px; font-weight: 600; color: #1a1a2e; margin-bottom: 16px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media(max-width: 600px) { .row { grid-template-columns: 1fr; } }
+    label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
+    input, select {
+      width: 100%;
+      padding: 11px 14px;
+      border: 2px solid #e8e8e8;
+      border-radius: 8px;
+      font-size: 15px;
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus { outline: none; border-color: #e63946; }
+    .btn-buscar {
+      background: #e63946;
+      color: white;
+      border: none;
+      padding: 12px 28px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 20px;
+      width: 100%;
+    }
+    .btn-buscar:hover { background: #c1121f; }
+
+    .producto-card {
+      border: 2px solid #e8e8e8;
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .producto-card:hover { border-color: #e63946; background: #fff5f5; }
+    .producto-card.seleccionado { border-color: #e63946; background: #fff5f5; }
+    .producto-nombre { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+    .producto-precio-main { font-size: 18px; font-weight: 700; color: #e63946; }
+    .check { font-size: 22px; color: #e63946; display: none; }
+    .producto-card.seleccionado .check { display: block; }
+    .stock-info { font-size: 11px; color: #2d6a4f; background: #d1e7dd; padding: 3px 8px; border-radius: 4px; margin-top: 5px; display: inline-block; }
+    .loading { text-align: center; padding: 30px; color: #888; }
+    .sin-stock { text-align: center; padding: 30px; color: #888; background: #f9f9f9; border-radius: 10px; }
+
+    @media print {
+      body { background: white !important; }
+      body * { visibility: hidden !important; }
+      header, .no-print, #form-card, #bateria-card { display: none !important; }
+      #bateria-generado, #bateria-generado * { visibility: visible !important; }
+      #bateria-generado { display: block !important; position: absolute; top: 0; left: 0; width: 100%; }
+    }
+
+    #bateria-generado { display: none; }
+    .presup-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 20px; }
+    .presup-empresa h3 { font-size: 20px; font-weight: 700; color: #1a1a2e; }
+    .presup-empresa p { font-size: 12px; color: #666; line-height: 1.5; }
+    .presup-numero { text-align: right; font-size: 12px; color: #666; }
+    .presup-numero strong { font-size: 18px; color: #1a1a2e; display: block; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    .acciones { display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap; }
+    .btn-accion {
+      flex: 1;
+      min-width: 140px;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+    }
+    .btn-imprimir { background: #1a1a2e; color: white; }
+    .btn-whatsapp { background: #25d366; color: white; }
+    .btn-nuevo { background: #e8e8e8; color: #333; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🔋 Presupuesto Baterías</h1>
+    <div style="display:flex;align-items:center;gap:12px">
+      <a href="/app/presupuesto.html" style="color:white;font-size:13px;opacity:0.8;text-decoration:none">🔴 Neumáticos</a>
+      <a href="/app/presupuesto-lubri.html" style="color:white;font-size:13px;opacity:0.8;text-decoration:none">🔧 Presupuesto Lubri</a>
+      <a href="/app/presupuesto-frenos.html" style="color:white;font-size:13px;opacity:0.8;text-decoration:none">🛑 Presupuesto Frenos</a>
+      <a href="/app/dashboard.html" style="color:white;font-size:13px;opacity:0.8;text-decoration:none">🏠 Dashboard</a>
+      <a href="/app/seguimiento.html" style="color:white;font-size:13px;opacity:0.8;text-decoration:none">📊 Seguimiento</a>
+      <span id="vendedor-nombre" style="color:white;font-size:13px;opacity:0.7"></span>
+      <button class="logout" onclick="logout()">Salir</button>
+    </div>
+  </header>
+
+  <div class="container">
+
+    <!-- Datos del cliente -->
+    <div class="card no-print" id="form-card">
+      <h2>📋 Datos del cliente</h2>
+      <div class="row">
+        <div>
+          <label>Nombre del cliente</label>
+          <input type="text" id="cliente-nombre" placeholder="Nombre y apellido">
+        </div>
+        <div>
+          <label>WhatsApp</label>
+          <input type="tel" id="cliente-tel" placeholder="11 xxxx-xxxx">
+        </div>
+      </div>
+    </div>
+
+    <!-- Batería Moura -->
+    <div class="card no-print" id="bateria-card">
+      <h2>🔋 Batería Moura</h2>
+      <div class="row">
+        <div>
+          <label>Marca</label>
+          <select id="moura-marca" onchange="cargarModelosMoura()">
+            <option value="">Cargando marcas...</option>
+          </select>
+        </div>
+        <div>
+          <label>Modelo / Motor / Año</label>
+          <select id="moura-modelo" onchange="buscarBateriaPorVehiculo()" disabled>
+            <option value="">Elegí la marca primero</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:16px">
+        <div>
+          <label>Mano de obra / Colocación</label>
+          <select id="mo-precio-bateria" onchange="actualizarBotonGenerarBateria()">
+            <option value="0">No incluir</option>
+            <option value="10000">$10.000</option>
+            <option value="15000">$15.000</option>
+            <option value="20000">$20.000</option>
+            <option value="25000">$25.000</option>
+            <option value="30000">$30.000</option>
+          </select>
+        </div>
+      </div>
+      <div id="bateria-resultado" style="margin-top:16px"></div>
+      <div id="btn-generar-bateria-wrap" style="display:none;margin-top:16px">
+        <button class="btn-buscar" onclick="generarPresupuestoBateria()">📄 Generar Presupuesto de Batería</button>
+      </div>
+    </div>
+
+    <!-- Presupuesto de batería generado -->
+    <div class="card" id="bateria-generado" style="display:none">
+      <div class="presup-header">
+        <div class="presup-empresa">
+          <h3>🔴 Neumáticos Gallo</h3>
+          <p>Suc. Victoria: Pres. Perón 3479 | 11-3773-5246<br>Suc. Nordelta: Agustín García 6318, Tigre | 11-5734-7692</p>
+        </div>
+        <div class="presup-numero">
+          <strong id="bateria-presup-num"></strong>
+          <span id="bateria-presup-fecha"></span>
+        </div>
+      </div>
+      <p style="margin-bottom:12px"><strong>Cliente:</strong> <span id="bateria-presup-cliente"></span></p>
+      <div id="bateria-presup-detalle" style="background:#f0f7ff;padding:14px 16px;border-radius:8px;font-size:14px;line-height:1.6"></div>
+      <div class="acciones no-print">
+        <button class="btn-accion btn-imprimir" onclick="window.print()">🖨️ Imprimir</button>
+        <button class="btn-accion btn-whatsapp" onclick="abrirWhatsAppBateria()">💬 WhatsApp</button>
+        <button class="btn-accion" style="background:#128c7e;color:white" onclick="copiarBateriaWA()">📋 Copiar mensaje</button>
+        <button class="btn-accion btn-nuevo" onclick="nuevoPresupuestoBateria()">➕ Nuevo</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const token = localStorage.getItem('token');
+    if (!token) window.location.href = '/app/login.html';
+    document.getElementById('vendedor-nombre').textContent = localStorage.getItem('vendedor') || '';
+
+    function logout() {
+      localStorage.clear();
+      window.location.href = '/app/login.html';
+    }
+
+    function fmt(n) {
+      return '$' + Math.round(n).toLocaleString('es-AR');
+    }
+
+    function getMoPrecioBateria() {
+      return parseInt(document.getElementById('mo-precio-bateria')?.value || 0) || 0;
+    }
+
+    let bateriaSeleccionada = null; // { descripcion, codAlternativo, precio, stockVictoria, stockNordelta }
+    let vehiculoActual = '';
+    let bateriaPresupuestoActual = null;
+
+    function actualizarBotonGenerarBateria() {
+      const hay = !!bateriaSeleccionada || getMoPrecioBateria() > 0;
+      document.getElementById('btn-generar-bateria-wrap').style.display = hay ? 'block' : 'none';
+    }
+
+    async function cargarMarcasMoura() {
+      const sel = document.getElementById('moura-marca');
+      try {
+        const res = await fetch('/app/moura/marcas', { headers: { 'Authorization': 'Bearer ' + token } });
+        if (res.status === 401) { window.location.href = '/app/login.html'; return; }
+        const marcas = await res.json();
+        sel.innerHTML = '<option value="">Seleccioná marca</option>' +
+          marcas.map(m => '<option value="' + m + '">' + m + '</option>').join('');
+      } catch (e) {
+        sel.innerHTML = '<option value="">Error al cargar marcas</option>';
+      }
+    }
+    cargarMarcasMoura();
+
+    window.mouraModelos = {};
+
+    async function cargarModelosMoura() {
+      const marca = document.getElementById('moura-marca').value;
+      const modeloSel = document.getElementById('moura-modelo');
+      document.getElementById('bateria-resultado').innerHTML = '';
+      bateriaSeleccionada = null;
+      vehiculoActual = '';
+      actualizarBotonGenerarBateria();
+
+      if (!marca) { modeloSel.innerHTML = '<option value="">Elegí la marca primero</option>'; modeloSel.disabled = true; return; }
+
+      modeloSel.innerHTML = '<option value="">Cargando modelos...</option>';
+      modeloSel.disabled = true;
+      const res = await fetch('/app/moura/modelos?marca=' + encodeURIComponent(marca), { headers: { 'Authorization': 'Bearer ' + token } });
+      if (res.status === 401) { window.location.href = '/app/login.html'; return; }
+      const modelos = await res.json();
+      window.mouraModelos = {};
+      modeloSel.innerHTML = '<option value="">Seleccioná modelo / motor / año</option>' +
+        modelos.map(m => {
+          window.mouraModelos[m.id] = m;
+          return '<option value="' + m.id + '">' + m.modelo + ' — ' + m.anioDesde + ' a ' + m.anioHasta + '</option>';
+        }).join('');
+      modeloSel.disabled = false;
+    }
+
+    async function buscarBateriaPorVehiculo() {
+      const marca = document.getElementById('moura-marca').value;
+      const id = document.getElementById('moura-modelo').value;
+      const resultadoDiv = document.getElementById('bateria-resultado');
+      bateriaSeleccionada = null;
+      actualizarBotonGenerarBateria();
+
+      if (!id) { resultadoDiv.innerHTML = ''; return; }
+      const m = window.mouraModelos[id];
+      if (!m) return;
+      vehiculoActual = marca + ' ' + m.modelo + ' ' + m.anioDesde + '-' + m.anioHasta;
+
+      if (!m.battery) {
+        resultadoDiv.innerHTML = '<div class="sin-stock">Moura no tiene una batería recomendada para este vehículo.</div>';
+        return;
+      }
+
+      resultadoDiv.innerHTML = '<div class="loading">🔍 Buscando en tu stock...</div>';
+      const res = await fetch('/app/moura/buscar?' + new URLSearchParams({
+        vehiculo: vehiculoActual, battery: m.battery, batteryAlt: m.batteryAlt || '',
+      }).toString(), { headers: { 'Authorization': 'Bearer ' + token } });
+      if (res.status === 401) { window.location.href = '/app/login.html'; return; }
+      const data = await res.json();
+      mostrarResultadoBateria(data);
+    }
+
+    function mostrarResultadoBateria(data) {
+      const resultadoDiv = document.getElementById('bateria-resultado');
+      if (!data.stock) {
+        let msg = 'Batería recomendada: <strong>' + data.battery + '</strong>' +
+          (data.batteryAlt ? ' (alternativa: ' + data.batteryAlt + ')' : '') +
+          ' — no está cargada en tu stock.';
+        resultadoDiv.innerHTML = '<div class="sin-stock">' + msg + '</div>';
+        return;
+      }
+      const s = data.stock;
+      const stockParts = [];
+      if (s.stockVictoria > 0) stockParts.push('Victoria: ' + s.stockVictoria);
+      if (s.stockNordelta > 0) stockParts.push('Nordelta: ' + s.stockNordelta);
+      const stockStr = stockParts.length > 0 ? stockParts.join(' | ') : 'Sin stock en Victoria/Nordelta';
+
+      let html = '<div class="producto-card seleccionado" id="bateria-card-resultado" onclick="toggleBateriaSeleccion()">';
+      html += '<div>';
+      html += '<div class="producto-nombre">' + s.descripcion + (s.codAlternativo ? ' <span style="font-size:10px;font-weight:400;color:#999;margin-left:6px">[' + s.codAlternativo + ']</span>' : '') + '</div>';
+      html += '<div class="stock-info no-print">📦 ' + stockStr + '</div>';
+      html += '</div>';
+      html += '<div style="text-align:right">';
+      html += '<div class="producto-precio-main">' + fmt(s.precio) + '</div>';
+      html += '<div class="check">✓</div>';
+      html += '</div></div>';
+      resultadoDiv.innerHTML = html;
+
+      bateriaSeleccionada = { ...s };
+      actualizarBotonGenerarBateria();
+    }
+
+    function toggleBateriaSeleccion() {
+      const card = document.getElementById('bateria-card-resultado');
+      if (bateriaSeleccionada) {
+        bateriaSeleccionada = null;
+        card.classList.remove('seleccionado');
+      } else {
+        // Sólo se puede deseleccionar/reseleccionar la que ya se buscó
+        card.classList.add('seleccionado');
+      }
+      actualizarBotonGenerarBateria();
+    }
+
+    function obtenerDatosBateria() {
+      const manoDeObra = getMoPrecioBateria();
+      const items = [];
+      if (bateriaSeleccionada) {
+        items.push({
+          descripcion: bateriaSeleccionada.descripcion + (bateriaSeleccionada.codAlternativo ? ' [' + bateriaSeleccionada.codAlternativo + ']' : ''),
+          precio: bateriaSeleccionada.precio,
+        });
+      }
+      const total = items.reduce((s, f) => s + f.precio, 0) + manoDeObra;
+      return { vehiculo: vehiculoActual, filtros: items, manoDeObra, total, titulo: 'Batería Moura' };
+    }
+
+    function resumenBateriaTexto() {
+      const { vehiculo, filtros, manoDeObra, total } = obtenerDatosBateria();
+      if (filtros.length === 0 && manoDeObra === 0) return '';
+      const partes = filtros.map(f => f.descripcion + ': ' + fmt(f.precio));
+      if (manoDeObra > 0) partes.push('Mano de obra: ' + fmt(manoDeObra));
+      return (vehiculo ? vehiculo + ' — ' : '') + partes.join(', ') + ' — Total aprox. ' + fmt(total);
+    }
+
+    function tablaBateriaHtml(datos) {
+      let html = '<table style="width:100%;border-collapse:collapse">';
+      if (datos.vehiculo) {
+        html += '<tr><td colspan="2" style="padding:0 0 10px;font-weight:700;font-size:14px;color:#1a1a2e">' + datos.vehiculo + '</td></tr>';
+      }
+      for (const f of datos.filtros) {
+        html += '<tr><td style="padding:8px 0;border-bottom:1px solid #dbe7f5">' + f.descripcion + '</td>' +
+          '<td style="padding:8px 0;border-bottom:1px solid #dbe7f5;text-align:right;white-space:nowrap">' + fmt(f.precio) + '</td></tr>';
+      }
+      if (datos.manoDeObra > 0) {
+        html += '<tr><td style="padding:8px 0;border-bottom:1px solid #dbe7f5">Mano de obra / Colocación</td>' +
+          '<td style="padding:8px 0;border-bottom:1px solid #dbe7f5;text-align:right;white-space:nowrap">' + fmt(datos.manoDeObra) + '</td></tr>';
+      }
+      html += '<tr><td style="padding:10px 0 0;font-weight:700;font-size:15px">Total aprox.</td>' +
+        '<td style="padding:10px 0 0;font-weight:700;font-size:15px;text-align:right;color:#e63946;white-space:nowrap">' + fmt(datos.total) + '</td></tr>';
+      html += '</table>';
+      return html;
+    }
+
+    function generarPresupuestoBateria() {
+      const datos = obtenerDatosBateria();
+      if (datos.filtros.length === 0 && datos.manoDeObra === 0) { alert('Seleccioná una batería o una mano de obra'); return; }
+
+      const cliente = document.getElementById('cliente-nombre').value.trim() || 'Sin nombre';
+      const tel = document.getElementById('cliente-tel').value.trim() || '-';
+      const fecha = new Date().toLocaleDateString('es-AR');
+      const num = '#' + String(Date.now()).slice(-6);
+      const resumen = resumenBateriaTexto();
+
+      bateriaPresupuestoActual = { cliente, tel, num, fecha, resumen, ...datos, linkPublico: null };
+
+      document.getElementById('bateria-presup-num').textContent = num;
+      document.getElementById('bateria-presup-fecha').textContent = fecha;
+      document.getElementById('bateria-presup-cliente').textContent = cliente;
+      document.getElementById('bateria-presup-detalle').innerHTML = tablaBateriaHtml(datos);
+      document.getElementById('bateria-generado').style.display = 'block';
+      document.getElementById('bateria-generado').scrollIntoView({ behavior: 'smooth' });
+
+      fetch('/app/guardar-presupuesto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ cliente, tel, num, fecha, items: [], servicios: { resumen, ...datos } })
+      }).then(r => r.json()).then(data => {
+        if (data.token) {
+          bateriaPresupuestoActual.linkPublico = 'https://neumaticos-bot-production.up.railway.app/app/ver/' + data.token;
+        }
+      });
+    }
+
+    function armarMensajeBateriaWA() {
+      if (!bateriaPresupuestoActual) return '';
+      const { cliente, num, vehiculo, filtros, manoDeObra, total, linkPublico } = bateriaPresupuestoActual;
+      let msg = 'Hola ' + cliente + '! Te enviamos el presupuesto ' + num + ' de batería Moura de Neumaticos Gallo.\n\n';
+      if (vehiculo) msg += vehiculo + '\n\n';
+      for (const f of filtros) msg += '• ' + f.descripcion + ': ' + fmt(f.precio) + '\n';
+      if (manoDeObra > 0) msg += '• Mano de obra: ' + fmt(manoDeObra) + '\n';
+      msg += '\nTotal aprox.: ' + fmt(total) + '\n\n';
+      if (linkPublico) msg += 'Ver presupuesto completo: ' + linkPublico + '\n\n';
+      msg += 'Victoria: 11-3773-5246 | Nordelta: 11-5734-7692';
+      return msg;
+    }
+
+    function abrirWhatsAppBateria() {
+      if (!bateriaPresupuestoActual) return;
+      const tel = (bateriaPresupuestoActual.tel || '').replace(/\D/g, '');
+      const msg = armarMensajeBateriaWA();
+      if (tel) {
+        let telWA = tel.startsWith('549') ? tel : (tel.startsWith('54') ? '549' + tel.slice(2) : '549' + tel);
+        window.open('https://wa.me/' + telWA + '?text=' + encodeURIComponent(msg), '_blank');
+      } else {
+        window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+      }
+    }
+
+    function copiarBateriaWA() {
+      if (!bateriaPresupuestoActual) return;
+      const msg = armarMensajeBateriaWA();
+      const btn = event.target;
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = msg;
+        textarea.style.position = 'fixed';
+        textarea.style.top = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        btn.textContent = '✅ Copiado!';
+        setTimeout(() => btn.textContent = '📋 Copiar mensaje', 2500);
+      } catch (e) {
+        const modal = document.createElement('div');
+        modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+        modal.innerHTML = '<div style="background:white;border-radius:12px;padding:20px;max-width:500px;width:100%">' +
+          '<p style="font-weight:700;margin-bottom:10px">Seleccioná y copiá el texto:</p>' +
+          '<textarea readonly style="width:100%;height:200px;font-size:12px;padding:8px">' + msg + '</textarea>' +
+          '<button onclick="this.closest(\'div[style]\').remove()" style="margin-top:10px;padding:10px 20px;background:#e63946;color:white;border:none;border-radius:8px;cursor:pointer;width:100%">Cerrar</button>' +
+          '</div>';
+        document.body.appendChild(modal);
+        modal.querySelector('textarea').select();
+      }
+    }
+
+    function nuevoPresupuestoBateria() {
+      bateriaSeleccionada = null;
+      bateriaPresupuestoActual = null;
+      vehiculoActual = '';
+      document.getElementById('cliente-nombre').value = '';
+      document.getElementById('cliente-tel').value = '';
+      document.getElementById('bateria-resultado').innerHTML = '';
+      document.getElementById('mo-precio-bateria').value = '0';
+      document.getElementById('moura-marca').value = '';
+      document.getElementById('moura-modelo').innerHTML = '<option value="">Elegí la marca primero</option>';
+      document.getElementById('moura-modelo').disabled = true;
+      document.getElementById('btn-generar-bateria-wrap').style.display = 'none';
+      document.getElementById('bateria-generado').style.display = 'none';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  </script>
+</body>
+</html>

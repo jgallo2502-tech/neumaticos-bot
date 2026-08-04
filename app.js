@@ -85,6 +85,540 @@ router.post('/precios', express.json(), authMiddleware, async (req, res) => {
   res.json(resultado);
 });
 
+// --- Buscar filtros (aceite/aire/combustible/habitáculo) por vehículo ---
+router.get('/filtros', authMiddleware, async (req, res) => {
+  try {
+    const q = (req.query.q || '').toString().trim().toLowerCase();
+    if (!q) return res.json([]);
+    const palabras = q.split(/\s+/).filter(Boolean);
+
+    const auth = new google.auth.GoogleAuth({
+      ...(process.env.GOOGLE_CREDENTIALS
+        ? { credentials: GOOGLE_CREDS }
+        : { keyFile: path.join(__dirname, 'credentials.json') }),
+      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+    });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const r = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Filtros!A:G',
+    });
+    const rows = (r.data.values || []).slice(1);
+
+    const resultados = [];
+    for (const row of rows) {
+      const [codArt, descripcion, codAlternativo, stockVic, stockNor, , precio] = row;
+      if (!descripcion || !precio) continue;
+      const haystack = (descripcion + ' ' + (codAlternativo || '')).toLowerCase();
+      if (!palabras.every(p => haystack.includes(p))) continue;
+
+      const stockVictoria = parseInt(stockVic) || 0;
+      const stockNordelta = parseInt(stockNor) || 0;
+      resultados.push({
+        codArt,
+        descripcion,
+        codAlternativo: codAlternativo || '',
+        precio: parseInt(precio) || 0,
+        stockVictoria,
+        stockNordelta,
+        stockPropio: stockVictoria + stockNordelta,
+      });
+    }
+
+    resultados.sort((a, b) => b.stockPropio - a.stockPropio);
+    res.json(resultados);
+  } catch (err) {
+    console.error('Error buscando filtros:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Catálogo Fram: marcas/modelos/versiones/búsqueda por vehículo ---
+const FRAM_MARCAS = ['ACURA','AGRALE','ALFA ROMEO','ASIA MOTORS','AUDI','BAIC','BMW','CATERPILLAR','CHERY',
+  'CHEVROLET','CHRYSLER','CITROEN','DACIA','DAEWOO','DAIHATSU','DEUTZ AGRALE','DFM','DFSK','DIMEX','DODGE',
+  'DS','EL DETALLE','FIAT','FORD','GEELY','GMC CHEVETTE','HAVAL','HONDA','HUMMER','HYUNDAI','IKA',
+  'INTERNATIONAL','ISUZU','IVECO','JAC','JAGUAR','JEEP','JMC','KIA','LADA','LAND ROVER','LEXUS','LIFAN',
+  'MARUTI','MAZDA','MERCEDES BENZ','MG','MINI','MITSUBISHI','NISSAN','OPEL','PEUGEOT','PORSCHE',
+  'PUMA DE TAT','RAM','RENAULT','ROVER','SAAB','SCANIA','SEAT','SHINERAY','SMART','SSANGYONG','SUBARU',
+  'SUZUKI','TOYOTA','VOLKSWAGEN','VOLVO'];
+
+router.get('/fram/marcas', authMiddleware, (req, res) => {
+  res.json(FRAM_MARCAS);
+});
+
+router.get('/fram/modelos', authMiddleware, async (req, res) => {
+  try {
+    const marca = (req.query.marca || '').toString();
+    const r = await fetch('https://catalogofram.com.ar/json/vehicle/model/?brand_id=' + encodeURIComponent(marca));
+    const data = await r.json();
+    res.json((data.result || []).map(x => x.model_master));
+  } catch (err) {
+    console.error('Error fram/modelos:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const decodeEntitiesFram = s => s.replace(/&#039;/g, "'").replace(/&amp;/g, '&').replace(/&quot;/g, '"');
+
+// Fram exige una cookie de sesión + un token CSRF para /resultado. El token que pide
+// como query param "_token" es el mismo valor que manda en la cookie XSRF-TOKEN.
+async function framIniciarSesion() {
+  const rSesion = await fetch('https://catalogofram.com.ar/buscar/vehiculo');
+  const setCookies = [...rSesion.headers].filter(h => h[0].toLowerCase() === 'set-cookie').map(h => h[1]);
+  const cookieMap = {};
+  for (const c of setCookies) { const [kv] = c.split(';'); const [k, v] = kv.split('='); cookieMap[k] = v; }
+  const xsrf = cookieMap['XSRF-TOKEN'] ? decodeURIComponent(cookieMap['XSRF-TOKEN']) : '';
+  const cookieHeader = Object.entries(cookieMap).map(([k, v]) => k + '=' + v).join('; ');
+  if (!xsrf) throw new Error('No se pudo iniciar sesión con catalogofram.com.ar');
+  return { xsrf, cookieHeader };
+}
+
+async function framFetchResultado({ marca, modelo, version }) {
+  const { xsrf, cookieHeader } = await framIniciarSesion();
+  const params = { _token: xsrf, brand_id: marca, model_id: modelo, tipo: 'vehiculo_sidebar' };
+  if (version) params.version_id = version;
+  const url = 'https://catalogofram.com.ar/resultado?' + new URLSearchParams(params).toString();
+  const r = await fetch(url, { headers: { Cookie: cookieHeader } });
+  const html = await r.text();
+  // Quitar TODOS los comentarios HTML: el template de Fram trae un result-item de
+  // ejemplo comentado (además de comentarios sueltos normales en el <head>) que
+  // contamina el parseo si no se descarta.
+  return html.replace(/<!--[\s\S]*?-->/g, '');
+}
+
+router.get('/fram/versiones', authMiddleware, async (req, res) => {
+  try {
+    const marca = (req.query.marca || '').toString();
+    const modelo = (req.query.modelo || '').toString();
+    // El endpoint real de Fram tiene "version}" en la ruta (bug de su template, pero funciona)
+    const url = 'https://catalogofram.com.ar/json/vehicle/version%7D/?brand_id=' + encodeURIComponent(marca) + '&model_id=' + encodeURIComponent(modelo);
+    const r = await fetch(url);
+    const data = await r.json();
+    const versiones = data.result || [];
+
+    // Fram no da el rango de años en este endpoint. Traemos una vez la lista sin
+    // versión (más liviana que consultar cada versión una por una) y le pegamos el
+    // rango a las que tengan una coincidencia única y sin ambigüedad; si una versión
+    // tiene varios rangos posibles (distintas carrocerías) no se le agrega nada para
+    // no mostrar un año que podría ser incorrecto.
+    try {
+      const zona = await framFetchResultado({ marca, modelo });
+      const carModels = [...zona.matchAll(/<div class="car-model">([^<]+)<\/div>/g)].map(m => decodeEntitiesFram(m[1]));
+      for (const v of versiones) {
+        const rangos = new Set();
+        for (const cm of carModels) {
+          if (!cm.toUpperCase().includes(v.version.toUpperCase())) continue;
+          const rangoMatch = cm.match(/(\d{4}\s+a\s+\d{4})\s*$/);
+          if (rangoMatch) rangos.add(rangoMatch[1]);
+        }
+        if (rangos.size === 1) v.anios = [...rangos][0];
+      }
+    } catch (e) {
+      // Si falla el enriquecimiento, se devuelven las versiones igual, sin años.
+      console.error('Error enriqueciendo años fram/versiones:', e.message);
+    }
+
+    res.json(versiones);
+  } catch (err) {
+    console.error('Error fram/versiones:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Consulta catalogofram.com.ar/resultado para un vehículo exacto y devuelve {vehiculo, items:[{codigo,categoria}]}
+async function framObtenerCodigosPorVehiculo(marca, modelo, version) {
+  const zona = await framFetchResultado({ marca, modelo, version });
+
+  const vehiculoMatch = zona.match(/<div class="car-model">([^<]+)<\/div>/);
+  const vehiculo = vehiculoMatch ? decodeEntitiesFram(vehiculoMatch[1].trim()) : '';
+
+  const items = [];
+  const re = /<div class="code">([^<]+)<\/div>\s*<div class="category">([^<]+)<\/div>/g;
+  let m;
+  while ((m = re.exec(zona))) {
+    items.push({ codigo: m[1].trim(), categoria: decodeEntitiesFram(m[2].trim()) });
+  }
+  return { vehiculo, items };
+}
+
+router.get('/fram/buscar', authMiddleware, async (req, res) => {
+  try {
+    const marca = (req.query.marca || '').toString();
+    const modelo = (req.query.modelo || '').toString();
+    const version = (req.query.version || '').toString();
+    if (!marca || !modelo || !version) return res.status(400).json({ error: 'Faltan marca/modelo/version' });
+
+    const { vehiculo, items } = await framObtenerCodigosPorVehiculo(marca, modelo, version);
+    if (items.length === 0) return res.json({ vehiculo, items: [] });
+
+    const auth = new google.auth.GoogleAuth({
+      ...(process.env.GOOGLE_CREDENTIALS
+        ? { credentials: GOOGLE_CREDS }
+        : { keyFile: path.join(__dirname, 'credentials.json') }),
+      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+    });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const r = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Filtros!A:G',
+    });
+    const filas = (r.data.values || []).slice(1);
+    const filaAStock = row => {
+      const stockVictoria = parseInt(row[3]) || 0;
+      const stockNordelta = parseInt(row[4]) || 0;
+      return {
+        codArt: row[0],
+        descripcion: row[1],
+        codAlternativo: row[2] || '',
+        precio: parseInt(row[6]) || 0,
+        stockVictoria,
+        stockNordelta,
+        stockPropio: stockVictoria + stockNordelta,
+      };
+    };
+
+    // Entre las filas que matchean, preferir la que tenga stock real en Victoria/Nordelta
+    const mejorMatch = filasMatch => filasMatch.reduce((mejor, row) => {
+      const s = filaAStock(row);
+      if (!mejor || s.stockPropio > mejor.stockPropio) return s;
+      return mejor;
+    }, null);
+
+    // Palabra clave por tipo de filtro, para el fallback por marca+modelo (ej: encontrar el
+    // equivalente Wix aunque el código Fram exacto no esté cargado en el stock)
+    const categoriaAKeywords = categoria => {
+      const c = categoria.toUpperCase();
+      if (c.includes('ACEITE')) return ['ACEITE'];
+      if (c.includes('HABIT') || c.includes('CABINA')) return ['HABIT', 'CABINA'];
+      if (c.includes('COMBUSTIBLE')) return ['COMB'];
+      if (c.includes('AIRE')) return ['AIRE'];
+      return [];
+    };
+    const cilindradaMatch = version.match(/(\d)[.,](\d)/);
+    const cilindrada = cilindradaMatch ? cilindradaMatch[1] + cilindradaMatch[2] : null; // ej "28" para 2.8
+
+    const resultado = items.map(it => {
+      const codigoUpper = it.codigo.toUpperCase();
+      const porCodigo = filas.filter(row => {
+        const desc = (row[1] || '').toUpperCase();
+        const codAlt = (row[2] || '').toUpperCase();
+        return desc.includes(codigoUpper) || codAlt.includes(codigoUpper);
+      });
+      let stock = mejorMatch(porCodigo);
+
+      if (!stock || stock.stockPropio === 0) {
+        // Fallback: buscar por marca + modelo + tipo de filtro (pesca el equivalente Wix
+        // aunque no tenga cargado el código exacto que dio Fram)
+        const keywords = categoriaAKeywords(it.categoria);
+        if (keywords.length > 0) {
+          const marcaUpper = marca.toUpperCase();
+          const modeloUpper = modelo.toUpperCase();
+          const porTexto = filas.filter(row => {
+            const desc = (row[1] || '').toUpperCase();
+            if (!desc.includes(marcaUpper) && !desc.includes(modeloUpper)) return false;
+            if (!desc.includes(modeloUpper)) return false;
+            if (!keywords.some(k => desc.includes(k))) return false;
+            return true;
+          });
+          // Si hay pistas de cilindrada, priorizar filas que la mencionen
+          const conCilindrada = cilindrada
+            ? porTexto.filter(row => (row[1] || '').replace(/[.,]/g, '').includes(cilindrada))
+            : [];
+          const candidatos = conCilindrada.length > 0 ? conCilindrada : porTexto;
+          const fallback = mejorMatch(candidatos);
+          if (fallback && (!stock || fallback.stockPropio > stock.stockPropio)) stock = fallback;
+        }
+      }
+
+      return { ...it, stock: stock || null };
+    });
+
+    // A veces Fram lista 2 códigos distintos (ej: combustible primario + secundario) que
+    // resuelven al mismo producto en el stock. Fusionarlos para no duplicar el precio.
+    const porCodArt = new Map();
+    const sinStock = [];
+    for (const it of resultado) {
+      if (!it.stock) { sinStock.push(it); continue; }
+      const existente = porCodArt.get(it.stock.codArt);
+      if (existente) {
+        if (!existente.categoria.includes(it.categoria)) existente.categoria += ' / ' + it.categoria;
+        if (!existente.codigo.includes(it.codigo)) existente.codigo += ' / ' + it.codigo;
+      } else {
+        porCodArt.set(it.stock.codArt, { ...it });
+      }
+    }
+    const resultadoFinal = [...porCodArt.values(), ...sinStock];
+
+    res.json({ vehiculo, items: resultadoFinal });
+  } catch (err) {
+    console.error('Error fram/buscar:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Catálogo Moura: marcas/modelos/búsqueda de batería por vehículo ---
+// API pública de "Moura Ya" (moura-search-argentina.herokuapp.com). El mapeo
+// vehículo -> batería no depende de la ciudad (sólo el precio/stats sí), así que
+// se consulta una vez con una ciudad fija y se cachea en memoria.
+const MOURA_CIUDAD_ID = '64e8f7d652c3ce0002405679'; // Gran Buenos Aires
+let mouraCache = { data: null, ts: 0 };
+
+async function mouraObtenerDataset() {
+  const ahora = Date.now();
+  if (mouraCache.data && ahora - mouraCache.ts < 12 * 60 * 60 * 1000) return mouraCache.data;
+  const url = 'https://moura-search-argentina.herokuapp.com/api/v1/topcarro?' + new URLSearchParams({
+    cidade: MOURA_CIUDAD_ID, limit: '10000', offset: '0', vehicleType: 'CARRO,CAMINHAO',
+    from: '2015-01-01', to: '2026-12-31',
+  }).toString();
+  const r = await fetch(url);
+  const data = await r.json();
+  if (!Array.isArray(data)) throw new Error('Respuesta inesperada de Moura');
+  mouraCache = { data, ts: ahora };
+  return data;
+}
+
+router.get('/moura/marcas', authMiddleware, async (req, res) => {
+  try {
+    const data = await mouraObtenerDataset();
+    const marcas = [...new Set(data.map(v => v.car_brand).filter(Boolean))].sort();
+    res.json(marcas);
+  } catch (err) {
+    console.error('Error moura/marcas:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/moura/modelos', authMiddleware, async (req, res) => {
+  try {
+    const marca = (req.query.marca || '').toString();
+    const data = await mouraObtenerDataset();
+    const vistos = new Set();
+    const modelos = [];
+    for (const v of data) {
+      if (v.car_brand !== marca) continue;
+      if (vistos.has(v.id)) continue;
+      vistos.add(v.id);
+      modelos.push({
+        id: v.id,
+        modelo: v.car_model,
+        anioDesde: v.car_year_from,
+        anioHasta: v.car_year_to,
+        battery: v.battery || '',
+        batteryAlt: v.battery_alt || '',
+      });
+    }
+    modelos.sort((a, b) => a.modelo.localeCompare(b.modelo) || a.anioDesde - b.anioDesde);
+    res.json(modelos);
+  } catch (err) {
+    console.error('Error moura/modelos:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/moura/buscar', authMiddleware, async (req, res) => {
+  try {
+    const vehiculo = (req.query.vehiculo || '').toString();
+    const battery = (req.query.battery || '').toString().toUpperCase();
+    const batteryAlt = (req.query.batteryAlt || '').toString().toUpperCase();
+    if (!battery) return res.status(400).json({ error: 'Falta el código de batería' });
+
+    const auth = new google.auth.GoogleAuth({
+      ...(process.env.GOOGLE_CREDENTIALS
+        ? { credentials: GOOGLE_CREDS }
+        : { keyFile: path.join(__dirname, 'credentials.json') }),
+      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+    });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const r = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Baterias!A:G',
+    });
+    const filas = (r.data.values || []).slice(1);
+
+    const filaAStock = row => {
+      const stockVictoria = parseInt(row[3]) || 0;
+      const stockNordelta = parseInt(row[4]) || 0;
+      return {
+        codArt: row[0], descripcion: row[1], codAlternativo: row[2] || '',
+        precio: parseInt(row[6]) || 0, stockVictoria, stockNordelta,
+        stockPropio: stockVictoria + stockNordelta,
+      };
+    };
+    const buscarCodigo = codigo => {
+      if (!codigo) return null;
+      const matches = filas.filter(row => {
+        const desc = (row[1] || '').toUpperCase();
+        const codAlt = (row[2] || '').toUpperCase();
+        return codAlt === codigo || desc.includes(codigo);
+      });
+      return matches.reduce((mejor, row) => {
+        const s = filaAStock(row);
+        if (!mejor || s.stockPropio > mejor.stockPropio) return s;
+        return mejor;
+      }, null);
+    };
+
+    let stock = buscarCodigo(battery);
+    let codigoUsado = battery;
+    if ((!stock || stock.stockPropio === 0) && batteryAlt) {
+      const stockAlt = buscarCodigo(batteryAlt);
+      if (stockAlt && (!stock || stockAlt.stockPropio > stock.stockPropio)) {
+        stock = stockAlt;
+        codigoUsado = batteryAlt;
+      }
+    }
+
+    res.json({ vehiculo, battery, batteryAlt, codigoUsado, stock: stock || null });
+  } catch (err) {
+    console.error('Error moura/buscar:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Catálogo Auto Experts (Fras-le): pastillas de freno por vehículo ---
+// API pública de autoexperts.parts (Frasle Mobility). Requiere el header
+// "x-region" (no es un campo del body) y devuelve, por cada producto, el
+// array completo de vehículos donde aplica (marca/nombre/motor/año desde-hasta).
+const AUTOEXPERTS_API = 'https://api.autoexperts.parts/autexp/bff/v1/catalog/products';
+const AUTOEXPERTS_PASTILLA_FRENO_ID = 'c33fa8a0-ea3d-489e-9657-b1271e67d6c9';
+const AUTOEXPERTS_FRASLE_BRAND_ID = '817d687b-ff60-4266-bf84-8045a33ae67f';
+
+router.get('/frasle/marcas', authMiddleware, (req, res) => {
+  res.json(FRAM_MARCAS);
+});
+
+async function autoexpertsBuscarProductos(body) {
+  const r = await fetch(AUTOEXPERTS_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-region': 'ar' },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error('autoexperts.parts respondió ' + r.status);
+  return r.json();
+}
+
+// Trae TODAS las páginas (la API limita "take" a 50 por página) para un filtro de vehículo dado
+async function autoexpertsBuscarTodosLosProductos(vehiclesFiltro) {
+  let productos = [];
+  let skip = 0;
+  for (let pagina = 0; pagina < 5; pagina++) {
+    const data = await autoexpertsBuscarProductos({
+      productGroups: [AUTOEXPERTS_PASTILLA_FRENO_ID],
+      brands: [AUTOEXPERTS_FRASLE_BRAND_ID],
+      vehicles: vehiclesFiltro,
+      skip,
+    });
+    productos = productos.concat(data.data || []);
+    if (!data.total || productos.length >= data.total) break;
+    skip += (data.data || []).length || 50;
+  }
+  return productos;
+}
+
+// Caché de modelos por marca: no hay un endpoint de "listar modelos", así que se arma
+// trayendo todos los productos de la marca y sacando los nombres únicos de vehicles[].
+let frasleModelosCache = {};
+
+async function frasleObtenerModelos(marca) {
+  const ahora = Date.now();
+  const cache = frasleModelosCache[marca];
+  if (cache && ahora - cache.ts < 12 * 60 * 60 * 1000) return cache.data;
+
+  const productos = await autoexpertsBuscarTodosLosProductos({ brands: marca });
+  const modelos = new Set();
+  for (const p of productos) {
+    for (const v of (p.vehicles || [])) {
+      if (v.brand === marca && v.name) modelos.add(v.name);
+    }
+  }
+  const lista = [...modelos].sort();
+  frasleModelosCache[marca] = { data: lista, ts: ahora };
+  return lista;
+}
+
+router.get('/frasle/modelos', authMiddleware, async (req, res) => {
+  try {
+    const marca = (req.query.marca || '').toString().trim().toUpperCase();
+    if (!marca) return res.json([]);
+    const modelos = await frasleObtenerModelos(marca);
+    res.json(modelos);
+  } catch (err) {
+    console.error('Error frasle/modelos:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/frasle/buscar', authMiddleware, async (req, res) => {
+  try {
+    const marca = (req.query.marca || '').toString().trim().toUpperCase();
+    const modelo = (req.query.modelo || '').toString().trim().toUpperCase();
+    if (!marca || !modelo) return res.status(400).json({ error: 'Faltan marca/modelo' });
+
+    const productos = await autoexpertsBuscarTodosLosProductos({ brands: marca, names: modelo });
+
+    // Extraer, por cada producto que aplica a esta marca+modelo, la versión/motor y el rango de años
+    const versiones = new Map();
+    for (const p of productos) {
+      for (const v of (p.vehicles || [])) {
+        if (v.brand !== marca || v.name !== modelo) continue;
+        const key = [v.model, v.startYear, v.endYear, p.partNumber].join('|');
+        if (versiones.has(key)) continue;
+        versiones.set(key, {
+          version: v.model || '', anioDesde: v.startYear, anioHasta: v.endYear,
+          partNumber: p.partNumber, descripcion: p.applicationDescription,
+        });
+      }
+    }
+    const lista = [...versiones.values()].sort((a, b) =>
+      (a.version || '').localeCompare(b.version || '') || (a.anioDesde || 0) - (b.anioDesde || 0));
+
+    if (lista.length === 0) return res.json([]);
+
+    const auth = new google.auth.GoogleAuth({
+      ...(process.env.GOOGLE_CREDENTIALS
+        ? { credentials: GOOGLE_CREDS }
+        : { keyFile: path.join(__dirname, 'credentials.json') }),
+      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+    });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const r = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Frasle!A:G',
+    });
+    const filas = (r.data.values || []).slice(1);
+
+    const filaAStock = row => {
+      const stockVictoria = parseInt(row[3]) || 0;
+      const stockNordelta = parseInt(row[4]) || 0;
+      return {
+        codArt: row[0], descripcion: row[1], codAlternativo: row[2] || '',
+        precio: parseInt(row[6]) || 0, stockVictoria, stockNordelta,
+        stockPropio: stockVictoria + stockNordelta,
+      };
+    };
+    const buscarCodigo = partNumber => {
+      const codigo = partNumber.toUpperCase();
+      const codigoBase = codigo.split('-')[0]; // ej "PD/1699-CMAXX" -> "PD/1699"
+      const matches = filas.filter(row => {
+        const desc = (row[1] || '').toUpperCase();
+        const codAlt = (row[2] || '').toUpperCase();
+        return codAlt === codigo || codAlt === codigoBase || desc.includes(codigo) || desc.includes(codigoBase);
+      });
+      return matches.reduce((mejor, row) => {
+        const s = filaAStock(row);
+        if (!mejor || s.stockPropio > mejor.stockPropio) return s;
+        return mejor;
+      }, null);
+    };
+
+    const resultado = lista.map(v => ({ ...v, stock: buscarCodigo(v.partNumber) }));
+    res.json(resultado);
+  } catch (err) {
+    console.error('Error frasle/buscar:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- Imágenes de productos ---
 let imagenesCache = null;
 let imagenesCacheTs = 0;
@@ -212,12 +746,15 @@ router.get('/mis-stats', authMiddleware, async (req, res) => {
 // --- Guardar presupuesto en Google Sheets ---
 router.post('/guardar-presupuesto', express.json(), authMiddleware, async (req, res) => {
   try {
-    const { cliente, tel, num, fecha, items } = req.body;
+    const { cliente, tel, num, fecha, items, servicios } = req.body;
     const vendedor = req.user.nombre;
     const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
     const sheets = google.sheets({ version: 'v4', auth });
 
-    const productos = items.map(i => i.descripcion).join(' | ');
+    // Si no hay neumáticos (presupuesto solo de servicios/filtros), usar el resumen como descripción
+    const productos = items.length > 0
+      ? items.map(i => i.descripcion).join(' | ')
+      : (servicios && servicios.resumen ? servicios.resumen : '');
     const total = items.reduce((s, i) => s + Math.round(i.precio * 0.80) * 4, 0);
 
     // Generar token único para URL pública
@@ -282,13 +819,13 @@ function renderPresupuestoPage(res, row, autoPrint) {
         🔧 <strong>Servicios:</strong> ${datos.servicios.resumen}
       </div>`;
     }
-  } else {
+  } else if (productos) {
     productosHtml = productos.split(' | ').map(p => `<div style="padding:8px 0;border-bottom:1px solid #eee">${p}</div>`).join('');
   }
 
   let tablaUnitarios = '';
   let tablaResumen = '';
-  if (datos && datos.items) {
+  if (datos && datos.items && datos.items.length > 0) {
     const cant = datos.cant || 4;
     const fp12 = datos.fp12 !== false;
     const fp6  = datos.fp6 !== false;
@@ -341,10 +878,25 @@ function renderPresupuestoPage(res, row, autoPrint) {
         <table style="width:100%;border-collapse:collapse"><thead><tr>${headers2}</tr></thead><tbody>${row2}</tbody></table>
       </div>`;
     }
+  }
 
-    if (datos.servicios && datos.servicios.resumen) {
-      tablaResumen += `<div style="background:#f0f7ff;padding:12px;border-radius:8px;font-size:13px;margin-top:8px">🔧 <strong>Servicios:</strong> ${datos.servicios.resumen}</div>`;
+  if (datos && datos.servicios && Array.isArray(datos.servicios.filtros) && datos.servicios.filtros.length > 0) {
+    const s = datos.servicios;
+    let filas = '';
+    if (s.vehiculo) filas += `<tr><td colspan="2" style="padding:0 0 10px;font-weight:700;font-size:14px;color:#1a1a2e">${s.vehiculo}</td></tr>`;
+    for (const f of s.filtros) {
+      filas += `<tr><td style="padding:8px 0;border-bottom:1px solid #dbe7f5">${f.descripcion}</td><td style="padding:8px 0;border-bottom:1px solid #dbe7f5;text-align:right;white-space:nowrap">${fmt(f.precio)}</td></tr>`;
     }
+    if (s.manoDeObra > 0) {
+      filas += `<tr><td style="padding:8px 0;border-bottom:1px solid #dbe7f5">Mano de obra</td><td style="padding:8px 0;border-bottom:1px solid #dbe7f5;text-align:right;white-space:nowrap">${fmt(s.manoDeObra)}</td></tr>`;
+    }
+    filas += `<tr><td style="padding:10px 0 0;font-weight:700;font-size:15px">Total aprox.</td><td style="padding:10px 0 0;font-weight:700;font-size:15px;text-align:right;color:#e63946;white-space:nowrap">${fmt(s.total)}</td></tr>`;
+    tablaResumen += `<div style="background:#f0f7ff;padding:14px 16px;border-radius:8px;margin-top:8px">
+      🔧 <strong>${s.titulo || 'Cambio de aceite y filtros'}</strong>
+      <table style="width:100%;border-collapse:collapse;margin-top:8px">${filas}</table>
+    </div>`;
+  } else if (datos && datos.servicios && datos.servicios.resumen) {
+    tablaResumen += `<div style="background:#f0f7ff;padding:12px;border-radius:8px;font-size:13px;margin-top:8px">🔧 <strong>Servicios:</strong> ${datos.servicios.resumen}</div>`;
   }
 
   res.send(`<!DOCTYPE html>

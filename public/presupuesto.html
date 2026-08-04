@@ -128,6 +128,9 @@
   <header>
     <h1>🔴 Neumáticos Gallo</h1>
     <div style="display:flex;align-items:center;gap:12px">
+      <a href="/app/presupuesto-lubri.html" style="color:white;font-size:13px;opacity:0.8;text-decoration:none">🔧 Presupuesto Lubri</a>
+      <a href="/app/presupuesto-baterias.html" style="color:white;font-size:13px;opacity:0.8;text-decoration:none">🔋 Presupuesto Baterías</a>
+      <a href="/app/presupuesto-frenos.html" style="color:white;font-size:13px;opacity:0.8;text-decoration:none">🛑 Presupuesto Frenos</a>
       <a href="/app/dashboard.html" style="color:white;font-size:13px;opacity:0.8;text-decoration:none">🏠 Dashboard</a>
       <a href="/app/seguimiento.html" style="color:white;font-size:13px;opacity:0.8;text-decoration:none">📊 Seguimiento</a>
       <a href="/app/conversaciones.html" style="color:white;font-size:13px;opacity:0.8;text-decoration:none">💬 Conversaciones</a>
@@ -449,6 +452,10 @@
       if (manual) manual.style.display = sel === 'manual' ? 'block' : 'none';
     }
 
+    function actualizarBotonGenerar() {
+      document.getElementById('btn-generar-wrap').style.display = Object.keys(seleccionados).length > 0 ? 'block' : 'none';
+    }
+
     function fmt(n) {
       return '$' + Math.round(n).toLocaleString('es-AR');
     }
@@ -488,9 +495,9 @@
       if (!medida1) { alert('Ingresá al menos una medida'); return; }
 
       document.getElementById('resultados').innerHTML = '<div class="loading">🔍 Buscando...</div>';
-      document.getElementById('btn-generar-wrap').style.display = 'none';
       document.getElementById('presupuesto-generado').style.display = 'none';
       seleccionados = {};
+      actualizarBotonGenerar();
       await cargarImagenes();
 
       const medidas = [medida1];
@@ -588,7 +595,21 @@
         seleccionados[idx] = { ...p, cantidad: 4 };
         card.classList.add('seleccionado');
       }
-      document.getElementById('btn-generar-wrap').style.display = Object.keys(seleccionados).length > 0 ? 'block' : 'none';
+      actualizarBotonGenerar();
+    }
+
+    function resumenServiciosNeumaticos() {
+      const svCant  = parseInt(document.getElementById('sv-cant')?.value || 0);
+      const sbCant  = parseInt(document.getElementById('sb-cant')?.value || 0);
+      const saTipo  = document.getElementById('sa-tipo')?.value || '';
+      const ssPrecio = getSsPrecio();
+      const ssPago  = document.getElementById('ss-pago')?.value || 'Contado o 3 pagos sin interés';
+      const partes = [];
+      if (svCant > 0) partes.push(svCant + ' válvula' + (svCant > 1 ? 's' : ''));
+      if (sbCant > 0) partes.push(sbCant + ' balanceo' + (sbCant > 1 ? 's' : ''));
+      if (saTipo) partes.push(saTipo);
+      if (partes.length === 0 || ssPrecio === 0) return '';
+      return partes.join(', ') + ' — ' + fmt(ssPrecio) + ' aprox. (' + ssPago + ')';
     }
 
     function generarPresupuesto() {
@@ -607,15 +628,7 @@
       document.getElementById('presup-tel').textContent = tel;
 
       // Recopilar todos los datos ANTES de guardar
-      const svCant   = parseInt(document.getElementById('sv-cant')?.value || 0);
-      const sbCant   = parseInt(document.getElementById('sb-cant')?.value || 0);
-      const saTipo   = document.getElementById('sa-tipo')?.value || '';
-      const ssPrecio = getSsPrecio();
-      const ssPago   = document.getElementById('ss-pago')?.value || '';
-      const sPartes  = [];
-      if (svCant > 0) sPartes.push(svCant + ' válvula' + (svCant > 1 ? 's' : ''));
-      if (sbCant > 0) sPartes.push(sbCant + ' balanceo' + (sbCant > 1 ? 's' : ''));
-      if (saTipo) sPartes.push(saTipo);
+      const resumen = resumenServiciosNeumaticos();
 
       presupuestoActual = {
         cliente, tel, num, fecha,
@@ -625,7 +638,7 @@
         fp6:   document.getElementById('fp6')?.checked,
         fp3:   document.getElementById('fp3')?.checked,
         fp1:   document.getElementById('fp1')?.checked,
-        servicios: (sPartes.length > 0 && ssPrecio > 0) ? { resumen: sPartes.join(', ') + ' — ' + fmt(ssPrecio) + ' aprox. (' + ssPago + ')' } : null,
+        servicios: resumen ? { resumen } : null,
         linkPublico: null
       };
 
@@ -648,7 +661,12 @@
 
     function recalcular() {
       const items = Object.values(seleccionados);
-      if (items.length === 0) return;
+      if (items.length === 0) {
+        document.getElementById('tabla-unitarios').innerHTML = '';
+        document.getElementById('tabla-totales').innerHTML = '';
+        calcularServicios();
+        return;
+      }
 
       const cant = parseInt(document.getElementById('select-cantidad')?.value || 4);
       const fp12 = document.getElementById('fp12')?.checked;
@@ -719,24 +737,13 @@
     }
 
     function calcularServicios() {
-      const svCant  = parseInt(document.getElementById('sv-cant')?.value || 0);
-      const sbCant  = parseInt(document.getElementById('sb-cant')?.value || 0);
-      const saTipo  = document.getElementById('sa-tipo')?.value || '';
-      const ssPrecio = getSsPrecio();
-      const ssPago  = document.getElementById('ss-pago')?.value || 'Contado o 3 pagos sin interés';
+      const resumen = resumenServiciosNeumaticos();
 
-      const partes = [];
-      if (svCant > 0) partes.push(svCant + ' válvula' + (svCant > 1 ? 's' : ''));
-      if (sbCant > 0) partes.push(sbCant + ' balanceo' + (sbCant > 1 ? 's' : ''));
-      if (saTipo) partes.push(saTipo);
-
-      if (partes.length === 0 || ssPrecio === 0) {
+      if (!resumen) {
         document.getElementById('servicios-hoja1').innerHTML = '';
         document.getElementById('servicios-hoja2').innerHTML = '';
         return;
       }
-
-      const resumen = partes.join(', ') + ' — ' + fmt(ssPrecio) + ' aprox. (' + ssPago + ')';
 
       const html = '<div style="margin-top:16px;padding:12px 16px;background:#f0f7ff;border-radius:8px;border-left:4px solid #1a1a2e">' +
         '<p style="font-weight:700;margin-bottom:6px">🔧 Servicios adicionales</p>' +
@@ -772,13 +779,6 @@
       const fp3  = document.getElementById('fp3')?.checked;
       const fp1  = document.getElementById('fp1')?.checked;
 
-      // Servicios
-      const svCant  = parseInt(document.getElementById('sv-cant')?.value || 0);
-      const sbCant  = parseInt(document.getElementById('sb-cant')?.value || 0);
-      const saTipo  = document.getElementById('sa-tipo')?.value || '';
-      const ssPrecio = getSsPrecio();
-      const ssPago  = document.getElementById('ss-pago')?.value || '';
-
       const vendedor = localStorage.getItem('vendedor') || '';
       let msg = `🔴 *Neumáticos Gallo* — Presupuesto ${num}\n`;
       msg += `👤 ${cliente}`;
@@ -805,13 +805,9 @@
         msg += '\n';
       }
 
-      // Servicios
-      const sPartes = [];
-      if (svCant > 0) sPartes.push(svCant + ' válvula' + (svCant > 1 ? 's' : ''));
-      if (sbCant > 0) sPartes.push(sbCant + ' balanceo' + (sbCant > 1 ? 's' : ''));
-      if (saTipo) sPartes.push(saTipo);
-      if (sPartes.length > 0 && ssPrecio > 0) {
-        msg += `🔧 *Servicios:* ${sPartes.join(', ')} — ${fmt(ssPrecio)} aprox. (${ssPago})\n\n`;
+      const resumenServ = resumenServiciosNeumaticos();
+      if (resumenServ) {
+        msg += `🔧 *Servicios:* ${resumenServ}\n\n`;
       }
 
       msg += `✅ Garantía 5 años por defecto de fabricación\n`;
@@ -856,11 +852,6 @@
       const fp6  = document.getElementById('fp6')?.checked;
       const fp3  = document.getElementById('fp3')?.checked;
       const fp1  = document.getElementById('fp1')?.checked;
-      const svCant  = parseInt(document.getElementById('sv-cant')?.value || 0);
-      const sbCant  = parseInt(document.getElementById('sb-cant')?.value || 0);
-      const saTipo  = document.getElementById('sa-tipo')?.value || '';
-      const ssPrecio = getSsPrecio();
-      const ssPago  = document.getElementById('ss-pago')?.value || '';
 
       const vendedor = localStorage.getItem('vendedor') || '';
       let msg = 'Hola ' + cliente + '! Te enviamos el presupuesto ' + num + ' de Neumaticos Gallo.\n\n';
@@ -884,12 +875,9 @@
         if (fp1)  msg += '  Contado (-20%): ' + fmt(c1) + '\n';
         msg += '\n';
       }
-      const sPartes = [];
-      if (svCant > 0) sPartes.push(svCant + ' válvula' + (svCant > 1 ? 's' : ''));
-      if (sbCant > 0) sPartes.push(sbCant + ' balanceo' + (sbCant > 1 ? 's' : ''));
-      if (saTipo) sPartes.push(saTipo);
-      if (sPartes.length > 0 && ssPrecio > 0) {
-        msg += 'Servicios: ' + sPartes.join(', ') + ' aprox. ' + fmt(ssPrecio) + ' (' + ssPago + ')\n\n';
+      const resumenServ = resumenServiciosNeumaticos();
+      if (resumenServ) {
+        msg += 'Servicios: ' + resumenServ + '\n\n';
       }
       if (linkPublico) { msg += 'Ver presupuesto completo: ' + linkPublico + '\n\n'; }
       msg += 'Garantia 5 anos. Colocacion sin cargo.\n';

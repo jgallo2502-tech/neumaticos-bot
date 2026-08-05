@@ -1,5 +1,12 @@
 require('dotenv').config();
 
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection:', reason?.message || reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err.message);
+});
+
 // Parsear credenciales Google UNA sola vez y corregir private_key
 // Railway guarda los \n como literales en env vars
 let GOOGLE_CREDS;
@@ -57,7 +64,7 @@ function registrarMensajeSesion(numero, rol, texto) {
 
   // Reiniciar timer de inactividad
   if (sesion.timer) clearTimeout(sesion.timer);
-  sesion.timer = setTimeout(() => enviarEncuesta(numero), INACTIVIDAD_ENCUESTA_MS);
+  sesion.timer = setTimeout(() => enviarEncuesta(numero).catch(e => console.error('enviarEncuesta error:', e.message)), INACTIVIDAD_ENCUESTA_MS);
 }
 
 async function guardarAlerta(numero, mensaje) {
@@ -108,7 +115,7 @@ async function enviarEncuesta(numero) {
   } catch(e) { console.error('Error enviando encuesta:', e.message); }
   // Si no responden en 10 min, cerrar igual
   if (sesion.timer) clearTimeout(sesion.timer);
-  sesion.timer = setTimeout(() => cerrarSesion(numero), INACTIVIDAD_CIERRE_MS);
+  sesion.timer = setTimeout(() => cerrarSesion(numero).catch(e => console.error('cerrarSesion error:', e.message)), INACTIVIDAD_CIERRE_MS);
 }
 
 async function cerrarSesion(numero) {

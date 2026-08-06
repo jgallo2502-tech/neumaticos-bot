@@ -121,6 +121,15 @@
     .nota { font-size: 11px; color: #888; margin-top: 16px; line-height: 1.5; }
     .loading { text-align: center; padding: 30px; color: #888; }
     .sin-stock { text-align: center; padding: 30px; color: #888; background: #f9f9f9; border-radius: 10px; }
+    /* Campaña */
+    #campana-card table { width:100%; border-collapse:collapse; font-size:13px; }
+    #campana-card th { background:#1a1a2e; color:white; padding:8px 10px; text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
+    #campana-card td { padding:8px 10px; border-bottom:1px solid #f0f0f0; vertical-align:middle; }
+    #campana-card tr:last-child td { border-bottom:none; }
+    #campana-card tr:hover td { background:#fafafa; }
+    .sem-header { font-size:12px; font-weight:700; color:#555; padding:10px 0 6px; text-transform:uppercase; letter-spacing:.5px; border-top:2px solid #e63946; margin-top:12px; }
+    .tel-link { color:#e63946; text-decoration:none; font-weight:600; }
+    .tel-link:hover { text-decoration:underline; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -157,6 +166,17 @@
           <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Últimos 7 días</div>
           <canvas id="chart-7d" height="60"></canvas>
         </div>
+      </div>
+    </div>
+
+    <!-- Clientes para llamar (campaña rotación) -->
+    <div class="card no-print" id="campana-card" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+        <h2 style="margin:0">📞 Mis clientes para llamar</h2>
+        <span id="campana-badge" style="font-size:12px;background:#fff3cd;color:#856404;padding:4px 10px;border-radius:20px;font-weight:600"></span>
+      </div>
+      <div id="campana-body">
+        <div style="text-align:center;padding:20px;color:#999;font-size:13px">Cargando...</div>
       </div>
     </div>
 
@@ -424,6 +444,51 @@
       } catch(e) { console.error('stats:', e); }
     }
     cargarStats();
+
+    // --- Clientes de campaña (solo vendedores, no admin) ---
+    if (localStorage.getItem('rol') !== 'admin') {
+      async function cargarCampana() {
+        try {
+          const r = await fetch('/app/campana/vendedor', { headers: { 'Authorization': 'Bearer ' + token } });
+          if (!r.ok) return;
+          const data = await r.json();
+          const card = document.getElementById('campana-card');
+          const body = document.getElementById('campana-body');
+          const badge = document.getElementById('campana-badge');
+
+          if (!data.semanas || data.semanas.length === 0 || data.total === 0) {
+            card.style.display = 'block';
+            body.innerHTML = '<div style="text-align:center;padding:14px;color:#999;font-size:13px">No hay clientes para llamar en las últimas semanas.</div>';
+            return;
+          }
+
+          badge.textContent = data.total + ' clientes';
+          let html = '<table><thead><tr><th>Patente</th><th>Cliente</th><th>Teléfono</th><th>Neumáticos</th><th>Vehículo</th><th>Fecha</th></tr></thead><tbody>';
+
+          for (const sem of data.semanas) {
+            if (sem.clientes.length === 0) continue;
+            html += '<tr><td colspan="6" style="padding:10px 0 4px;border:none"><div class="sem-header">🗓 ' + sem.label + ' — ' + sem.total + ' cliente' + (sem.total !== 1 ? 's' : '') + '</div></td></tr>';
+            for (const c of sem.clientes) {
+              const tel = (c.tel || '').replace(/\D/g, '');
+              const telLink = tel ? '<a class="tel-link" href="https://wa.me/549' + tel + '" target="_blank">' + c.tel + '</a>' : (c.tel || '-');
+              html += '<tr>' +
+                '<td><strong>' + (c.patente || '-') + '</strong></td>' +
+                '<td>' + (c.cliente || '-') + '</td>' +
+                '<td>' + telLink + '</td>' +
+                '<td style="font-size:12px">' + (c.neu_detalle || (Math.round(c.neu_uds) + 'x')) + '</td>' +
+                '<td style="font-size:12px">' + (c.vehiculo || '-') + '</td>' +
+                '<td style="font-size:12px;white-space:nowrap">' + (c.fecha || '-') + '</td>' +
+              '</tr>';
+            }
+          }
+
+          html += '</tbody></table>';
+          body.innerHTML = html;
+          card.style.display = 'block';
+        } catch(e) { console.error('campana:', e); }
+      }
+      cargarCampana();
+    }
 
     let seleccionados = {};
     let presupuestoActual = null;

@@ -112,9 +112,36 @@
           return;
         }
 
-        let html = '<table><thead><tr><th>Patente</th><th>Cliente</th><th>Teléfono</th><th>Neumáticos</th><th>Vehículo</th><th>KM</th><th>Fecha visita</th><th>Nro. Factura</th></tr></thead><tbody>';
+        const sucursal = localStorage.getItem('sucursal') || 'Victoria';
+        const CALENDLY = sucursal === 'Nordelta'
+          ? 'https://calendly.com/neumaticosgallo/nordelta'   // ← reemplazar con link real Nordelta
+          : 'https://calendly.com/neumaticosgallo/victoria';  // ← reemplazar con link real Victoria
 
-        for (const c of clientes) {
+        function mensajeWA(c) {
+          const nombre = (c.cliente || '').split(' ')[0];
+          const nombre_fmt = nombre.charAt(0).toUpperCase() + nombre.slice(1).toLowerCase();
+          const vehiculo = c.vehiculo ? ' tu ' + c.vehiculo : ' tu vehículo';
+          return '¡Hola ' + nombre_fmt + '! 👋 ¿Cómo andás?\n\n' +
+            'Desde *Neumáticos Gallo* te queremos hacer un regalo 🎁\n\n' +
+            'Como cambiaste tus neumáticos con nosotros hace 6 meses, te invitamos a venir a visitarnos *sin cargo* para hacer la rotación y alineación de' + vehiculo + ', como corresponde para mantenerlos en perfecto estado.\n\n' +
+            '📅 Para que no esperes, reservá tu turno acá:\n' + CALENDLY + '\n\n' +
+            'Te mando un abrazo y nos vemos pronto! 🤗\n_Neumáticos Gallo_';
+        }
+
+        function copiar(idx) {
+          const c = clientes[idx];
+          navigator.clipboard.writeText(mensajeWA(c)).then(() => {
+            const btn = document.getElementById('btn-copy-' + idx);
+            btn.textContent = '✅ Copiado';
+            btn.style.background = '#2d6a4f';
+            setTimeout(() => { btn.textContent = '📋 Copiar mensaje'; btn.style.background = ''; }, 2500);
+          });
+        }
+
+        let html = '<table><thead><tr><th>Patente</th><th>Cliente</th><th>Teléfono</th><th>Neumáticos</th><th>Vehículo</th><th>KM</th><th>Fecha visita</th><th></th></tr></thead><tbody>';
+
+        for (let i = 0; i < clientes.length; i++) {
+          const c = clientes[i];
           const telLimpio = (c.tel || '').replace(/\D/g, '');
           const telLink = telLimpio
             ? '<a class="tel-link" href="https://wa.me/549' + telLimpio + '" target="_blank">📱 ' + c.tel + '</a>'
@@ -128,7 +155,7 @@
             '<td style="font-size:12px">' + (c.vehiculo || '-') + '</td>' +
             '<td style="font-size:12px;color:#888">' + km + '</td>' +
             '<td style="font-size:12px;white-space:nowrap">' + (c.fecha || '-') + '</td>' +
-            '<td style="font-size:12px;color:#888">' + (c.nro_fact || '-') + '</td>' +
+            '<td><button id="btn-copy-' + i + '" onclick="copiar(' + i + ')" style="background:#1a1a2e;color:white;border:none;padding:7px 12px;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap">📋 Copiar mensaje</button></td>' +
           '</tr>';
         }
 

@@ -57,8 +57,8 @@ router.post('/login', express.json(), (req, res) => {
   const { usuario, password } = req.body;
   const user = USUARIOS.find(u => u.usuario === usuario && u.password === password);
   if (!user) return res.status(401).json({ error: 'Inválido' });
-  const token = jwt.sign({ usuario: user.usuario, nombre: user.nombre, rol: user.rol }, JWT_SECRET, { expiresIn: '12h' });
-  res.json({ token, nombre: user.nombre, rol: user.rol });
+  const token = jwt.sign({ usuario: user.usuario, nombre: user.nombre, rol: user.rol, sucursal: user.sucursal }, JWT_SECRET, { expiresIn: '12h' });
+  res.json({ token, nombre: user.nombre, rol: user.rol, sucursal: user.sucursal });
 });
 
 // --- Buscar precios (reutiliza lógica del bot) ---

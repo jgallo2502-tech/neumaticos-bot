@@ -117,6 +117,7 @@
         localStorage.setItem('token', data.token);
         localStorage.setItem('vendedor', data.nombre);
         localStorage.setItem('rol', data.rol);
+        localStorage.setItem('sucursal', data.sucursal || 'Victoria');
         window.location.href = '/app/dashboard.html';
       } else {
         errorEl.style.display = 'block';

@@ -133,14 +133,86 @@
       </div>
     </div>
 
-    <!-- Trabajos -->
+    <!-- Trabajos / Neumáticos -->
     <div class="card">
-      <div class="card-title">🔧 Trabajos a realizar</div>
+      <div class="card-title">🔧 Neumáticos</div>
       <div id="trabajos-list"></div>
-      <div style="display:flex;gap:8px;margin-top:8px">
-        <button class="btn-add" onclick="agregarNeumatico('',0,4)" style="flex:1">🔧 Agregar neumático</button>
-        <button class="btn-add" onclick="agregarServicio()" style="flex:1">+ Agregar servicio / ítem</button>
+      <button class="btn-add" onclick="agregarNeumatico('',0,4)" style="width:100%;margin-top:8px">+ Agregar neumático</button>
+    </div>
+
+    <!-- Servicios adicionales -->
+    <div class="card">
+      <div class="card-title">⚙️ Servicios adicionales</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:14px;align-items:end">
+        <div class="field">
+          <label>Válvulas</label>
+          <select id="sv-cant" onchange="recalcTotal()">
+            <option value="0">No incluir</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Balanceos</label>
+          <select id="sb-cant" onchange="recalcTotal()">
+            <option value="0">No incluir</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Alineación</label>
+          <select id="sa-tipo" onchange="recalcTotal()">
+            <option value="">No incluir</option>
+            <option value="Alineación">Alineación</option>
+            <option value="Alineación Integral">Alineación Integral</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Precio servicios</label>
+          <select id="ss-precio" onchange="toggleSsPrecioManual(); recalcTotal()">
+            <option value="0">Sin precio</option>
+            <option value="10000">$10.000</option>
+            <option value="15000">$15.000</option>
+            <option value="20000">$20.000</option>
+            <option value="25000">$25.000</option>
+            <option value="30000">$30.000</option>
+            <option value="35000">$35.000</option>
+            <option value="40000">$40.000</option>
+            <option value="45000">$45.000</option>
+            <option value="50000">$50.000</option>
+            <option value="60000">$60.000</option>
+            <option value="70000">$70.000</option>
+            <option value="80000">$80.000</option>
+            <option value="90000">$90.000</option>
+            <option value="100000">$100.000</option>
+            <option value="110000">$110.000</option>
+            <option value="120000">$120.000</option>
+            <option value="130000">$130.000</option>
+            <option value="140000">$140.000</option>
+            <option value="150000">$150.000</option>
+            <option value="160000">$160.000</option>
+            <option value="170000">$170.000</option>
+            <option value="180000">$180.000</option>
+            <option value="200000">$200.000</option>
+            <option value="manual">Otro valor...</option>
+          </select>
+          <input type="number" id="ss-precio-manual" placeholder="Monto" style="display:none;margin-top:6px" oninput="recalcTotal()">
+        </div>
+        <div class="field">
+          <label>F. pago servicios</label>
+          <select id="ss-pago" onchange="recalcTotal()">
+            <option value="Contado o 3 pagos s/i">Contado o 3 pagos s/i</option>
+            <option value="Contado">Contado</option>
+            <option value="3 pagos sin interés">3 pagos sin interés</option>
+          </select>
+        </div>
       </div>
+      <div id="servicios-resumen" style="margin-top:12px;font-size:13px;color:#555;display:none"></div>
     </div>
 
     <!-- Observaciones -->
@@ -254,12 +326,12 @@
             agregarNeumatico(item.descripcion || '', item.precio || 0, cantPreso);
           }
           if (d.datos.servicios && d.datos.servicios.resumen) {
-            // Extraer precio del resumen si viene con formato "... — $140.000 aprox."
+            // Extraer precio del resumen "...descripción... — $140.000 aprox."
             const matchPrecio = d.datos.servicios.resumen.match(/\$([0-9.]+)/);
-            const precioServ = matchPrecio ? parseInt(matchPrecio[1].replace(/\./g,'')) : '0';
-            // Extraer descripción sin el precio
+            const precioServ = matchPrecio ? parseInt(matchPrecio[1].replace(/\./g,'')) : 0;
             const descServ = d.datos.servicios.resumen.replace(/ — \$.*$/, '').trim();
-            agregarServicio(descServ, precioServ.toString());
+            // Pre-rellenar panel de servicios
+            agregarServicio(descServ, precioServ ? precioServ.toString() : '0');
           }
         } else if (pProductos) {
           pProductos.split(' | ').filter(Boolean).forEach(p => agregarNeumatico(p, 0, 4));
@@ -329,19 +401,32 @@
       document.getElementById('loading-vehiculo').style.display = 'none';
     }
 
-    const PRECIOS_SERVICIO = [10000,15000,20000,25000,30000,35000,40000,45000,50000,60000,70000,80000,90000,100000,110000,120000,130000,140000,150000,160000,170000,180000,200000];
     const FP_FACTORES = { '12': 1, '6': 0.90, '3': 0.85, '1': 0.80 };
     const FP_LABELS   = { '12': '12 cuotas (lista)', '6': '6 cuotas (-10%)', '3': '3 cuotas (-15%)', '1': 'Contado (-20%)' };
     let trabajoCount = 0;
 
-    function precioOptsServicio(selVal = '0') {
-      let html = '<option value="0">— Sin precio —</option>';
-      for (const v of PRECIOS_SERVICIO) {
-        const label = '$' + v.toLocaleString('es-AR');
-        html += `<option value="${v}" ${selVal==v?'selected':''}>${label}</option>`;
-      }
-      html += `<option value="manual" ${selVal==='manual'?'selected':''}>Ingresar otro valor...</option>`;
-      return html;
+    function toggleSsPrecioManual() {
+      const sel = document.getElementById('ss-precio');
+      const manual = document.getElementById('ss-precio-manual');
+      manual.style.display = sel.value === 'manual' ? 'block' : 'none';
+      if (sel.value !== 'manual') manual.value = '';
+    }
+
+    function getPrecioServiciosPanel() {
+      const sel = document.getElementById('ss-precio');
+      if (sel.value === 'manual') return parseInt(document.getElementById('ss-precio-manual').value) || 0;
+      return parseInt(sel.value) || 0;
+    }
+
+    function getResumenServicios() {
+      const svCant = parseInt(document.getElementById('sv-cant').value) || 0;
+      const sbCant = parseInt(document.getElementById('sb-cant').value) || 0;
+      const saTipo = document.getElementById('sa-tipo').value;
+      const partes = [];
+      if (svCant > 0) partes.push(svCant + ' válvula' + (svCant > 1 ? 's' : ''));
+      if (sbCant > 0) partes.push(sbCant + ' balanceo' + (sbCant > 1 ? 's' : ''));
+      if (saTipo)     partes.push(saTipo);
+      return partes.join(' + ');
     }
 
     function agregarNeumatico(desc, precioBase, cantDefault) {
@@ -391,28 +476,35 @@
       calcTrab(n);
     }
 
+    // agregarServicio queda disponible por compatibilidad pero el panel de servicios
+    // es el mecanismo principal; se usa como fallback si hay items de servicio en datos JSON
     function agregarServicio(desc = '', precioVal = '0') {
-      trabajoCount++;
-      const n = trabajoCount;
-      const div = document.createElement('div');
-      div.className = 'trabajo-item';
-      div.id = 'trab-' + n;
-      div.dataset.tipo = 'servicio';
-      div.innerHTML = `
-        <div class="trab-row1">
-          <span class="trab-tipo-badge serv">Servicio</span>
-          <input type="text" class="trab-desc" value="${(desc+'').replace(/"/g,'&quot;')}" placeholder="Descripción del servicio">
-          <button class="btn-remove" onclick="document.getElementById('trab-${n}').remove(); recalcTotal()" title="Quitar">✕</button>
-        </div>
-        <div class="trab-row2">
-          <div class="trab-campo">
-            <label>Precio</label>
-            <select class="trab-precio-sel" onchange="toggleManualServicio(${n}); recalcTotal()">${precioOptsServicio(precioVal)}</select>
-            <input type="number" class="trab-precio-manual" placeholder="Ingresá el monto" min="0"
-              style="display:none;margin-top:6px;width:160px" oninput="recalcTotal()">
-          </div>
-        </div>`;
-      document.getElementById('trabajos-list').appendChild(div);
+      // Pre-rellenar el panel de servicios con datos del presupuesto
+      // Intentar parsear desc para extraer válvulas/balanceo/alineación
+      const precio = parseInt(precioVal) || 0;
+      if (precio) {
+        const ssPrecio = document.getElementById('ss-precio');
+        const opts = [...ssPrecio.options].map(o => parseInt(o.value));
+        if (opts.includes(precio)) {
+          ssPrecio.value = precio;
+        } else if (precio > 0) {
+          ssPrecio.value = 'manual';
+          document.getElementById('ss-precio-manual').style.display = 'block';
+          document.getElementById('ss-precio-manual').value = precio;
+        }
+        toggleSsPrecioManual();
+      }
+      // Detectar válvulas/balanceo/alineación en el resumen del desc
+      if (desc) {
+        const dLow = desc.toLowerCase();
+        const mVal = dLow.match(/(\d)\s*válvula/);
+        const mBal = dLow.match(/(\d)\s*balanceo/);
+        if (mVal) document.getElementById('sv-cant').value = mVal[1];
+        if (mBal) document.getElementById('sb-cant').value = mBal[1];
+        if (dLow.includes('integral')) document.getElementById('sa-tipo').value = 'Alineación Integral';
+        else if (dLow.includes('alineac')) document.getElementById('sa-tipo').value = 'Alineación';
+      }
+      recalcTotal();
     }
 
     function calcTrab(n) {
@@ -431,34 +523,29 @@
       recalcTotal();
     }
 
-    function toggleManualServicio(n) {
-      const div = document.getElementById('trab-' + n);
-      const sel = div?.querySelector('.trab-precio-sel');
-      const manual = div?.querySelector('.trab-precio-manual');
-      if (!sel || !manual) return;
-      manual.style.display = sel.value === 'manual' ? 'block' : 'none';
-    }
-
-    function getPrecioServicio(div) {
-      const sel = div.querySelector('.trab-precio-sel');
-      if (!sel) return 0;
-      if (sel.value === 'manual') return parseInt(div.querySelector('.trab-precio-manual')?.value) || 0;
-      return parseInt(sel.value) || 0;
-    }
-
     function recalcTotal() {
       let sum = 0;
       document.querySelectorAll('#trabajos-list .trabajo-item').forEach(div => {
-        if (div.dataset.tipo === 'neumatico') {
-          const base = parseFloat(div.dataset.precioBase) || 0;
-          const cant = parseInt(div.querySelector('.trab-cant')?.value) || 1;
-          const fp   = div.querySelector('.trab-fp')?.value || '12';
-          sum += Math.round(base * (FP_FACTORES[fp] || 1)) * cant;
-        } else {
-          sum += getPrecioServicio(div);
-        }
+        const base = parseFloat(div.dataset.precioBase) || 0;
+        const cant = parseInt(div.querySelector('.trab-cant')?.value) || 1;
+        const fp   = div.querySelector('.trab-fp')?.value || '12';
+        sum += Math.round(base * (FP_FACTORES[fp] || 1)) * cant;
       });
-      // total calculado desde items, no hay campo visible
+
+      // Sumar servicios del panel
+      sum += getPrecioServiciosPanel();
+
+      // Actualizar resumen de servicios
+      const resumen = getResumenServicios();
+      const precioServ = getPrecioServiciosPanel();
+      const resEl = document.getElementById('servicios-resumen');
+      if (resumen || precioServ) {
+        resEl.style.display = 'block';
+        resEl.innerHTML = '⚙️ ' + (resumen || 'Servicios') +
+          (precioServ ? ' — <strong style="color:#e63946">$' + precioServ.toLocaleString('es-AR') + '</strong>' : '');
+      } else {
+        resEl.style.display = 'none';
+      }
     }
 
     async function guardarOrden() {
@@ -480,22 +567,27 @@
       const trabajos = [...document.querySelectorAll('#trabajos-list .trabajo-item')].map(el => {
         const desc = el.querySelector('.trab-desc')?.value.trim() || '';
         if (!desc) return null;
-        if (el.dataset.tipo === 'neumatico') {
-          const base   = parseFloat(el.dataset.precioBase) || 0;
-          const cant   = parseInt(el.querySelector('.trab-cant')?.value) || 1;
-          const fp     = el.querySelector('.trab-fp')?.value || '12';
-          const factor = FP_FACTORES[fp] || 1;
-          const unit   = Math.round(base * factor);
-          return { descripcion: desc, tipo: 'neumatico', precioBase: base, cantidad: cant, formaPago: FP_LABELS[fp] || fp, precioUnit: unit, precio: unit * cant };
-        } else {
-          const precio = getPrecioServicio(el);
-          return { descripcion: desc, tipo: 'servicio', precio };
-        }
+        const base   = parseFloat(el.dataset.precioBase) || 0;
+        const cant   = parseInt(el.querySelector('.trab-cant')?.value) || 1;
+        const fp     = el.querySelector('.trab-fp')?.value || '12';
+        const factor = FP_FACTORES[fp] || 1;
+        const unit   = Math.round(base * factor);
+        return { descripcion: desc, tipo: 'neumatico', precioBase: base, cantidad: cant, formaPago: FP_LABELS[fp] || fp, precioUnit: unit, precio: unit * cant };
       }).filter(Boolean);
+
+      // Agregar servicios del panel si tienen precio o descripción
+      const resumenServ = getResumenServicios();
+      const precioServ  = getPrecioServiciosPanel();
+      const fpServ      = document.getElementById('ss-pago')?.value || '';
+      if (resumenServ || precioServ) {
+        trabajos.push({ descripcion: resumenServ || 'Servicios adicionales', tipo: 'servicio', precio: precioServ, formaPago: fpServ });
+      }
 
       if (!patente) { mostrarMsg('Ingresá la patente del vehículo.', 'err'); return; }
       if (!apellido && !nombre) { mostrarMsg('Ingresá al menos el nombre o apellido del cliente.', 'err'); return; }
-      if (trabajos.length === 0) { mostrarMsg('Agregá al menos un trabajo.', 'err'); return; }
+      const tieneNeumaticos = document.querySelectorAll('#trabajos-list .trabajo-item .trab-desc').length > 0;
+      const tieneServicios  = getResumenServicios() || getPrecioServiciosPanel();
+      if (!tieneNeumaticos && !tieneServicios) { mostrarMsg('Agregá al menos un neumático o servicio.', 'err'); return; }
 
       const body = {
         pToken, pNumero,

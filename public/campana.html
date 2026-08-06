@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Campaña — Neumáticos Gallo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #f5f5f5; color: #222; }
+    header {
+      background: #1a1a2e; color: white;
+      padding: 14px 24px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    header h1 { font-size: 18px; }
+    header nav { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    header nav a { color: white; font-size: 13px; opacity: 0.8; text-decoration: none; }
+    header nav a:hover { opacity: 1; }
+    .logout { background: none; border: 1px solid rgba(255,255,255,0.3); color: white; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .container { max-width: 1000px; margin: 24px auto; padding: 0 16px; }
+    .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    h2 { font-size: 18px; font-weight: 700; color: #1a1a2e; }
+
+    /* Filtros */
+    .filtros { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 20px; }
+    .filtros label { font-size: 13px; color: #555; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+    .filtros select { padding: 7px 12px; border: 2px solid #e8e8e8; border-radius: 8px; font-size: 14px; }
+    .btn-buscar { background: #e63946; color: white; border: none; padding: 9px 22px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .btn-buscar:hover { background: #c1121f; }
+
+    /* Tabla */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { background: #1a1a2e; color: white; padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; position: sticky; top: 0; }
+    td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafafa; }
+    .tel-link { color: #e63946; text-decoration: none; font-weight: 600; white-space: nowrap; }
+    .tel-link:hover { text-decoration: underline; }
+    .badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+    .badge-week { background: #fff3cd; color: #856404; }
+    .empty { text-align: center; padding: 40px; color: #999; font-size: 14px; }
+    .loading { text-align: center; padding: 40px; color: #aaa; font-size: 14px; }
+
+    /* Header de semana */
+    .sem-row td { background: #f8f9fa; font-weight: 700; font-size: 12px; color: #555; text-transform: uppercase; letter-spacing: .5px; padding: 8px 12px; border-top: 2px solid #e63946; }
+
+    .stat { font-size: 28px; font-weight: 700; color: #1a1a2e; }
+    .stat-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: .5px; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🔴 Neumáticos Gallo</h1>
+    <nav>
+      <a href="/app/presupuesto.html">🆕 Nuevo presupuesto</a>
+      <a href="/app/presupuesto-lubri.html">🔧 Lubri</a>
+      <a href="/app/presupuesto-baterias.html">🔋 Baterías</a>
+      <a href="/app/presupuesto-frenos.html">🛑 Frenos</a>
+      <a href="/app/dashboard.html">🏠 Dashboard</a>
+      <a href="/app/seguimiento.html">📊 Seguimiento</a>
+      <a href="/app/conversaciones.html">💬 Conversaciones</a>
+      <a href="/app/campana.html" style="opacity:1;font-weight:700">📞 Campaña</a>
+      <a href="/app/broadcast.html" id="nav-broadcast" style="display:none">📢 Broadcast</a>
+      <span id="vendedor-nombre" style="font-size:13px;opacity:0.7"></span>
+      <button class="logout" onclick="logout()">Salir</button>
+    </nav>
+  </header>
+
+  <div class="container">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+        <div>
+          <h2>📞 Clientes para llamar esta semana</h2>
+          <div style="font-size:13px;color:#888;margin-top:4px">Compraron neumáticos + balanceo + alineación en los últimos 7 días</div>
+        </div>
+        <div style="display:flex;gap:20px;align-items:center">
+          <div style="text-align:center">
+            <div id="stat-total" class="stat">—</div>
+            <div class="stat-label">Clientes</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="filtros">
+        <label><input type="checkbox" id="fil-bal" checked> Con balanceo</label>
+        <label><input type="checkbox" id="fil-ali" checked> Con alineación</label>
+        <select id="fil-neu">
+          <option value="2">Mín. 2 neumáticos</option>
+          <option value="1">Mín. 1 neumático</option>
+          <option value="4">Mín. 4 neumáticos</option>
+        </select>
+        <select id="fil-semanas">
+          <option value="1">Esta semana (7 días)</option>
+          <option value="2">Últimas 2 semanas</option>
+          <option value="4">Último mes</option>
+        </select>
+        <button class="btn-buscar" onclick="cargar()">🔍 Actualizar</button>
+      </div>
+
+      <div id="tabla-wrap">
+        <div class="loading">Cargando...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const token = localStorage.getItem('token');
+    if (!token) window.location.href = '/app/login.html';
+    document.getElementById('vendedor-nombre').textContent = localStorage.getItem('vendedor') || '';
+    if (localStorage.getItem('rol') === 'admin') document.getElementById('nav-broadcast').style.display = 'inline';
+
+    function logout() { localStorage.clear(); window.location.href = '/app/login.html'; }
+
+    async function cargar() {
+      const bal     = document.getElementById('fil-bal').checked ? '1' : '0';
+      const ali     = document.getElementById('fil-ali').checked ? '1' : '0';
+      const neuMin  = document.getElementById('fil-neu').value;
+      const semanas = document.getElementById('fil-semanas').value;
+      const wrap    = document.getElementById('tabla-wrap');
+
+      wrap.innerHTML = '<div class="loading">Cargando...</div>';
+
+      try {
+        const params = new URLSearchParams({ semanas, neu_min: neuMin, balanceo: bal, alineacion: ali });
+        const r = await fetch('/app/campana/vendedor?' + params, {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (r.status === 401) { window.location.href = '/app/login.html'; return; }
+        const data = await r.json();
+
+        document.getElementById('stat-total').textContent = data.total || 0;
+
+        if (!data.semanas || data.semanas.length === 0 || data.total === 0) {
+          wrap.innerHTML = '<div class="empty">✅ No hay clientes para llamar en el período seleccionado.</div>';
+          return;
+        }
+
+        let html = '<table><thead><tr><th>Patente</th><th>Cliente</th><th>Teléfono</th><th>Neumáticos</th><th>Vehículo</th><th>KM</th><th>Fecha visita</th><th>Nro. Factura</th></tr></thead><tbody>';
+
+        for (const sem of data.semanas) {
+          if (sem.clientes.length === 0) continue;
+          // Fila de cabecera de semana
+          html += '<tr class="sem-row"><td colspan="8">🗓 ' + sem.label + ' — ' + sem.total + ' cliente' + (sem.total !== 1 ? 's' : '') + '</td></tr>';
+          for (const c of sem.clientes) {
+            const telLimpio = (c.tel || '').replace(/\D/g, '');
+            const telLink = telLimpio
+              ? '<a class="tel-link" href="https://wa.me/549' + telLimpio + '" target="_blank">📱 ' + c.tel + '</a>'
+              : (c.tel || '-');
+            const km = c.km ? Number(c.km).toLocaleString('es-AR') + ' km' : '-';
+            html += '<tr>' +
+              '<td><strong>' + (c.patente || '-') + '</strong></td>' +
+              '<td>' + (c.cliente || '-') + '</td>' +
+              '<td>' + telLink + '</td>' +
+              '<td>' + (c.neu_detalle || (Math.round(c.neu_uds) + 'x')) + '</td>' +
+              '<td style="font-size:12px">' + (c.vehiculo || '-') + '</td>' +
+              '<td style="font-size:12px;color:#888">' + km + '</td>' +
+              '<td style="font-size:12px;white-space:nowrap">' + (c.fecha || '-') + '</td>' +
+              '<td style="font-size:12px;color:#888">' + (c.nro_fact || '-') + '</td>' +
+            '</tr>';
+          }
+        }
+
+        html += '</tbody></table>';
+        wrap.innerHTML = html;
+
+      } catch(e) {
+        console.error('campana:', e);
+        wrap.innerHTML = '<div class="empty" style="color:#e63946">Error al cargar. Intentá de nuevo.</div>';
+      }
+    }
+
+    cargar();
+  </script>
+</body>
+</html>

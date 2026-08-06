@@ -228,8 +228,17 @@
         `N° ${pNumero} — ${pCliente} — ${pProductos} — Total: $${parseInt(pTotal||0).toLocaleString('es-AR')}`;
     }
 
-    // Pre-completar teléfono del presupuesto
+    // Pre-completar datos del cliente desde el presupuesto
     if (pTel) document.getElementById('tel-cliente').value = pTel;
+    if (pCliente) {
+      const partes = pCliente.trim().split(/\s+/);
+      if (partes.length >= 2) {
+        document.getElementById('apellido').value = partes[0];
+        document.getElementById('nombre').value   = partes.slice(1).join(' ');
+      } else {
+        document.getElementById('apellido').value = pCliente;
+      }
+    }
 
     // Cargar items reales del presupuesto desde el backend
     async function cargarItemsPresupuesto() {

@@ -390,8 +390,8 @@
         renderTabla('tabla-seguimiento', enSeguim, true);
         renderTabla('tabla-hoy', hoy, false);
       } else {
-        // Vendedor: mostrar todos sus presupuestos con búsqueda
-        _todosPresupuestos = todos;
+        // Vendedor: ocultar No cerrado y mostrar con búsqueda
+        _todosPresupuestos = todos.filter(p => p.estado !== 'No cerrado');
         document.getElementById('cnt-mis-presup').textContent = todos.length;
         filtrarPresupuestos();
       }
@@ -435,7 +435,7 @@
               <option value="Vendido" ${p.estado==='Vendido'?'selected':''}>Vendido</option>
               <option value="No cerrado" ${p.estado==='No cerrado'?'selected':''}>No cerrado</option>
             </select>
-            <a href="/app/orden.html?fila=${p.fila}" style="background:#1a1a2e;color:white;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none;display:inline-flex;align-items:center">🔧 OS</a>
+            <a href="/app/orden.html?token=${encodeURIComponent(p.token||'')}&numero=${encodeURIComponent(p.numero||'')}&cliente=${encodeURIComponent(p.cliente||'')}&tel=${encodeURIComponent(p.tel||'')}&productos=${encodeURIComponent(p.productos||'')}&total=${encodeURIComponent(p.total||'')}" style="background:#1a1a2e;color:white;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none;display:inline-flex;align-items:center">🔧 OS</a>
           </td>
         </tr>`;
       }).join('');

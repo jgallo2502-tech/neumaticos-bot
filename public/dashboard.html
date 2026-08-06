@@ -125,31 +125,43 @@
       <div class="stat-card vencido"><div class="stat-num" id="s-vencido">-</div><div class="stat-label">Sin respuesta +48hs</div></div>
     </div>
 
-    <!-- Acciones del día: +48hs sin respuesta -->
-    <div class="seccion">
-      <div class="seccion-titulo">
-        🔔 Acciones del día — Sin respuesta hace más de 48hs
-        <span class="badge-count" id="cnt-urgente">0</span>
+    <!-- Solo admin: Acciones del día, En seguimiento, Presupuestos de hoy -->
+    <div id="seccion-admin-detalle" style="display:none">
+      <div class="seccion">
+        <div class="seccion-titulo">
+          🔔 Acciones del día — Sin respuesta hace más de 48hs
+          <span class="badge-count" id="cnt-urgente">0</span>
+        </div>
+        <div id="tabla-urgente"><div class="loading">Cargando...</div></div>
       </div>
-      <div id="tabla-urgente"><div class="loading">Cargando...</div></div>
+      <div class="seccion">
+        <div class="seccion-titulo">
+          📌 En seguimiento
+          <span class="badge-count" id="cnt-seguim">0</span>
+        </div>
+        <div id="tabla-seguimiento"><div class="loading">Cargando...</div></div>
+      </div>
+      <div class="seccion">
+        <div class="seccion-titulo">
+          📋 Presupuestos de hoy
+          <span class="badge-count" id="cnt-hoy">0</span>
+        </div>
+        <div id="tabla-hoy"><div class="loading">Cargando...</div></div>
+      </div>
     </div>
 
-    <!-- En seguimiento -->
-    <div class="seccion">
-      <div class="seccion-titulo">
-        📌 En seguimiento
-        <span class="badge-count" id="cnt-seguim">0</span>
+    <!-- Solo vendedor: Mis presupuestos con búsqueda -->
+    <div class="seccion" id="seccion-mis-presupuestos" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+        <div class="seccion-titulo" style="margin:0">
+          📋 Mis presupuestos
+          <span class="badge-count" id="cnt-mis-presup">0</span>
+        </div>
+        <input type="text" id="buscador-presup" placeholder="🔍 Buscar por cliente, teléfono o medida..."
+          oninput="filtrarPresupuestos()"
+          style="padding:9px 14px;border:2px solid #e8e8e8;border-radius:8px;font-size:14px;width:320px;max-width:100%">
       </div>
-      <div id="tabla-seguimiento"><div class="loading">Cargando...</div></div>
-    </div>
-
-    <!-- Presupuestos de hoy -->
-    <div class="seccion">
-      <div class="seccion-titulo">
-        📋 Presupuestos de hoy
-        <span class="badge-count" id="cnt-hoy">0</span>
-      </div>
-      <div id="tabla-hoy"><div class="loading">Cargando...</div></div>
+      <div id="tabla-mis-presupuestos"><div class="loading">Cargando...</div></div>
     </div>
 
     <!-- Resumen vendedores (solo admin) -->
@@ -172,8 +184,8 @@
       </div>
     </div>
 
-    <!-- Seguimiento Bot -->
-    <div class="seccion">
+    <!-- Seguimiento Bot (solo admin) -->
+    <div class="seccion" id="seccion-bot" style="display:none">
       <div class="seccion-titulo">
         🤖 Seguimiento Bot — Consultas sin contactar +48hs
         <span class="badge-count" id="cnt-bot">0</span>
@@ -185,15 +197,23 @@
   <script>
     const token = localStorage.getItem('token');
     const vendedor = localStorage.getItem('vendedor') || '';
+    const esAdmin = localStorage.getItem('rol') === 'admin';
     if (!token) window.location.href = '/app/login.html';
 
     document.getElementById('vendedor-nombre').textContent = vendedor;
     document.getElementById('nombre-usuario').textContent = vendedor;
-    if (localStorage.getItem('rol') === 'admin') {
+
+    if (esAdmin) {
       document.getElementById('nav-broadcast').style.display = 'inline';
       document.getElementById('seccion-vendedores').style.display = '';
+      document.getElementById('seccion-admin-detalle').style.display = '';
       cargarStatsVendedores();
+    } else {
+      document.getElementById('seccion-mis-presupuestos').style.display = '';
     }
+
+    // Almacén global para filtrar sin re-fetch
+    let _todosPresupuestos = [];
 
     async function cargarStatsVendedores() {
       try {
@@ -351,12 +371,6 @@
         if (filtroVend) todos = todos.filter(p => p.vendedor === filtroVend);
       }
 
-      // Auto-cerrar los que tienen más de 10 días en "En seguimiento"
-      const aCerrar = todos.filter(p => p.estado === 'En seguimiento' && horasDiff(p.fecha) > 240);
-      for (const p of aCerrar) {
-        await cambiarEstado(p.fila, 'No cerrado');
-      }
-
       // Stats
       const hoy = todos.filter(p => p.fecha === hoyStr);
       const vendidos = todos.filter(p => p.estado === 'Vendido');
@@ -368,14 +382,66 @@
       document.getElementById('s-seguim').textContent = enSeguim.length;
       document.getElementById('s-vencido').textContent = sinResp.length;
 
-      // Tablas
-      document.getElementById('cnt-urgente').textContent = sinResp.length;
-      document.getElementById('cnt-seguim').textContent = enSeguim.length;
-      document.getElementById('cnt-hoy').textContent = hoy.length;
+      if (esAdmin) {
+        document.getElementById('cnt-urgente').textContent = sinResp.length;
+        document.getElementById('cnt-seguim').textContent = enSeguim.length;
+        document.getElementById('cnt-hoy').textContent = hoy.length;
+        renderTabla('tabla-urgente', sinResp, true);
+        renderTabla('tabla-seguimiento', enSeguim, true);
+        renderTabla('tabla-hoy', hoy, false);
+      } else {
+        // Vendedor: mostrar todos sus presupuestos con búsqueda
+        _todosPresupuestos = todos;
+        document.getElementById('cnt-mis-presup').textContent = todos.length;
+        filtrarPresupuestos();
+      }
+    }
 
-      renderTabla('tabla-urgente', sinResp, true);
-      renderTabla('tabla-seguimiento', enSeguim, true);
-      renderTabla('tabla-hoy', hoy, false);
+    function filtrarPresupuestos() {
+      const q = (document.getElementById('buscador-presup')?.value || '').toLowerCase().trim();
+      const lista = q
+        ? _todosPresupuestos.filter(p =>
+            (p.cliente||'').toLowerCase().includes(q) ||
+            (p.tel||'').replace(/\D/g,'').includes(q.replace(/\D/g,'')) ||
+            (p.productos||'').toLowerCase().includes(q)
+          )
+        : _todosPresupuestos;
+
+      document.getElementById('cnt-mis-presup').textContent = lista.length;
+
+      if (lista.length === 0) {
+        document.getElementById('tabla-mis-presupuestos').innerHTML = '<div class="empty">Sin resultados</div>';
+        return;
+      }
+
+      const headers = '<tr><th>Fecha</th><th>N°</th><th>Cliente</th><th>Tel</th><th>Productos</th><th>Estado</th><th>Acciones</th></tr>';
+      const filas = lista.map(p => {
+        const tel = (p.tel||'').replace(/\D/g,'');
+        let telWA = tel.startsWith('549') ? tel : tel.startsWith('54') ? '549'+tel.slice(2) : '549'+tel;
+        const nombreVend = vendedor.split(' ')[0];
+        const msg = encodeURIComponent('Hola ' + p.cliente + ' cómo estás? Soy ' + nombreVend + ' de Neumáticos Gallo, quería saber qué te había parecido el presupuesto que te pasamos 😊');
+        return `<tr>
+          <td style="white-space:nowrap">${p.fecha}</td>
+          <td style="font-weight:600">${p.numero}</td>
+          <td>${p.cliente}</td>
+          <td style="white-space:nowrap">${p.tel||'-'}</td>
+          <td style="font-size:12px;max-width:220px">${p.productos||''}</td>
+          <td>${badgeEstado(p.estado)}</td>
+          <td style="white-space:nowrap;display:flex;gap:6px;flex-wrap:wrap">
+            ${tel ? `<button class="btn-wa" onclick="window.open('https://wa.me/${telWA}?text=${msg}','_blank')">💬</button>` : ''}
+            <select onchange="cambiarEstado(${p.fila}, this.value)" style="font-size:12px;padding:3px 6px;border:1px solid #e8e8e8;border-radius:4px">
+              <option value="Enviado" ${p.estado==='Enviado'?'selected':''}>Enviado</option>
+              <option value="En seguimiento" ${p.estado==='En seguimiento'?'selected':''}>En seguimiento</option>
+              <option value="Vendido" ${p.estado==='Vendido'?'selected':''}>Vendido</option>
+              <option value="No cerrado" ${p.estado==='No cerrado'?'selected':''}>No cerrado</option>
+            </select>
+            <a href="/app/orden.html?fila=${p.fila}" style="background:#1a1a2e;color:white;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none;display:inline-flex;align-items:center">🔧 OS</a>
+          </td>
+        </tr>`;
+      }).join('');
+
+      document.getElementById('tabla-mis-presupuestos').innerHTML =
+        '<table><thead>' + headers + '</thead><tbody>' + filas + '</tbody></table>';
     }
 
     function logout() { localStorage.clear(); window.location.href = '/app/login.html'; }
@@ -486,7 +552,10 @@
 
     cargar();
     cargarAlertas();
-    cargarSeguimientoBot();
+    if (esAdmin) {
+      document.getElementById('seccion-bot').style.display = '';
+      cargarSeguimientoBot();
+    }
     setInterval(cargarAlertas, 60000);
   </script>
 </body>

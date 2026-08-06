@@ -746,11 +746,11 @@ router.get('/mis-stats', authMiddleware, async (req, res) => {
 // --- Clientes de campaña del vendedor (proxy hacia Gallo app) ---
 router.get('/campana/vendedor', authMiddleware, async (req, res) => {
   try {
-    const vendedor = req.user.nombre; // ej: "R. Gallo"
+    const usuario  = req.user.usuario; // ej: "nruiz"
     const semanas  = req.query.semanas || '25';
     const galloUrl = process.env.GALLO_API_URL || 'https://web-production-f7777.up.railway.app';
     const apiKey   = process.env.CAMPANA_API_KEY || 'gallo-campana-2026';
-    const params   = new URLSearchParams({ vendedor, semanas, neu_min: '2', balanceo: '1', alineacion: '1' });
+    const params   = new URLSearchParams({ usuario, semanas, neu_min: '2', balanceo: '1', alineacion: '1' });
     const r = await fetch(`${galloUrl}/api/campana/por-vendedor?${params}`, {
       headers: { 'X-Api-Key': apiKey },
     });

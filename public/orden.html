@@ -273,8 +273,7 @@
     }
     cargarItemsPresupuesto();
 
-    // Pre-completar total
-    if (pTotal && !document.getElementById('total').value) document.getElementById('total').value = pTotal;
+    // (total se recalcula automáticamente desde los items)
 
     // Buscar cliente por DNI/CUIT en el Sheet
     async function buscarCliente() {

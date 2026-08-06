@@ -1967,4 +1967,217 @@ router.get('/reventa/lista', reventaAuthMiddleware, async (req, res) => {
   }
 });
 
+// ─── ÓRDENES DE SERVICIO ─────────────────────────────────────────────────────
+
+// Traer datos del presupuesto por token (para pre-cargar en orden.html)
+router.get('/orden/presupuesto', authMiddleware, async (req, res) => {
+  try {
+    const { token: pToken } = req.query;
+    if (!pToken) return res.json({ ok: false, error: 'Sin token' });
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const result = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Presupuestos!A:J',
+    });
+    const rows = result.data.values || [];
+    const row = rows.find(r => r[8] === pToken);
+    if (!row) return res.json({ ok: false, error: 'No encontrado' });
+    let datos = null;
+    try { datos = row[9] ? JSON.parse(row[9]) : null; } catch(e) {}
+    res.json({ ok: true, numero: row[1], cliente: row[3], tel: row[4], productos: row[5], total: row[6], datos });
+  } catch (err) {
+    console.error('Error orden/presupuesto:', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Buscar cliente por DNI/CUIT en historial de presupuestos
+router.get('/orden/cliente', authMiddleware, async (req, res) => {
+  try {
+    const doc = (req.query.doc || '').replace(/\D/g, '');
+    if (!doc) return res.json({ encontrado: false });
+    // Por ahora no hay tabla de clientes con DNI, devolver no encontrado
+    res.json({ encontrado: false });
+  } catch (err) {
+    res.json({ encontrado: false });
+  }
+});
+
+// Buscar vehículo por patente en historial de órdenes
+router.get('/orden/vehiculo', authMiddleware, async (req, res) => {
+  try {
+    const patente = (req.query.patente || '').toUpperCase().trim();
+    if (!patente) return res.json({ encontrado: false });
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const result = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Ordenes!A:Z',
+    });
+    const rows = (result.data.values || []).slice(1);
+    // Columna G = patente en la hoja Ordenes
+    const row = rows.filter(r => (r[6]||'').toUpperCase() === patente).pop();
+    if (!row) return res.json({ encontrado: false });
+    res.json({ encontrado: true, marca: row[7]||'', modelo: row[8]||'', anio: row[9]||'', km: row[10]||'' });
+  } catch (err) {
+    res.json({ encontrado: false });
+  }
+});
+
+// Columnas hoja Ordenes (A→V):
+// A:fecha  B:hora  C:nroOrden  D:vendedor
+// E:clienteNombre  F:tel  G:doc  H:mail
+// I:direccion  J:localidad  K:provincia  L:patente
+// M:marcaVeh  N:modeloVeh  O:anio  P:km
+// Q:total  R:estado  S:presupuestoNum  T:presupuestoToken
+// U:observaciones  V:trabajosJSON
+
+function parseOrdenRow(r, i) {
+  return {
+    fila: i + 2,
+    fecha: r[0]||'', hora: r[1]||'', numero: r[2]||'', vendedor: r[3]||'',
+    clienteNombre: r[4]||'', tel: r[5]||'', doc: r[6]||'', mail: r[7]||'',
+    direccion: r[8]||'', localidad: r[9]||'', provincia: r[10]||'', patente: r[11]||'',
+    marcaVeh: r[12]||'', modeloVeh: r[13]||'', anio: r[14]||'', km: r[15]||'',
+    total: r[16]||'', estado: r[17]||'Ingresada',
+    presupuestoNum: r[18]||'', presupuestoToken: r[19]||'',
+    observaciones: r[20]||'',
+    trabajos: (() => { try { return JSON.parse(r[21]||'[]'); } catch(e) { return []; } })()
+  };
+}
+
+// Guardar orden de servicio en hoja Ordenes
+router.post('/orden/guardar', express.json(), authMiddleware, async (req, res) => {
+  try {
+    const vendedor = req.user.nombre;
+    const {
+      pNumero, pToken,
+      doc, nombre, apellido, tel, mail, direccion, localidad, provincia,
+      patente, marcaVeh, modeloVeh, anio, km,
+      trabajos, total, observaciones
+    } = req.body;
+
+    const ahora = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    const fecha = ahora.toLocaleDateString('es-AR');
+    const hora  = ahora.toTimeString().slice(0, 5);
+
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+
+    // Generar número de orden: OS-YYYYMMDD-XXX
+    const existing = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Ordenes!A:A',
+    });
+    const existingRows = existing.data.values || [];
+    // Crear encabezado si el sheet está vacío
+    if (existingRows.length === 0) {
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: process.env.GOOGLE_SHEET_ID,
+        range: 'Ordenes!A:V',
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [['Fecha','Hora','Número','Vendedor','Cliente','Tel','Doc','Mail','Dirección','Localidad','Provincia','Patente','Marca','Modelo','Año','KM','Total','Estado','Pres.Num','Pres.Token','Observaciones','Trabajos']] },
+      });
+    }
+    const countRows = existingRows.length; // sin header la primera OS es -001
+    const nroOrden = 'OS-' + ahora.toISOString().slice(0,10).replace(/-/g,'') + '-' + String(countRows).padStart(3,'0');
+
+    const clienteNombre = [apellido, nombre].filter(Boolean).join(' ');
+    const trabajosJSON  = JSON.stringify(trabajos || []);
+    const totalNum = parseInt(total) || (trabajos||[]).reduce((s, t) => s + (t.precio || 0), 0);
+
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Ordenes!A:V',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [[
+          fecha, hora, nroOrden, vendedor,
+          clienteNombre, tel||'', doc||'', mail||'',
+          direccion||'', localidad||'', provincia||'', (patente||'').toUpperCase(),
+          marcaVeh||'', modeloVeh||'', anio||'', km||'',
+          totalNum, 'Ingresada',
+          pNumero||'', pToken||'',
+          observaciones||'', trabajosJSON
+        ]],
+      },
+    });
+
+    res.json({ ok: true, id: nroOrden });
+  } catch (err) {
+    console.error('Error orden/guardar:', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Ver orden individual por número
+router.get('/orden/ver', authMiddleware, async (req, res) => {
+  try {
+    const id = (req.query.id || '').trim();
+    if (!id) return res.json({ ok: false });
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const result = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Ordenes!A:V',
+    });
+    const rows = (result.data.values || []).slice(1);
+    const idx  = rows.findIndex(r => r[2] === id);
+    if (idx === -1) return res.json({ ok: false });
+    res.json({ ok: true, orden: parseOrdenRow(rows[idx], idx) });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Cambiar estado de una orden
+router.post('/orden/estado', express.json(), authMiddleware, async (req, res) => {
+  try {
+    const { id, estado } = req.body;
+    if (!id || !estado) return res.json({ ok: false });
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const result = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Ordenes!C:C',
+    });
+    const rows = (result.data.values || []);
+    const rowIdx = rows.findIndex(r => r[0] === id);
+    if (rowIdx === -1) return res.json({ ok: false, error: 'No encontrada' });
+    const sheetRow = rowIdx + 1; // 1-indexed, no header offset needed (incluye fila 1)
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: `Ordenes!R${sheetRow}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [[estado]] },
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Listar todas las órdenes
+router.get('/ordenes/listar', authMiddleware, async (req, res) => {
+  try {
+    const esAdmin = req.user.rol === 'admin';
+    const vendedorActual = req.user.nombre;
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const result = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Ordenes!A:V',
+    });
+    const rows = (result.data.values || []).slice(1);
+    const ordenes = rows
+      .map((r, i) => parseOrdenRow(r, i))
+      .filter(o => esAdmin || o.vendedor === vendedorActual)
+      .reverse();
+    res.json({ ordenes, esAdmin });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

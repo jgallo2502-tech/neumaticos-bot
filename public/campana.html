@@ -21,13 +21,6 @@
     .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
     h2 { font-size: 18px; font-weight: 700; color: #1a1a2e; }
 
-    /* Filtros */
-    .filtros { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 20px; }
-    .filtros label { font-size: 13px; color: #555; display: flex; align-items: center; gap: 6px; cursor: pointer; }
-    .filtros select { padding: 7px 12px; border: 2px solid #e8e8e8; border-radius: 8px; font-size: 14px; }
-    .btn-buscar { background: #e63946; color: white; border: none; padding: 9px 22px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
-    .btn-buscar:hover { background: #c1121f; }
-
     /* Tabla */
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     th { background: #1a1a2e; color: white; padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; position: sticky; top: 0; }
@@ -71,32 +64,12 @@
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:20px">
         <div>
           <h2>📞 Clientes para llamar esta semana</h2>
-          <div style="font-size:13px;color:#888;margin-top:4px">Compraron neumáticos + balanceo + alineación</div>
+          <div id="subtitulo" style="font-size:13px;color:#888;margin-top:4px">Cargando...</div>
         </div>
-        <div style="display:flex;gap:20px;align-items:center">
-          <div style="text-align:center">
-            <div id="stat-total" class="stat">—</div>
-            <div class="stat-label">Clientes</div>
-          </div>
+        <div style="text-align:center">
+          <div id="stat-total" class="stat">—</div>
+          <div class="stat-label">Clientes</div>
         </div>
-      </div>
-
-      <div class="filtros">
-        <label><input type="checkbox" id="fil-bal" checked> Con balanceo</label>
-        <label><input type="checkbox" id="fil-ali" checked> Con alineación</label>
-        <select id="fil-neu">
-          <option value="2">Mín. 2 neumáticos</option>
-          <option value="1">Mín. 1 neumático</option>
-          <option value="4">Mín. 4 neumáticos</option>
-        </select>
-        <select id="fil-semanas">
-          <option value="1">Esta semana (7 días)</option>
-          <option value="2">Últimas 2 semanas</option>
-          <option value="4">Último mes</option>
-          <option value="13">Últimos 3 meses</option>
-          <option value="25" selected>Últimos 6 meses</option>
-        </select>
-        <button class="btn-buscar" onclick="cargar()">🔍 Actualizar</button>
       </div>
 
       <div id="tabla-wrap">
@@ -114,52 +87,49 @@
     function logout() { localStorage.clear(); window.location.href = '/app/login.html'; }
 
     async function cargar() {
-      const bal     = document.getElementById('fil-bal').checked ? '1' : '0';
-      const ali     = document.getElementById('fil-ali').checked ? '1' : '0';
-      const neuMin  = document.getElementById('fil-neu').value;
-      const semanas = document.getElementById('fil-semanas').value;
-      const wrap    = document.getElementById('tabla-wrap');
-
+      const wrap = document.getElementById('tabla-wrap');
       wrap.innerHTML = '<div class="loading">Cargando...</div>';
 
       try {
-        const params = new URLSearchParams({ semanas, neu_min: neuMin, balanceo: bal, alineacion: ali });
+        const params = new URLSearchParams({ semanas: '25', neu_min: '2', balanceo: '1', alineacion: '1' });
         const r = await fetch('/app/campana/vendedor?' + params, {
           headers: { 'Authorization': 'Bearer ' + token }
         });
         if (r.status === 401) { window.location.href = '/app/login.html'; return; }
         const data = await r.json();
 
-        document.getElementById('stat-total').textContent = data.total || 0;
+        // Solo mostrar semana 25 (la más antigua = la que toca llamar esta semana)
+        const sem25 = (data.semanas || []).find(s => s.semana === 25);
+        const clientes = sem25 ? sem25.clientes : [];
 
-        if (!data.semanas || data.semanas.length === 0 || data.total === 0) {
-          wrap.innerHTML = '<div class="empty">✅ No hay clientes para llamar en el período seleccionado.</div>';
+        document.getElementById('stat-total').textContent = clientes.length;
+        document.getElementById('subtitulo').textContent = sem25
+          ? 'Visitaron ' + sem25.label.replace('Semana 25 ', '') + ' — ya es hora de volver'
+          : 'Sin clientes para esta semana';
+
+        if (clientes.length === 0) {
+          wrap.innerHTML = '<div class="empty">✅ No hay clientes para llamar esta semana.</div>';
           return;
         }
 
         let html = '<table><thead><tr><th>Patente</th><th>Cliente</th><th>Teléfono</th><th>Neumáticos</th><th>Vehículo</th><th>KM</th><th>Fecha visita</th><th>Nro. Factura</th></tr></thead><tbody>';
 
-        for (const sem of data.semanas) {
-          if (sem.clientes.length === 0) continue;
-          // Fila de cabecera de semana
-          html += '<tr class="sem-row"><td colspan="8">🗓 ' + sem.label + ' — ' + sem.total + ' cliente' + (sem.total !== 1 ? 's' : '') + '</td></tr>';
-          for (const c of sem.clientes) {
-            const telLimpio = (c.tel || '').replace(/\D/g, '');
-            const telLink = telLimpio
-              ? '<a class="tel-link" href="https://wa.me/549' + telLimpio + '" target="_blank">📱 ' + c.tel + '</a>'
-              : (c.tel || '-');
-            const km = c.km ? Number(c.km).toLocaleString('es-AR') + ' km' : '-';
-            html += '<tr>' +
-              '<td><strong>' + (c.patente || '-') + '</strong></td>' +
-              '<td>' + (c.cliente || '-') + '</td>' +
-              '<td>' + telLink + '</td>' +
-              '<td>' + (c.neu_detalle || (Math.round(c.neu_uds) + 'x')) + '</td>' +
-              '<td style="font-size:12px">' + (c.vehiculo || '-') + '</td>' +
-              '<td style="font-size:12px;color:#888">' + km + '</td>' +
-              '<td style="font-size:12px;white-space:nowrap">' + (c.fecha || '-') + '</td>' +
-              '<td style="font-size:12px;color:#888">' + (c.nro_fact || '-') + '</td>' +
-            '</tr>';
-          }
+        for (const c of clientes) {
+          const telLimpio = (c.tel || '').replace(/\D/g, '');
+          const telLink = telLimpio
+            ? '<a class="tel-link" href="https://wa.me/549' + telLimpio + '" target="_blank">📱 ' + c.tel + '</a>'
+            : (c.tel || '-');
+          const km = c.km ? Number(c.km).toLocaleString('es-AR') + ' km' : '-';
+          html += '<tr>' +
+            '<td><strong>' + (c.patente || '-') + '</strong></td>' +
+            '<td>' + (c.cliente || '-') + '</td>' +
+            '<td>' + telLink + '</td>' +
+            '<td>' + (c.neu_detalle || (Math.round(c.neu_uds) + 'x')) + '</td>' +
+            '<td style="font-size:12px">' + (c.vehiculo || '-') + '</td>' +
+            '<td style="font-size:12px;color:#888">' + km + '</td>' +
+            '<td style="font-size:12px;white-space:nowrap">' + (c.fecha || '-') + '</td>' +
+            '<td style="font-size:12px;color:#888">' + (c.nro_fact || '-') + '</td>' +
+          '</tr>';
         }
 
         html += '</tbody></table>';

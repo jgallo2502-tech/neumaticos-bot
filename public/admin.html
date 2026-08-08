@@ -168,7 +168,8 @@
           }
         } catch(e) {
           el.className = 'fuente-status err';
-          el.textContent = '❌ Error de red';
+          el.textContent = '❌ ' + (e.message || 'Error de red');
+          console.error('Upload error:', e);
         }
       }
 

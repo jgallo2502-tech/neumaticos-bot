@@ -2201,36 +2201,39 @@ function adminMiddleware(req, res, next) {
   }
 }
 
-// Subir archivo a Drive (reemplaza si existe con mismo nombre)
+// Mapa de tipo de fuente → nombre de archivo local en /tmp/admin-fuentes/
+const FUENTES_DIR = '/tmp/admin-fuentes';
+const FUENTE_NOMBRES = {
+  gallo:    'gallo.xlsx',
+  celsur:   'celsur.xlsx',
+  hankook:  'hankook.xlsx',
+  yokohama: 'yokohama.xlsx',
+  linglong: 'linglong.xlsx',
+  michelin: 'michelin.xlsx',
+};
+
+function detectarTipoFuente(nombre) {
+  const n = nombre.toLowerCase();
+  if (n.includes('gallo') || n.includes('inv ') || n.startsWith('inv')) return 'gallo';
+  if (n.includes('celsur') || n.includes('stock_disponible') || n.includes('stock disponible')) return 'celsur';
+  if (n.includes('hankook')) return 'hankook';
+  if (n.includes('yokohama')) return 'yokohama';
+  if (n.includes('ling')) return 'linglong';
+  if (n.includes('michelin') || n.includes('bfgoodrich')) return 'michelin';
+  return null;
+}
+
+// Subir archivo al servidor (guarda en /tmp/admin-fuentes/)
 router.post('/admin/upload', adminMiddleware, upload.single('archivo'), async (req, res) => {
   if (!req.file) return res.status(400).json({ ok: false, error: 'Sin archivo' });
+  const tipo = detectarTipoFuente(req.file.originalname);
+  if (!tipo) return res.status(400).json({ ok: false, error: `No reconozco el archivo: ${req.file.originalname}` });
   try {
-    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/drive'] });
-    const drive = google.drive({ version: 'v3', auth });
-
-    // Buscar si ya existe un archivo con ese nombre en la carpeta
-    const list = await drive.files.list({
-      q: `name='${req.file.originalname}' and '${DRIVE_FOLDER_ID}' in parents and trashed=false`,
-      fields: 'files(id,name)',
-    });
-
-    const { Readable } = require('stream');
-    const stream = Readable.from(req.file.buffer);
-    const mimeType = req.file.mimetype || 'application/octet-stream';
-
-    if (list.data.files.length > 0) {
-      // Actualizar el existente
-      const fileId = list.data.files[0].id;
-      await drive.files.update({ fileId, media: { mimeType, body: stream } });
-      res.json({ ok: true, accion: 'actualizado', nombre: req.file.originalname });
-    } else {
-      // Crear nuevo
-      await drive.files.create({
-        requestBody: { name: req.file.originalname, parents: [DRIVE_FOLDER_ID] },
-        media: { mimeType, body: stream },
-      });
-      res.json({ ok: true, accion: 'creado', nombre: req.file.originalname });
-    }
+    const fs = require('fs');
+    if (!fs.existsSync(FUENTES_DIR)) fs.mkdirSync(FUENTES_DIR, { recursive: true });
+    const destino = `${FUENTES_DIR}/${FUENTE_NOMBRES[tipo]}`;
+    fs.writeFileSync(destino, req.file.buffer);
+    res.json({ ok: true, accion: 'guardado', nombre: req.file.originalname, tipo });
   } catch(e) {
     console.error('Admin upload error:', e.message);
     res.status(500).json({ ok: false, error: e.message });

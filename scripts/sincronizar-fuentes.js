@@ -76,6 +76,18 @@ function parseNum(val) {
 }
 
 // ─── Descargar archivo de Drive ───────────────────────────────────────────────
+const fs = require('fs');
+const FUENTES_DIR = '/tmp/admin-fuentes';
+
+function leerLocal(nombre) {
+  const p = `${FUENTES_DIR}/${nombre}`;
+  if (fs.existsSync(p)) {
+    console.log(`  📁 Usando archivo local: ${nombre}`);
+    return XLSX.read(fs.readFileSync(p), { type: 'buffer', cellDates: true, raw: false });
+  }
+  return null;
+}
+
 async function descargarXlsx(drive, fileId) {
   const res = await drive.files.get({ fileId, alt: 'media' }, { responseType: 'arraybuffer' });
   const buf = Buffer.from(res.data);
@@ -424,14 +436,14 @@ async function main() {
 
   console.log('📥 Descargando archivos...');
   const [wbInv, wbCelsur, wbMich, wbHank, wbYoko, wbLL] = await Promise.all([
-    descargarXlsx(drive, archivoInventario.id),
-    descargarXlsx(drive, archivoCelsur.id),
-    descargarXlsx(drive, archivoMichelin.id),
-    descargarXlsx(drive, archivoHankook.id),
-    descargarXlsx(drive, archivoYokohama.id),
-    descargarXlsx(drive, archivoLinglong.id),
+    leerLocal('gallo.xlsx')    || descargarXlsx(drive, archivoInventario.id),
+    leerLocal('celsur.xlsx')   || descargarXlsx(drive, archivoCelsur.id),
+    leerLocal('michelin.xlsx') || descargarXlsx(drive, archivoMichelin.id),
+    leerLocal('hankook.xlsx')  || descargarXlsx(drive, archivoHankook.id),
+    leerLocal('yokohama.xlsx') || descargarXlsx(drive, archivoYokohama.id),
+    leerLocal('linglong.xlsx') || descargarXlsx(drive, archivoLinglong.id),
   ]);
-  const wbNex = archivoNeumasur ? await descargarXlsx(drive, archivoNeumasur.id) : null;
+  const wbNex = archivoNeumasur ? (leerLocal('neumasur.xlsx') || await descargarXlsx(drive, archivoNeumasur.id)) : null;
 
   console.log('🔄 Procesando fuentes...');
   const { vicMap, norMap, precioMap, productos } = leerInventarioGallo(wbInv);

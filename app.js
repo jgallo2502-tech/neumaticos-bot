@@ -2201,15 +2201,16 @@ function adminMiddleware(req, res, next) {
   }
 }
 
-// Mapa de tipo de fuente → nombre de archivo local en /tmp/admin-fuentes/
-const FUENTES_DIR = '/tmp/admin-fuentes';
-const FUENTE_NOMBRES = {
-  gallo:    'gallo.xlsx',
-  celsur:   'celsur.xlsx',
-  hankook:  'hankook.xlsx',
-  yokohama: 'yokohama.xlsx',
-  linglong: 'linglong.xlsx',
-  michelin: 'michelin.xlsx',
+const DRIVE_FOLDER_ID = '11Ham__W-bVOJtaMsZQHRap-orDV6cpek';
+
+// Keywords para encontrar cada tipo de fuente en Drive (mismo criterio que sincronizar-fuentes.js)
+const DRIVE_KEYWORDS = {
+  gallo:    { include: [['inv', 'gallo'], ['inventario'], ['gallo']], exclude: [['michelin'], ['lista'], ['precio']] },
+  celsur:   { include: [['celsur'], ['stock_disponible'], ['stock disponible']], exclude: [] },
+  hankook:  { include: [['hankook']], exclude: [] },
+  yokohama: { include: [['yokohama']], exclude: [] },
+  linglong: { include: [['ling']], exclude: [] },
+  michelin: { include: [['michelin', 'con descripcion'], ['michelin', 'bfgoodrich']], exclude: [] },
 };
 
 function detectarTipoFuente(nombre) {
@@ -2223,35 +2224,75 @@ function detectarTipoFuente(nombre) {
   return null;
 }
 
-// Estado de archivos en /tmp/admin-fuentes/
-router.get('/admin/fuentes', adminMiddleware, (req, res) => {
-  const fs = require('fs');
-  const resultado = {};
-  for (const [tipo, nombre] of Object.entries(FUENTE_NOMBRES)) {
-    const p = `${FUENTES_DIR}/${nombre}`;
-    if (fs.existsSync(p)) {
-      const stat = fs.statSync(p);
-      resultado[tipo] = { existe: true, nombre, tamaño: stat.size, modificado: stat.mtime };
-    } else {
-      resultado[tipo] = { existe: false };
+function getAdminAuth(scopes) {
+  return new google.auth.GoogleAuth({
+    ...(process.env.GOOGLE_CREDENTIALS ? { credentials: GOOGLE_CREDS } : { keyFile: path.join(__dirname, 'credentials.json') }),
+    scopes,
+  });
+}
+
+async function listarDrive() {
+  const auth = getAdminAuth(['https://www.googleapis.com/auth/drive']);
+  const drive = google.drive({ version: 'v3', auth });
+  const r = await drive.files.list({
+    q: `'${DRIVE_FOLDER_ID}' in parents and trashed = false`,
+    fields: 'files(id, name, size, modifiedTime)',
+    orderBy: 'modifiedTime desc',
+  });
+  return { drive, archivos: r.data.files || [] };
+}
+
+function encontrarEnDrive(archivos, keywords) {
+  for (const { include, exclude } of [keywords]) {
+    for (const inc of include) {
+      const matches = archivos.filter(f => {
+        const n = f.name.toLowerCase();
+        return inc.every(k => n.includes(k)) && (exclude.length === 0 || exclude.every(ex => !ex.every(e => n.includes(e))));
+      });
+      if (matches.length > 0) return matches[0];
     }
   }
-  res.json(resultado);
+  return null;
+}
+
+// Estado de archivos en Drive
+router.get('/admin/fuentes', adminMiddleware, async (req, res) => {
+  try {
+    const { archivos } = await listarDrive();
+    const resultado = {};
+    for (const [tipo, kw] of Object.entries(DRIVE_KEYWORDS)) {
+      const f = encontrarEnDrive(archivos, kw);
+      if (f) {
+        resultado[tipo] = { existe: true, nombre: f.name, tamaño: parseInt(f.size) || 0, modificado: f.modifiedTime };
+      } else {
+        resultado[tipo] = { existe: false };
+      }
+    }
+    res.json(resultado);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-// Subir archivo al servidor (guarda en /tmp/admin-fuentes/)
+// Subir archivo → actualiza el archivo correspondiente en Drive
 router.post('/admin/upload', adminMiddleware, upload.single('archivo'), async (req, res) => {
   if (!req.file) return res.status(400).json({ ok: false, error: 'Sin archivo' });
   const tipo = detectarTipoFuente(req.file.originalname);
   if (!tipo) return res.status(400).json({ ok: false, error: `No reconozco el archivo: ${req.file.originalname}` });
   try {
-    const fs = require('fs');
-    if (!fs.existsSync(FUENTES_DIR)) fs.mkdirSync(FUENTES_DIR, { recursive: true });
-    const destino = `${FUENTES_DIR}/${FUENTE_NOMBRES[tipo]}`;
-    fs.writeFileSync(destino, req.file.buffer);
-    res.json({ ok: true, accion: 'guardado', nombre: req.file.originalname, tipo });
+    const { Readable } = require('stream');
+    const { drive, archivos } = await listarDrive();
+    const archivo = encontrarEnDrive(archivos, DRIVE_KEYWORDS[tipo]);
+    if (!archivo) return res.status(404).json({ ok: false, error: `No se encontró el archivo de ${tipo} en Drive` });
+
+    const mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    await drive.files.update({
+      fileId: archivo.id,
+      media: { mimeType, body: Readable.from(req.file.buffer) },
+    });
+    res.json({ ok: true, accion: 'actualizado en Drive', nombre: archivo.name, tipo });
   } catch(e) {
-    console.error('Admin upload error:', e.message);
+    console.error('Admin upload Drive error:', e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });

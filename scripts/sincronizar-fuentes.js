@@ -83,17 +83,6 @@ function parseNum(val) {
 }
 
 // ─── Descargar archivo de Drive ───────────────────────────────────────────────
-const fs = require('fs');
-const FUENTES_DIR = '/tmp/admin-fuentes';
-
-function leerLocal(nombre) {
-  const p = `${FUENTES_DIR}/${nombre}`;
-  if (fs.existsSync(p)) {
-    console.log(`  📁 Usando archivo local: ${nombre}`);
-    return XLSX.read(fs.readFileSync(p), { type: 'buffer', cellDates: true, raw: false });
-  }
-  return null;
-}
 
 async function descargarXlsx(drive, fileId) {
   const res = await drive.files.get({ fileId, alt: 'media' }, { responseType: 'arraybuffer' });
@@ -451,17 +440,17 @@ async function main() {
   }
   if (!archivoNeumasur) console.log('⚠️  Neumasur no encontrado — Nexen sin actualizar');
 
-  console.log('📥 Descargando archivos...');
-  const cargar = (local, archivo) => leerLocal(local) || (archivo ? descargarXlsx(drive, archivo.id) : null);
+  console.log('📥 Descargando archivos desde Drive...');
+  const cargar = (archivo) => archivo ? descargarXlsx(drive, archivo.id) : null;
   const [wbInv, wbCelsur, wbMich, wbHank, wbYoko, wbLL] = await Promise.all([
-    cargar('gallo.xlsx',    archivoInventario),
-    cargar('celsur.xlsx',   archivoCelsur),
-    cargar('michelin.xlsx', archivoMichelin),
-    cargar('hankook.xlsx',  archivoHankook),
-    cargar('yokohama.xlsx', archivoYokohama),
-    cargar('linglong.xlsx', archivoLinglong),
+    cargar(archivoInventario),
+    cargar(archivoCelsur),
+    cargar(archivoMichelin),
+    cargar(archivoHankook),
+    cargar(archivoYokohama),
+    cargar(archivoLinglong),
   ]);
-  const wbNex = archivoNeumasur ? (leerLocal('neumasur.xlsx') || await descargarXlsx(drive, archivoNeumasur.id)) : null;
+  const wbNex = archivoNeumasur ? await descargarXlsx(drive, archivoNeumasur.id) : null;
 
   console.log('🔄 Procesando fuentes...');
   const { vicMap, norMap, precioMap, productos } = wbInv ? leerInventarioGallo(wbInv) : { vicMap: {}, norMap: {}, precioMap: {}, productos: {} };

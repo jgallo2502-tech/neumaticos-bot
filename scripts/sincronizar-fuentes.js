@@ -121,10 +121,15 @@ function encontrarArchivo(archivos, keywords, excluir = []) {
 
 // ─── Leer Inventario Gallo ────────────────────────────────────────────────────
 function leerInventarioGallo(wb) {
-  const sheetName = wb.SheetNames[0];
-  console.log(`  Gallo — Hojas: ${wb.SheetNames.join(', ')} | Usando: ${sheetName}`);
+  // Usar la hoja con más filas (evita hojas de portada vacías)
+  let sheetName = wb.SheetNames[0];
+  let maxRows = 0;
+  for (const s of wb.SheetNames) {
+    const n = XLSX.utils.sheet_to_json(wb.Sheets[s], { header: 1 }).length;
+    if (n > maxRows) { maxRows = n; sheetName = s; }
+  }
+  console.log(`  Gallo — Hojas: ${wb.SheetNames.join(', ')} | Usando: ${sheetName} (${maxRows} filas)`);
   const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1 });
-  console.log(`  Gallo — Filas totales: ${rows.length}`);
   if (rows.length > 1) {
     console.log(`  Gallo — Fila 1 (cols A-H): ${rows[1].slice(0,8).map((v,i) => `[${i}]${v}`).join(' | ')}`);
   }

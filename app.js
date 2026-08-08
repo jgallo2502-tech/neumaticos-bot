@@ -2371,12 +2371,18 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
       actualizados++;
     }
 
+    // Marcas que no se suben a Tienda Nube
+    const MARCAS_EXCLUIR_TN = ['FATE', 'PIRELLI', 'BRIDGESTONE', 'GOODYEAR'];
+
     // Productos nuevos: en sheet con stock propio >= 4 y no en TN
     const nuevos = [];
     for (const [codArt, prod] of Object.entries(sheetMap)) {
       if (tnCodArts.has(codArt) || prod.precio <= 0) continue;
       const totalStock = prod.stockVic + prod.stockNor;
       if (totalStock < 4) continue;
+      // Excluir Z. USADO, Z. OFERTA y marcas que no se suben
+      if (/^Z\./i.test(prod.desc)) continue;
+      if (MARCAS_EXCLUIR_TN.includes(prod.marca.toUpperCase())) continue;
       nuevos.push({ codArt, ...prod, totalStock });
 
       // Construir fila CSV para el nuevo producto

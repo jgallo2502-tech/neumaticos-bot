@@ -620,9 +620,14 @@ async function main() {
 
   // 1. Inventario Gallo: productos con stock propio no están en la hoja
   for (const [codArt, prod] of Object.entries(productos)) {
-    if (codArtsEnHoja.has(codArt)) continue;
     const stockVicN = Math.round(vicMap[codArt] || 0);
     const stockNorN = Math.round(norMap[codArt] || 0);
+    // Log detallado para debug (marcas que pueden ser nuevas)
+    if (/tracmax|giti|gtradial|sailun|triangle|sportcat|firemax/i.test(prod.desc)) {
+      const enHoja = codArtsEnHoja.has(codArt);
+      console.log(`  🔍 ${prod.desc?.substring(0,50)} | CodArt:${codArt} | Vic:${stockVicN} Nor:${stockNorN} | EnHoja:${enHoja}`);
+    }
+    if (codArtsEnHoja.has(codArt)) continue;
     if (stockVicN <= 0 && stockNorN <= 0) continue;
     agregarNuevo(codArt, prod.codAlt, prod.desc, stockVicN, stockNorN, 0, precioMap[codArt]);
   }

@@ -2284,4 +2284,142 @@ router.get('/admin/sync', (req, res, next) => {
   });
 });
 
+// ─── Tienda Nube: actualizar precios y stock desde CSV ───────────────────────
+function parsearMedidaTN(medida) {
+  // "195/50R16" → { ancho: 195, perfil: 50, rodado: 16 }
+  const m = medida.match(/(\d{3})[\/ ](\d{2})[Rr][Cc]?(\d{2})/);
+  if (m) return { ancho: m[1], perfil: m[2], rodado: m[3] };
+  const am = medida.match(/(\d{2})[Xx](\d+\.?\d*)[Rr](\d{2})/);
+  if (am) return { ancho: am[1], perfil: am[2], rodado: am[3] };
+  return null;
+}
+
+function formatTNNum(n) {
+  // 129000 → "129,000.00"
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function splitCSVLine(line) {
+  // Split by ; respetando campos entre comillas
+  const parts = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { inQ = !inQ; cur += c; }
+    else if (c === ';' && !inQ) { parts.push(cur); cur = ''; }
+    else cur += c;
+  }
+  parts.push(cur);
+  return parts;
+}
+
+router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ ok: false, error: 'Sin archivo CSV' });
+  try {
+    const auth = new google.auth.GoogleAuth({
+      ...(process.env.GOOGLE_CREDENTIALS ? { credentials: GOOGLE_CREDS } : { keyFile: path.join(__dirname, 'credentials.json') }),
+      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+    });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const r = await sheets.spreadsheets.values.get({ spreadsheetId: process.env.GOOGLE_SHEET_ID, range: 'Bot WhatsApp!A:J' });
+    const sheetRows = r.data.values || [];
+
+    // Mapa codArt → datos
+    const sheetMap = {};
+    for (let i = 1; i < sheetRows.length; i++) {
+      const row = sheetRows[i];
+      const codArt = (row[0] || '').trim();
+      if (!codArt) continue;
+      sheetMap[codArt] = {
+        codAlt:   (row[1] || '').trim(),
+        desc:     (row[2] || '').trim(),
+        marca:    (row[3] || '').trim(),
+        medida:   (row[5] || '').trim(),
+        stockVic: parseInt(row[6]) || 0,
+        stockNor: parseInt(row[7]) || 0,
+        stockExpr:parseInt(row[8]) || 0,
+        precio:   parseInt(row[9]) || 0,
+      };
+    }
+
+    const content = req.file.buffer.toString('latin1');
+    const lines = content.split(/\r?\n/).filter(Boolean);
+    const header = lines[0];
+    const tnCodArts = new Set();
+    const updatedLines = [header];
+    let actualizados = 0, sinDatos = 0;
+
+    for (let i = 1; i < lines.length; i++) {
+      const parts = splitCSVLine(lines[i]);
+      const codArt = parts[0].replace(/^"|"$/g, '').trim();
+      tnCodArts.add(codArt);
+
+      const prod = sheetMap[codArt];
+      if (!prod || prod.precio <= 0) { sinDatos++; updatedLines.push(lines[i]); continue; }
+
+      const isExpress = (parts[2] || '').replace(/"/g, '').includes('Pedido Express');
+      const precioPromo = prod.precio;
+      const precio = Math.round(precioPromo / 0.8);
+      const stockVic = isExpress ? 0 : (prod.stockVic + prod.stockNor);
+      const stockCD  = isExpress ? String(prod.stockExpr > 0 ? prod.stockExpr : 0) : 'ND';
+
+      parts[9]  = formatTNNum(precio);
+      parts[10] = formatTNNum(precioPromo);
+      parts[15] = String(stockVic);
+      parts[16] = stockCD;
+      updatedLines.push(parts.join(';'));
+      actualizados++;
+    }
+
+    // Productos nuevos: en sheet con stock propio >= 4 y no en TN
+    const nuevos = [];
+    for (const [codArt, prod] of Object.entries(sheetMap)) {
+      if (tnCodArts.has(codArt) || prod.precio <= 0) continue;
+      const totalStock = prod.stockVic + prod.stockNor;
+      if (totalStock < 4) continue;
+      nuevos.push({ codArt, ...prod, totalStock });
+
+      // Construir fila CSV para el nuevo producto
+      const dim = parsearMedidaTN(prod.medida);
+      const precioPromo = prod.precio;
+      const precio = Math.round(precioPromo / 0.8);
+      const marca = prod.marca.toUpperCase();
+      const cat = `"[NUEVO] > ${marca}"`;
+      const row = [
+        codArt,
+        `"${prod.desc} (${codArt})"`,
+        cat,
+        'Ancho', dim ? dim.ancho : '',
+        'Perfil', dim ? dim.perfil : '',
+        'Rodado', dim ? dim.rodado : '',
+        formatTNNum(precio),
+        formatTNNum(precioPromo),
+        '', '', '', '',   // peso, alto, ancho, prof — vacíos
+        String(prod.stockVic + prod.stockNor),
+        'ND',
+        prod.codAlt,
+        '',               // código barras
+        'SI', 'NO',
+        '', '', '', '',   // desc, tags, seo title, seo desc
+        marca,
+        'SI',
+        '', '', '', '',   // mpn, sexo, edad, costo
+        'Visible',
+      ];
+      updatedLines.push(row.join(';'));
+    }
+
+    const csvOutput = updatedLines.join('\n');
+    res.json({
+      ok: true,
+      stats: { actualizados, sinDatos, nuevos: nuevos.length, total: lines.length - 1 },
+      nuevos: nuevos.map(p => ({ codArt: p.codArt, desc: p.desc, medida: p.medida, marca: p.marca, stock: p.totalStock, precio: p.precio })),
+      csv: Buffer.from(csvOutput, 'latin1').toString('base64'),
+    });
+  } catch(e) {
+    console.error('TN update error:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 module.exports = router;

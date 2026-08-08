@@ -2387,6 +2387,7 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
     const tnCodArts = new Set();
     const updatedLines = [header];
     let actualizados = 0, sinDatos = 0;
+    const cambios = [];
 
     for (let i = 1; i < lines.length; i++) {
       const parts = splitCSVLine(lines[i]);
@@ -2402,12 +2403,30 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
       const stockVic = isExpress ? 0 : (prod.stockVic + prod.stockNor);
       const stockCD  = isExpress ? String(prod.stockExpr > 0 ? prod.stockExpr : 0) : 'ND';
 
+      const precioAnt = parseInt((parts[9] || '').replace(/[^0-9]/g, '')) || 0;
+      const stockAnt  = parseInt(parts[15]) || 0;
+      const precioCambio = precioAnt !== precio;
+      const stockCambio  = stockAnt  !== stockVic;
+
       parts[9]  = formatTNNum(precio);
       parts[10] = formatTNNum(precioPromo);
       parts[15] = String(stockVic);
       parts[16] = stockCD;
       updatedLines.push(parts.join(';'));
       actualizados++;
+
+      if (precioCambio || stockCambio) {
+        cambios.push({
+          codArt,
+          desc: prod.desc,
+          precioAnt,
+          precioNuevo: precio,
+          stockAnt,
+          stockNuevo: stockVic,
+          precioCambio,
+          stockCambio,
+        });
+      }
     }
 
     // Marcas que no se suben a Tienda Nube
@@ -2455,11 +2474,59 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
     }
 
     const csvOutput = updatedLines.join('\n');
+
+    // Generar txt resumen de cambios
+    const fecha = new Date().toLocaleString('es-AR');
+    const lineasTxt = [
+      `CAMBIOS TIENDA NUBE — ${fecha}`,
+      `${'='.repeat(60)}`,
+      `Total productos: ${lines.length - 1} | Actualizados: ${actualizados} | Sin datos: ${sinDatos} | Nuevos: ${nuevos.length}`,
+      '',
+    ];
+    const soloPrecio   = cambios.filter(c => c.precioCambio && !c.stockCambio);
+    const soloStock    = cambios.filter(c => c.stockCambio && !c.precioCambio);
+    const ambos        = cambios.filter(c => c.precioCambio && c.stockCambio);
+    const sinCambioReal = actualizados - cambios.length;
+
+    lineasTxt.push(`CAMBIOS DETECTADOS (${cambios.length} productos con diferencias):`);
+    lineasTxt.push(`  Precio y stock: ${ambos.length} | Solo precio: ${soloPrecio.length} | Solo stock: ${soloStock.length} | Sin cambio real: ${sinCambioReal}`);
+    lineasTxt.push('');
+
+    if (ambos.length > 0) {
+      lineasTxt.push(`--- PRECIO Y STOCK CAMBIARON (${ambos.length}) ---`);
+      for (const c of ambos) {
+        lineasTxt.push(`  ${c.codArt} | ${c.desc.substring(0, 45).padEnd(45)} | Precio: $${c.precioAnt.toLocaleString('es-AR')} → $${c.precioNuevo.toLocaleString('es-AR')} | Stock: ${c.stockAnt} → ${c.stockNuevo}`);
+      }
+      lineasTxt.push('');
+    }
+    if (soloPrecio.length > 0) {
+      lineasTxt.push(`--- SOLO PRECIO CAMBIÓ (${soloPrecio.length}) ---`);
+      for (const c of soloPrecio) {
+        lineasTxt.push(`  ${c.codArt} | ${c.desc.substring(0, 45).padEnd(45)} | $${c.precioAnt.toLocaleString('es-AR')} → $${c.precioNuevo.toLocaleString('es-AR')}`);
+      }
+      lineasTxt.push('');
+    }
+    if (soloStock.length > 0) {
+      lineasTxt.push(`--- SOLO STOCK CAMBIÓ (${soloStock.length}) ---`);
+      for (const c of soloStock) {
+        lineasTxt.push(`  ${c.codArt} | ${c.desc.substring(0, 45).padEnd(45)} | Stock: ${c.stockAnt} → ${c.stockNuevo}`);
+      }
+      lineasTxt.push('');
+    }
+    if (nuevos.length > 0) {
+      lineasTxt.push(`--- PRODUCTOS NUEVOS (${nuevos.length}) ---`);
+      for (const p of nuevos) {
+        lineasTxt.push(`  ${p.codArt} | ${p.desc.substring(0, 45).padEnd(45)} | Stock: ${p.totalStock} | Precio: $${p.precio.toLocaleString('es-AR')}`);
+      }
+    }
+    const txtOutput = lineasTxt.join('\n');
+
     res.json({
       ok: true,
-      stats: { actualizados, sinDatos, nuevos: nuevos.length, total: lines.length - 1 },
+      stats: { actualizados, sinDatos, nuevos: nuevos.length, total: lines.length - 1, cambios: cambios.length },
       nuevos: nuevos.map(p => ({ codArt: p.codArt, desc: p.desc, medida: p.medida, marca: p.marca, stock: p.totalStock, precio: p.precio })),
       csv: Buffer.from(csvOutput, 'latin1').toString('base64'),
+      txt: Buffer.from(txtOutput, 'utf8').toString('base64'),
     });
   } catch(e) {
     console.error('TN update error:', e.message);

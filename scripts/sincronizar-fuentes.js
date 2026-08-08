@@ -85,6 +85,10 @@ function parseNum(val) {
 // ─── Descargar archivo de Drive ───────────────────────────────────────────────
 
 async function descargarXlsx(drive, fileId) {
+  const meta = await drive.files.get({ fileId, fields: 'name,size,modifiedTime' });
+  const kb = Math.round(parseInt(meta.data.size || 0) / 1024);
+  const fecha = meta.data.modifiedTime ? new Date(meta.data.modifiedTime).toLocaleString('es-AR') : '?';
+  console.log(`  📄 ${meta.data.name} (${kb} KB, modificado: ${fecha})`);
   const res = await drive.files.get({ fileId, alt: 'media' }, { responseType: 'arraybuffer' });
   const buf = Buffer.from(res.data);
   return XLSX.read(buf, { type: 'buffer', cellDates: true, raw: false });

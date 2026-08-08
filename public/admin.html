@@ -144,6 +144,7 @@
       <div id="tn-resultado" style="margin-top:16px;display:none">
         <div id="tn-stats" style="font-size:13px;color:#555;margin-bottom:12px"></div>
         <button class="btn" style="background:#16a34a;color:white;margin-bottom:14px" id="btn-tn-download" onclick="descargarCSV()">⬇️ Descargar CSV actualizado</button>
+        <button class="btn" style="background:#2563eb;color:white;margin-bottom:14px;margin-left:8px;display:none" id="btn-tn-txt" onclick="descargarTxt()">📄 Ver resumen de cambios</button>
         <div id="tn-nuevos" style="display:none">
           <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:#1a1a2e">🆕 Productos nuevos para crear en Tienda Nube:</div>
           <div style="overflow-x:auto">
@@ -264,6 +265,7 @@
     }
 
     let csvBase64 = null;
+    let txtBase64 = null;
 
     async function procesarTN() {
       const fileInput = document.getElementById('tn-file');
@@ -284,10 +286,13 @@
         const d = await r.json();
         if (!d.ok) throw new Error(d.error || 'Error desconocido');
         csvBase64 = d.csv;
+        txtBase64 = d.txt || null;
+        document.getElementById('btn-tn-txt').style.display = txtBase64 ? 'inline-block' : 'none';
 
         const s = d.stats;
         document.getElementById('tn-stats').innerHTML =
           `✅ <b>${s.actualizados}</b> productos actualizados · ` +
+          `🔄 <b>${s.cambios || 0}</b> con diferencias · ` +
           `⚠️ <b>${s.sinDatos}</b> sin datos en sheet · ` +
           `🆕 <b>${s.nuevos}</b> productos nuevos detectados (incluidos en el CSV)`;
 
@@ -322,6 +327,19 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url; a.download = 'tiendanube-actualizado.csv';
+      a.click(); URL.revokeObjectURL(url);
+    }
+
+    function descargarTxt() {
+      if (!txtBase64) return;
+      const bin = atob(txtBase64);
+      const arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      const blob = new Blob([arr], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const fecha = new Date().toISOString().slice(0,10);
+      a.href = url; a.download = `cambios-tn-${fecha}.txt`;
       a.click(); URL.revokeObjectURL(url);
     }
 

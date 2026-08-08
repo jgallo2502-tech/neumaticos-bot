@@ -20,12 +20,19 @@ const FOLDER_ID   = '11Ham__W-bVOJtaMsZQHRap-orDV6cpek';
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 async function getAuth() {
+  const scopes = [
+    'https://www.googleapis.com/auth/spreadsheets',
+    'https://www.googleapis.com/auth/drive.readonly',
+  ];
+  // En Railway se usa GOOGLE_CREDENTIALS env var; localmente credentials.json
+  if (process.env.GOOGLE_CREDENTIALS) {
+    let creds = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    if (creds.private_key) creds.private_key = creds.private_key.replace(/\\n/g, '\n');
+    return new google.auth.GoogleAuth({ credentials: creds, scopes });
+  }
   return new google.auth.GoogleAuth({
     keyFile: path.join(__dirname, '../credentials.json'),
-    scopes: [
-      'https://www.googleapis.com/auth/spreadsheets',
-      'https://www.googleapis.com/auth/drive.readonly',
-    ],
+    scopes,
   });
 }
 

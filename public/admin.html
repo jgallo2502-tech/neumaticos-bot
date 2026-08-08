@@ -36,9 +36,19 @@
     .log-box .fin-ok { color: #4ade80; font-weight: 700; }
     .log-box .fin-err { color: #f87171; font-weight: 700; }
     .badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px; margin-left: 6px; }
-    .badge-req { background: #fee2e2; color: #dc2626; }
     .badge-opt { background: #f0fdf4; color: #16a34a; }
     .info { font-size: 12px; color: #888; margin-top: 8px; }
+
+    /* Estado de archivos */
+    .estado-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .estado-item { padding: 10px 14px; border-radius: 8px; border: 1.5px solid #eee; background: #fafafa; }
+    .estado-item.cargado { border-color: #bbf7d0; background: #f0fdf4; }
+    .estado-item.vacio { border-color: #fee2e2; background: #fff5f5; }
+    .estado-nombre { font-size: 12px; font-weight: 700; color: #333; }
+    .estado-info { font-size: 11px; color: #888; margin-top: 3px; }
+    .estado-info.ok { color: #16a34a; }
+    .estado-info.err { color: #dc2626; }
+    .refresh-btn { font-size: 12px; color: #2563eb; background: none; border: none; cursor: pointer; padding: 0; margin-left: 8px; text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -52,13 +62,25 @@
 
   <div class="container">
 
+    <!-- Estado de archivos en servidor -->
+    <div class="card">
+      <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+        📁 Archivos cargados en el servidor
+        <button class="refresh-btn" onclick="cargarEstado()">↻ Actualizar</button>
+      </div>
+      <div class="estado-grid" id="estado-grid">
+        <div class="estado-item" style="grid-column:1/-1;color:#888;font-size:13px">Cargando...</div>
+      </div>
+      <p class="info" style="margin-top:10px">⚠️ Los archivos se borran si el servidor se reinicia. Subí los archivos antes de cada sincronización.</p>
+    </div>
+
     <!-- Subir archivos -->
     <div class="card">
-      <div class="card-title">📂 Actualizar fuentes de precios y stock</div>
+      <div class="card-title">⬆️ Subir archivos de fuentes</div>
       <div class="fuentes" id="fuentes-list">
         <div class="fuente-row">
           <div>
-            <div class="fuente-label">Inventario Gallo <span class="badge badge-req">Requerido</span></div>
+            <div class="fuente-label">Inventario Gallo <span class="badge badge-opt">Opcional</span></div>
             <div class="fuente-desc">Stock Victoria + Nordelta para todas las marcas</div>
           </div>
           <input type="file" class="fuente-file" accept=".xlsx,.xls" data-nombre="Inv Gallo">
@@ -66,7 +88,7 @@
         </div>
         <div class="fuente-row">
           <div>
-            <div class="fuente-label">Stock Celsur <span class="badge badge-req">Requerido</span></div>
+            <div class="fuente-label">Stock Celsur <span class="badge badge-opt">Opcional</span></div>
             <div class="fuente-desc">Stock Express (Michelin/BFGoodrich)</div>
           </div>
           <input type="file" class="fuente-file" accept=".xlsx,.xls" data-nombre="Stock_Disponible">
@@ -108,13 +130,13 @@
       <div class="upload-actions">
         <button class="btn btn-primary" id="btn-upload" onclick="subirArchivos()">⬆️ Subir archivos seleccionados</button>
       </div>
-      <p class="info">Solo se suben los archivos que hayas seleccionado. Los que no seleccionés quedan como están en Drive.</p>
+      <p class="info">Solo se suben los archivos que hayas seleccionado. Los que no seleccionés quedan como están.</p>
     </div>
 
     <!-- Sincronizar -->
     <div class="card">
       <div class="card-title">🔄 Sincronizar precios y stock</div>
-      <p style="font-size:13px;color:#555;margin-bottom:14px">Procesá las fuentes subidas y actualizá la hoja "Bot WhatsApp". Tarda 1-2 minutos.</p>
+      <p style="font-size:13px;color:#555;margin-bottom:14px">Procesá las fuentes cargadas y actualizá la hoja "Bot WhatsApp". Los archivos no cargados localmente se descargan desde Drive. Tarda 1-2 minutos.</p>
       <button class="btn btn-sync" id="btn-sync" onclick="correrSync()">🔄 Correr sincronización</button>
       <div class="log-box" id="log-box" style="margin-top:14px;display:none"></div>
     </div>
@@ -125,13 +147,48 @@
     const token = localStorage.getItem('token');
     if (!token) window.location.href = '/app/login.html';
 
-    // Verificar que sea admin
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
       if (payload.rol !== 'admin') window.location.href = '/app/seguimiento.html';
     } catch { window.location.href = '/app/login.html'; }
 
     function logout() { localStorage.removeItem('token'); window.location.href = '/app/login.html'; }
+
+    const LABELS = {
+      gallo:    'Inventario Gallo',
+      celsur:   'Stock Celsur',
+      hankook:  'Hankook',
+      yokohama: 'Yokohama',
+      linglong: 'Linglong',
+      michelin: 'Michelin / BFGoodrich',
+    };
+
+    async function cargarEstado() {
+      const grid = document.getElementById('estado-grid');
+      grid.innerHTML = '<div style="grid-column:1/-1;color:#888;font-size:13px">Cargando...</div>';
+      try {
+        const r = await fetch('/app/admin/fuentes', { headers: { 'Authorization': 'Bearer ' + token } });
+        const d = await r.json();
+        grid.innerHTML = '';
+        for (const [tipo, info] of Object.entries(d)) {
+          const div = document.createElement('div');
+          div.className = 'estado-item ' + (info.existe ? 'cargado' : 'vacio');
+          if (info.existe) {
+            const fecha = new Date(info.modificado);
+            const fechaStr = fecha.toLocaleDateString('es-AR') + ' ' + fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+            const kb = Math.round(info.tamaño / 1024);
+            div.innerHTML = `<div class="estado-nombre">✅ ${LABELS[tipo]}</div><div class="estado-info ok">Cargado el ${fechaStr} · ${kb} KB</div>`;
+          } else {
+            div.innerHTML = `<div class="estado-nombre">⬜ ${LABELS[tipo]}</div><div class="estado-info err">No cargado — se usará Drive</div>`;
+          }
+          grid.appendChild(div);
+        }
+      } catch(e) {
+        grid.innerHTML = `<div style="grid-column:1/-1;color:#dc2626;font-size:13px">Error al consultar estado: ${e.message}</div>`;
+      }
+    }
+
+    cargarEstado();
 
     async function subirArchivos() {
       const inputs = document.querySelectorAll('.fuente-file');
@@ -161,7 +218,7 @@
           const d = await r.json();
           if (d.ok) {
             el.className = 'fuente-status ok';
-            el.textContent = d.accion === 'actualizado' ? '✅ Actualizado' : '✅ Subido';
+            el.textContent = '✅ Subido';
           } else {
             el.className = 'fuente-status err';
             el.textContent = '❌ ' + (d.error || 'Error');
@@ -169,12 +226,12 @@
         } catch(e) {
           el.className = 'fuente-status err';
           el.textContent = '❌ ' + (e.message || 'Error de red');
-          console.error('Upload error:', e);
         }
       }
 
       btn.disabled = false;
       btn.textContent = '⬆️ Subir archivos seleccionados';
+      cargarEstado();
     }
 
     function correrSync() {

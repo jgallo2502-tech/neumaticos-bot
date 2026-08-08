@@ -2223,6 +2223,22 @@ function detectarTipoFuente(nombre) {
   return null;
 }
 
+// Estado de archivos en /tmp/admin-fuentes/
+router.get('/admin/fuentes', adminMiddleware, (req, res) => {
+  const fs = require('fs');
+  const resultado = {};
+  for (const [tipo, nombre] of Object.entries(FUENTE_NOMBRES)) {
+    const p = `${FUENTES_DIR}/${nombre}`;
+    if (fs.existsSync(p)) {
+      const stat = fs.statSync(p);
+      resultado[tipo] = { existe: true, nombre, tamaño: stat.size, modificado: stat.mtime };
+    } else {
+      resultado[tipo] = { existe: false };
+    }
+  }
+  res.json(resultado);
+});
+
 // Subir archivo al servidor (guarda en /tmp/admin-fuentes/)
 router.post('/admin/upload', adminMiddleware, upload.single('archivo'), async (req, res) => {
   if (!req.file) return res.status(400).json({ ok: false, error: 'Sin archivo' });

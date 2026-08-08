@@ -442,29 +442,30 @@ async function main() {
     ['Yokohama', archivoYokohama],
     ['Linglong', archivoLinglong],
   ]) {
-    if (!archivo) { console.error(`❌ No se encontró archivo: ${nombre}`); process.exit(1); }
+    if (!archivo) console.warn(`⚠️  No se encontró archivo en Drive: ${nombre} — se omitirá`);
   }
   if (!archivoNeumasur) console.log('⚠️  Neumasur no encontrado — Nexen sin actualizar');
 
   console.log('📥 Descargando archivos...');
+  const cargar = (local, archivo) => leerLocal(local) || (archivo ? descargarXlsx(drive, archivo.id) : null);
   const [wbInv, wbCelsur, wbMich, wbHank, wbYoko, wbLL] = await Promise.all([
-    leerLocal('gallo.xlsx')    || descargarXlsx(drive, archivoInventario.id),
-    leerLocal('celsur.xlsx')   || descargarXlsx(drive, archivoCelsur.id),
-    leerLocal('michelin.xlsx') || descargarXlsx(drive, archivoMichelin.id),
-    leerLocal('hankook.xlsx')  || descargarXlsx(drive, archivoHankook.id),
-    leerLocal('yokohama.xlsx') || descargarXlsx(drive, archivoYokohama.id),
-    leerLocal('linglong.xlsx') || descargarXlsx(drive, archivoLinglong.id),
+    cargar('gallo.xlsx',    archivoInventario),
+    cargar('celsur.xlsx',   archivoCelsur),
+    cargar('michelin.xlsx', archivoMichelin),
+    cargar('hankook.xlsx',  archivoHankook),
+    cargar('yokohama.xlsx', archivoYokohama),
+    cargar('linglong.xlsx', archivoLinglong),
   ]);
   const wbNex = archivoNeumasur ? (leerLocal('neumasur.xlsx') || await descargarXlsx(drive, archivoNeumasur.id)) : null;
 
   console.log('🔄 Procesando fuentes...');
-  const { vicMap, norMap, precioMap, productos } = leerInventarioGallo(wbInv);
-  const { caiMap: celsurStock, descMap: celsurDesc, marcaMap: celsurMarca } = leerCelsur(wbCelsur);
-  const michelinPrecios    = leerMichelinPrecios(wbMich);
-  const hankookData        = leerHankook(wbHank);
-  const yokoData           = leerYokohama(wbYoko);
-  const llData             = leerLinglong(wbLL);
-  const nexenData          = wbNex ? leerNeumasur(wbNex) : { skuMap: {}, medidaMap: {} };
+  const { vicMap, norMap, precioMap, productos } = wbInv ? leerInventarioGallo(wbInv) : { vicMap: {}, norMap: {}, precioMap: {}, productos: {} };
+  const { caiMap: celsurStock, descMap: celsurDesc, marcaMap: celsurMarca } = wbCelsur ? leerCelsur(wbCelsur) : { caiMap: {}, descMap: {}, marcaMap: {} };
+  const michelinPrecios = wbMich ? leerMichelinPrecios(wbMich) : {};
+  const hankookData     = wbHank ? leerHankook(wbHank)         : { skuMap: {}, medidaMap: {} };
+  const yokoData        = wbYoko ? leerYokohama(wbYoko)        : { skuMap: {}, medidaMap: {} };
+  const llData          = wbLL   ? leerLinglong(wbLL)          : { skuMap: {}, medidaMap: {} };
+  const nexenData       = wbNex  ? leerNeumasur(wbNex)         : { skuMap: {}, medidaMap: {} };
 
   console.log(`  Gallo Victoria: ${Object.keys(vicMap).length} productos`);
   console.log(`  Gallo Nordelta: ${Object.keys(norMap).length} productos`);

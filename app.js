@@ -2187,8 +2187,6 @@ const multer = require('multer');
 const { spawn } = require('child_process');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
-const DRIVE_FOLDER_ID = '11Ham__W-bVOJtaMsZQHRap-orDV6cpek';
-
 function adminMiddleware(req, res, next) {
   const token = (req.headers.authorization || '').replace('Bearer ', '');
   try {

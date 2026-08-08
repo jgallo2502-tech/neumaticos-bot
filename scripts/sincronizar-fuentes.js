@@ -122,7 +122,12 @@ function encontrarArchivo(archivos, keywords, excluir = []) {
 // ─── Leer Inventario Gallo ────────────────────────────────────────────────────
 function leerInventarioGallo(wb) {
   const sheetName = wb.SheetNames[0];
+  console.log(`  Gallo — Hojas: ${wb.SheetNames.join(', ')} | Usando: ${sheetName}`);
   const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1 });
+  console.log(`  Gallo — Filas totales: ${rows.length}`);
+  if (rows.length > 1) {
+    console.log(`  Gallo — Fila 1 (cols A-H): ${rows[1].slice(0,8).map((v,i) => `[${i}]${v}`).join(' | ')}`);
+  }
   const vicMap    = {};
   const norMap    = {};
   const precioMap = {};

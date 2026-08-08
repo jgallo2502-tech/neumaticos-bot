@@ -336,7 +336,7 @@ async function obtenerPrecios(medida, marca, incluirRunFlat = false, minStock = 
     const stockTotal = sVic + sNor + sExpr;
 
     // RF seguido de dígito = run flat (RF205..., RF 235...); RF11/RF12 son modelos Hankook, no run flat
-    const esRunFlat = /runflat|run flat|run-flat|\bRFT\b|\bZP\b/i.test(rowDesc) || /^RF\s*\d{3}/i.test(rowDesc);
+    const esRunFlat = /runflat|run flat|run-flat|\bRFT\b|\bZP\b|\bEMT\b/i.test(rowDesc) || /^RF\s*\d{3}/i.test(rowDesc);
     if (incluirRunFlat && !esRunFlat) continue;  // modo solo run flat: excluir normales
     if (!incluirRunFlat && esRunFlat) continue;  // modo normal: excluir run flat
 

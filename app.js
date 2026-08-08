@@ -2180,4 +2180,89 @@ router.get('/ordenes/listar', authMiddleware, async (req, res) => {
   }
 });
 
+// ============================================================
+// ADMIN — solo rol admin
+// ============================================================
+const multer = require('multer');
+const { spawn } = require('child_process');
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+
+const DRIVE_FOLDER_ID = '11Ham__W-bVOJtaMsZQHRap-orDV6cpek';
+
+function adminMiddleware(req, res, next) {
+  const token = (req.headers.authorization || '').replace('Bearer ', '');
+  try {
+    const user = jwt.verify(token, JWT_SECRET);
+    if (user.rol !== 'admin') return res.status(403).json({ error: 'Solo admin' });
+    req.user = user;
+    next();
+  } catch {
+    res.status(401).json({ error: 'No autorizado' });
+  }
+}
+
+// Subir archivo a Drive (reemplaza si existe con mismo nombre)
+router.post('/admin/upload', adminMiddleware, upload.single('archivo'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ ok: false, error: 'Sin archivo' });
+  try {
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/drive'] });
+    const drive = google.drive({ version: 'v3', auth });
+
+    // Buscar si ya existe un archivo con ese nombre en la carpeta
+    const list = await drive.files.list({
+      q: `name='${req.file.originalname}' and '${DRIVE_FOLDER_ID}' in parents and trashed=false`,
+      fields: 'files(id,name)',
+    });
+
+    const { Readable } = require('stream');
+    const stream = Readable.from(req.file.buffer);
+    const mimeType = req.file.mimetype || 'application/octet-stream';
+
+    if (list.data.files.length > 0) {
+      // Actualizar el existente
+      const fileId = list.data.files[0].id;
+      await drive.files.update({ fileId, media: { mimeType, body: stream } });
+      res.json({ ok: true, accion: 'actualizado', nombre: req.file.originalname });
+    } else {
+      // Crear nuevo
+      await drive.files.create({
+        requestBody: { name: req.file.originalname, parents: [DRIVE_FOLDER_ID] },
+        media: { mimeType, body: stream },
+      });
+      res.json({ ok: true, accion: 'creado', nombre: req.file.originalname });
+    }
+  } catch(e) {
+    console.error('Admin upload error:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Correr sincronización y devolver output via SSE (token por query param para EventSource)
+router.get('/admin/sync', (req, res, next) => {
+  const token = req.query.token || (req.headers.authorization || '').replace('Bearer ', '');
+  try {
+    const user = jwt.verify(token, JWT_SECRET);
+    if (user.rol !== 'admin') return res.status(403).end();
+    req.user = user; next();
+  } catch { res.status(401).end(); }
+}, (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const send = (msg) => res.write(`data: ${JSON.stringify(msg)}\n\n`);
+  send({ tipo: 'inicio', texto: 'Iniciando sincronización...' });
+
+  const scriptPath = path.join(__dirname, 'scripts', 'sincronizar-fuentes.js');
+  const proc = spawn(process.execPath, [scriptPath], { env: process.env });
+
+  proc.stdout.on('data', d => d.toString().split('\n').filter(Boolean).forEach(l => send({ tipo: 'log', texto: l })));
+  proc.stderr.on('data', d => d.toString().split('\n').filter(Boolean).forEach(l => send({ tipo: 'err', texto: l })));
+  proc.on('close', code => {
+    send({ tipo: 'fin', texto: code === 0 ? '✅ Sincronización completa' : `❌ Terminó con código ${code}`, ok: code === 0 });
+    res.end();
+  });
+});
+
 module.exports = router;

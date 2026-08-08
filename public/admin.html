@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin — Neumáticos Gallo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #f5f5f5; color: #222; }
+    header { background: #1a1a2e; color: white; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; }
+    header h1 { font-size: 17px; }
+    .nav a { color: white; font-size: 13px; opacity: 0.8; text-decoration: none; margin-left: 14px; }
+    .container { max-width: 800px; margin: 28px auto; padding: 0 16px; }
+    .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .card-title { font-size: 15px; font-weight: 700; color: #1a1a2e; margin-bottom: 18px; padding-bottom: 10px; border-bottom: 2px solid #f0f0f0; }
+    .fuentes { display: flex; flex-direction: column; gap: 12px; }
+    .fuente-row { display: flex; align-items: center; gap:12px; padding: 10px 14px; border: 1.5px solid #eee; border-radius: 8px; background: #fafafa; }
+    .fuente-label { flex: 1; font-size: 13px; font-weight: 600; color: #333; }
+    .fuente-desc { font-size: 11px; color: #888; margin-top: 2px; }
+    .fuente-file { flex: 0 0 auto; }
+    input[type=file] { font-size: 12px; }
+    .fuente-status { font-size: 12px; min-width: 80px; text-align: right; color: #888; }
+    .fuente-status.ok { color: #16a34a; font-weight: 700; }
+    .fuente-status.err { color: #dc2626; font-weight: 700; }
+    .fuente-status.loading { color: #2563eb; }
+    .btn { padding: 11px 24px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 700; }
+    .btn-primary { background: #e63946; color: white; }
+    .btn-primary:hover { background: #c62d3a; }
+    .btn-primary:disabled { background: #ccc; cursor: default; }
+    .btn-sync { background: #1a1a2e; color: white; width: 100%; padding: 14px; font-size: 15px; margin-top: 8px; }
+    .btn-sync:hover { background: #2a2a4e; }
+    .btn-sync:disabled { background: #888; cursor: default; }
+    .upload-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+    .log-box { background: #0f0f1a; color: #a3e635; font-family: monospace; font-size: 12px; padding: 16px; border-radius: 8px; height: 320px; overflow-y: auto; white-space: pre-wrap; margin-top: 0; }
+    .log-box .err { color: #f87171; }
+    .log-box .fin-ok { color: #4ade80; font-weight: 700; }
+    .log-box .fin-err { color: #f87171; font-weight: 700; }
+    .badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px; margin-left: 6px; }
+    .badge-req { background: #fee2e2; color: #dc2626; }
+    .badge-opt { background: #f0fdf4; color: #16a34a; }
+    .info { font-size: 12px; color: #888; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>⚙️ Panel Admin — Neumáticos Gallo</h1>
+    <nav class="nav">
+      <a href="/app/seguimiento.html">← Volver</a>
+      <a href="#" onclick="logout()">Salir</a>
+    </nav>
+  </header>
+
+  <div class="container">
+
+    <!-- Subir archivos -->
+    <div class="card">
+      <div class="card-title">📂 Actualizar fuentes de precios y stock</div>
+      <div class="fuentes" id="fuentes-list">
+        <div class="fuente-row">
+          <div>
+            <div class="fuente-label">Inventario Gallo <span class="badge badge-req">Requerido</span></div>
+            <div class="fuente-desc">Stock Victoria + Nordelta para todas las marcas</div>
+          </div>
+          <input type="file" class="fuente-file" accept=".xlsx,.xls" data-nombre="Inv Gallo">
+          <div class="fuente-status" id="st-gallo"></div>
+        </div>
+        <div class="fuente-row">
+          <div>
+            <div class="fuente-label">Stock Celsur <span class="badge badge-req">Requerido</span></div>
+            <div class="fuente-desc">Stock Express (Michelin/BFGoodrich)</div>
+          </div>
+          <input type="file" class="fuente-file" accept=".xlsx,.xls" data-nombre="Stock_Disponible">
+          <div class="fuente-status" id="st-celsur"></div>
+        </div>
+        <div class="fuente-row">
+          <div>
+            <div class="fuente-label">Hankook <span class="badge badge-opt">Opcional</span></div>
+            <div class="fuente-desc">Lista de precios Hankook PMG</div>
+          </div>
+          <input type="file" class="fuente-file" accept=".xlsx,.xls" data-nombre="Hankook">
+          <div class="fuente-status" id="st-hankook"></div>
+        </div>
+        <div class="fuente-row">
+          <div>
+            <div class="fuente-label">Yokohama <span class="badge badge-opt">Opcional</span></div>
+            <div class="fuente-desc">Lista de precios Yokohama PMG</div>
+          </div>
+          <input type="file" class="fuente-file" accept=".xlsx,.xls" data-nombre="Yokohama">
+          <div class="fuente-status" id="st-yokohama"></div>
+        </div>
+        <div class="fuente-row">
+          <div>
+            <div class="fuente-label">Linglong <span class="badge badge-opt">Opcional</span></div>
+            <div class="fuente-desc">Lista de precios Linglong PMG</div>
+          </div>
+          <input type="file" class="fuente-file" accept=".xlsx,.xls" data-nombre="Ling Long">
+          <div class="fuente-status" id="st-linglong"></div>
+        </div>
+        <div class="fuente-row">
+          <div>
+            <div class="fuente-label">Michelin / BFGoodrich <span class="badge badge-opt">Opcional</span></div>
+            <div class="fuente-desc">Lista de precios Michelin PMG</div>
+          </div>
+          <input type="file" class="fuente-file" accept=".xlsx,.xls" data-nombre="Michelin BFGoodrich">
+          <div class="fuente-status" id="st-michelin"></div>
+        </div>
+      </div>
+      <div class="upload-actions">
+        <button class="btn btn-primary" id="btn-upload" onclick="subirArchivos()">⬆️ Subir archivos seleccionados</button>
+      </div>
+      <p class="info">Solo se suben los archivos que hayas seleccionado. Los que no seleccionés quedan como están en Drive.</p>
+    </div>
+
+    <!-- Sincronizar -->
+    <div class="card">
+      <div class="card-title">🔄 Sincronizar precios y stock</div>
+      <p style="font-size:13px;color:#555;margin-bottom:14px">Procesá las fuentes subidas y actualizá la hoja "Bot WhatsApp". Tarda 1-2 minutos.</p>
+      <button class="btn btn-sync" id="btn-sync" onclick="correrSync()">🔄 Correr sincronización</button>
+      <div class="log-box" id="log-box" style="margin-top:14px;display:none"></div>
+    </div>
+
+  </div>
+
+  <script>
+    const token = localStorage.getItem('token');
+    if (!token) window.location.href = '/app/login.html';
+
+    // Verificar que sea admin
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      if (payload.rol !== 'admin') window.location.href = '/app/seguimiento.html';
+    } catch { window.location.href = '/app/login.html'; }
+
+    function logout() { localStorage.removeItem('token'); window.location.href = '/app/login.html'; }
+
+    async function subirArchivos() {
+      const inputs = document.querySelectorAll('.fuente-file');
+      const archivos = [...inputs].filter(i => i.files.length > 0);
+      if (archivos.length === 0) { alert('Seleccioná al menos un archivo.'); return; }
+
+      const btn = document.getElementById('btn-upload');
+      btn.disabled = true;
+      btn.textContent = '⏳ Subiendo...';
+
+      for (const input of archivos) {
+        const file = input.files[0];
+        const statusId = input.closest('.fuente-row').querySelector('.fuente-status').id;
+        const el = document.getElementById(statusId);
+        el.className = 'fuente-status loading';
+        el.textContent = 'Subiendo...';
+
+        const fd = new FormData();
+        fd.append('archivo', file, file.name);
+
+        try {
+          const r = await fetch('/app/admin/upload', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token },
+            body: fd,
+          });
+          const d = await r.json();
+          if (d.ok) {
+            el.className = 'fuente-status ok';
+            el.textContent = d.accion === 'actualizado' ? '✅ Actualizado' : '✅ Subido';
+          } else {
+            el.className = 'fuente-status err';
+            el.textContent = '❌ ' + (d.error || 'Error');
+          }
+        } catch(e) {
+          el.className = 'fuente-status err';
+          el.textContent = '❌ Error de red';
+        }
+      }
+
+      btn.disabled = false;
+      btn.textContent = '⬆️ Subir archivos seleccionados';
+    }
+
+    function correrSync() {
+      const btn = document.getElementById('btn-sync');
+      const box = document.getElementById('log-box');
+      btn.disabled = true;
+      btn.textContent = '⏳ Sincronizando...';
+      box.style.display = 'block';
+      box.innerHTML = '';
+
+      const es = new EventSource('/app/admin/sync?token=' + encodeURIComponent(token));
+
+      es.onmessage = (e) => {
+        const d = JSON.parse(e.data);
+        const line = document.createElement('div');
+        if (d.tipo === 'err') line.className = 'err';
+        if (d.tipo === 'fin') line.className = d.ok ? 'fin-ok' : 'fin-err';
+        line.textContent = d.texto;
+        box.appendChild(line);
+        box.scrollTop = box.scrollHeight;
+        if (d.tipo === 'fin') {
+          es.close();
+          btn.disabled = false;
+          btn.textContent = '🔄 Correr sincronización';
+        }
+      };
+
+      es.onerror = () => {
+        const line = document.createElement('div');
+        line.className = 'err';
+        line.textContent = '❌ Error de conexión con el servidor';
+        box.appendChild(line);
+        es.close();
+        btn.disabled = false;
+        btn.textContent = '🔄 Correr sincronización';
+      };
+    }
+  </script>
+</body>
+</html>

@@ -382,19 +382,49 @@
       wrap.innerHTML='<div class="sin-datos">Todavía no guardaste ningún período en el sistema.</div>';
       return;
     }
-    let html = '<table class="hist-table"><thead><tr><th>Período</th><th>ARCA Recibidos</th><th>ARCA Emitidos</th><th>Libro Gallo</th></tr></thead><tbody>';
+    const btnDel = (tipo, p) =>
+      `<button onclick="eliminarDatos('${tipo}','${p}')" title="Eliminar ${tipo} de ${formatPeriodo(p)}"
+        style="margin-left:6px;padding:1px 7px;font-size:11px;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;cursor:pointer">✕</button>`;
+    let html = '<table class="hist-table"><thead><tr><th>Período</th><th>ARCA Recibidos</th><th>ARCA Emitidos</th><th>Libro Gallo</th><th></th></tr></thead><tbody>';
     todosP.forEach(p=>{
-      const r = periodos.rec.includes(p)?'<span class="badge-tipo bt-rec">✅ Cargado</span>':'<span style="color:#bbb;font-size:12px">—</span>';
-      const e = periodos.emi.includes(p)?'<span class="badge-tipo bt-emi">✅ Cargado</span>':'<span style="color:#bbb;font-size:12px">—</span>';
-      const g = periodos.gal.includes(p)?'<span class="badge-tipo bt-gall">✅ Cargado</span>':'<span style="color:#bbb;font-size:12px">—</span>';
-      html += `<tr><td><strong>${formatPeriodo(p)}</strong></td><td>${r}</td><td>${e}</td><td>${g}</td></tr>`;
+      const r = periodos.rec.includes(p) ? `<span class="badge-tipo bt-rec">✅ Cargado</span>${btnDel('rec',p)}` : '<span style="color:#bbb;font-size:12px">—</span>';
+      const e = periodos.emi.includes(p) ? `<span class="badge-tipo bt-emi">✅ Cargado</span>${btnDel('emi',p)}` : '<span style="color:#bbb;font-size:12px">—</span>';
+      const g = periodos.gal.includes(p) ? `<span class="badge-tipo bt-gall">✅ Cargado</span>${btnDel('gal',p)}` : '<span style="color:#bbb;font-size:12px">—</span>';
+      html += `<tr>
+        <td><strong>${formatPeriodo(p)}</strong></td>
+        <td>${r}</td><td>${e}</td><td>${g}</td>
+        <td><button onclick="eliminarDatos(null,'${p}')" title="Eliminar todo el período"
+          style="padding:2px 8px;font-size:11px;background:#1a1a2e;color:#fff;border:none;border-radius:6px;cursor:pointer">🗑 Todo</button></td>
+      </tr>`;
     });
-    // Agregar cargas de esta sesión que no están guardadas
     historial.filter(h=>!['guardado'].includes(h.estado)).forEach(h=>{
-      html += `<tr style="background:#fffbeb"><td style="color:#888;font-size:11px">Esta sesión — ${formatPeriodo(document.getElementById('periodo-carga').value)}</td><td>${h.tipo==='rec'?'<span class="badge-tipo bt-rec">⏳ Sin guardar</span>':''}</td><td>${h.tipo==='emi'?'<span class="badge-tipo bt-emi">⏳ Sin guardar</span>':''}</td><td>${h.tipo==='gal'?'<span class="badge-tipo bt-gall">⏳ Sin guardar</span>':''}</td></tr>`;
+      html += `<tr style="background:#fffbeb"><td style="color:#888;font-size:11px">Esta sesión — ${formatPeriodo(document.getElementById('periodo-carga').value)}</td><td>${h.tipo==='rec'?'<span class="badge-tipo bt-rec">⏳ Sin guardar</span>':''}</td><td>${h.tipo==='emi'?'<span class="badge-tipo bt-emi">⏳ Sin guardar</span>':''}</td><td>${h.tipo==='gal'?'<span class="badge-tipo bt-gall">⏳ Sin guardar</span>':''}</td><td></td></tr>`;
     });
     html += '</tbody></table>';
     wrap.innerHTML = html;
+  }
+
+  async function eliminarDatos(tipo, periodo) {
+    const label = tipo ? `${tipo.toUpperCase()} de ${formatPeriodo(periodo)}` : `TODO el período ${formatPeriodo(periodo)}`;
+    if(!confirm(`¿Eliminar ${label} del sistema? Esta acción no se puede deshacer.`)) return;
+    try {
+      const url = `/app/oficina/datos?periodo=${periodo}${tipo?'&tipo='+tipo:''}`;
+      const r = await fetch(url, { method:'DELETE', headers:{'Authorization':'Bearer '+token} });
+      const d = await r.json();
+      if(d.ok) {
+        // Actualizar el estado local
+        if(tipo) {
+          _periodosDisponibles[tipo] = _periodosDisponibles[tipo].filter(p=>p!==periodo);
+        } else {
+          ['rec','emi','gal'].forEach(t=>{ _periodosDisponibles[t]=_periodosDisponibles[t].filter(p=>p!==periodo); });
+        }
+        renderHistorialPeriodos(_periodosDisponibles);
+        actualizarSelectPeriodos();
+        alert(`✅ Eliminado (${d.eliminados} filas)`);
+      } else {
+        alert('Error: '+d.error);
+      }
+    } catch(e) { alert('Error: '+e.message); }
   }
 
   // ── Guardar en sistema (Google Sheets) ────────────────────────────

@@ -2102,6 +2102,36 @@ router.get('/oficina/datos', authMiddleware, async (req, res) => {
   }
 });
 
+// Eliminar tipo+periodo (o solo tipo dentro de un periodo)
+router.delete('/oficina/datos', express.json(), authMiddleware, async (req, res) => {
+  if (!['admin','adm'].includes(req.user.rol)) return res.status(403).json({ error: 'Sin acceso' });
+  try {
+    const { tipo, periodo } = req.query;
+    if (!periodo) return res.status(400).json({ ok: false, error: 'Falta periodo' });
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const existing = await getOficinaDatos(sheets);
+    const header = existing.find(r => r[0] === 'tipo') || ['tipo','periodo','fecha','tipo_comp','puntoNum','denom','cuit','neto','iva','total'];
+    const keep = existing.filter(r => {
+      if (r[0] === 'tipo') return false; // se pone el header de nuevo
+      if (tipo) return !(r[0] === tipo && r[1] === periodo);
+      return r[1] !== periodo; // sin tipo: borra todo el periodo
+    });
+    await sheets.spreadsheets.values.clear({ spreadsheetId: process.env.GOOGLE_SHEET_ID, range: 'OficinaDatos!A:J' });
+    if (keep.length) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: process.env.GOOGLE_SHEET_ID,
+        range: 'OficinaDatos!A1',
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [header, ...keep] },
+      });
+    }
+    res.json({ ok: true, eliminados: existing.length - keep.length - 1 });
+  } catch(err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // ─── ÓRDENES DE SERVICIO ─────────────────────────────────────────────────────
 
 // Traer datos del presupuesto por token (para pre-cargar en orden.html)

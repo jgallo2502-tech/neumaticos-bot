@@ -288,6 +288,7 @@
           <input type="text" id="rc-q" placeholder="Buscar número o cliente..." oninput="renderRecon()">
           <button onclick="exportarRecon(false)" style="padding:7px 14px;background:#1a1a2e;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600">⬇ Exportar vista</button>
           <button onclick="exportarRecon(true)" style="padding:7px 14px;background:#fff;color:#1a1a2e;border:1.5px solid #1a1a2e;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600">⬇ Exportar todo</button>
+          <button id="btn-wsp" onclick="copiarWhatsapp()" style="padding:7px 14px;background:#25d366;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600">📋 Copiar para WhatsApp</button>
         </div>
         <div class="tbl-wrap">
           <table class="data">
@@ -872,6 +873,50 @@
     document.getElementById('rc-solo-sist').textContent = cnt['solo-sist'];
     document.getElementById('rc-dif').textContent       = cnt.dif;
     renderRecon();
+  }
+
+  function copiarWhatsapp() {
+    const filtro = document.getElementById('rc-filtro').value;
+    const q = norm(document.getElementById('rc-q').value);
+    let rows = _recon;
+    if (filtro) rows = rows.filter(r => r.estado === filtro);
+    if (q) rows = rows.filter(r => (r.puntoNum||'').includes(q) || norm(r.denom).includes(q));
+
+    const periodo = document.getElementById('periodo-informe').value || '';
+    const ESTADO_LABEL = { ok:'✅ Coincide', nc:'✅ N. Crédito', 'solo-arca':'⚠️ Solo ARCA', 'solo-sist':'❓ Solo sistema', dif:'💰 Dif. monto' };
+    const filtroLabel = { '':'Todos', ok:'Coinciden', nc:'Notas de crédito', 'solo-arca':'Solo en ARCA', 'solo-sist':'Solo en sistema', dif:'Diferencia de monto' };
+
+    let txt = `*Reconciliación IVA Compras — ${formatPeriodo(periodo)}*\n`;
+    if (filtro) txt += `Filtro: ${filtroLabel[filtro]}\n`;
+    if (q) txt += `Búsqueda: "${document.getElementById('rc-q').value}"\n`;
+    txt += `_${rows.length} registros_\n`;
+    txt += '─'.repeat(32) + '\n';
+
+    rows.forEach(r => {
+      const dif = r.totalArca - r.totalSist;
+      txt += `${ESTADO_LABEL[r.estado] || r.estado}\n`;
+      txt += `  📄 ${r.puntoNum}  ${r.fecha}\n`;
+      if (r.denom) txt += `  🏢 ${r.denom}\n`;
+      txt += `  ARCA: $${Number(r.totalArca).toLocaleString('es-AR')}`;
+      if (r.totalSist) txt += `  |  Sist: $${Number(r.totalSist).toLocaleString('es-AR')}`;
+      if (Math.abs(dif) > 50) txt += `  |  Dif: ${dif > 0 ? '+' : ''}$${Number(dif).toLocaleString('es-AR')}`;
+      txt += '\n\n';
+    });
+
+    navigator.clipboard.writeText(txt).then(() => {
+      const btn = document.getElementById('btn-wsp');
+      btn.textContent = '✅ ¡Copiado!';
+      setTimeout(() => { btn.textContent = '📋 Copiar para WhatsApp'; }, 2500);
+    }).catch(() => {
+      // fallback para navegadores sin clipboard API
+      const ta = document.createElement('textarea');
+      ta.value = txt; ta.style.position='fixed'; ta.style.opacity='0';
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+      document.body.removeChild(ta);
+      const btn = document.getElementById('btn-wsp');
+      btn.textContent = '✅ ¡Copiado!';
+      setTimeout(() => { btn.textContent = '📋 Copiar para WhatsApp'; }, 2500);
+    });
   }
 
   function exportarRecon(todo) {

@@ -199,6 +199,7 @@
     const vendedor = localStorage.getItem('vendedor') || '';
     const esAdmin = localStorage.getItem('rol') === 'admin';
     if (!token) window.location.href = '/app/login.html';
+    if (localStorage.getItem('rol') === 'adm') window.location.href = '/app/oficina.html';
 
     document.getElementById('vendedor-nombre').textContent = vendedor;
     document.getElementById('nombre-usuario').textContent = vendedor;

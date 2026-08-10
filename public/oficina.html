@@ -46,6 +46,13 @@
     .carga-estado { font-size: 12px; text-align: center; margin-top: 8px; min-height: 16px; }
     .carga-ok  { color: #16a34a; }
     .carga-err { color: #dc2626; }
+    .btn-guardar { width:100%; margin-top:6px; padding:9px; background:#16a34a; color:white; border:none; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer; }
+    .btn-guardar:hover { background:#15803d; }
+    .btn-guardar:disabled { background:#ccc; cursor:default; }
+    .periodo-bar { display:flex; align-items:center; gap:10px; margin-bottom:20px; flex-wrap:wrap; }
+    .periodo-bar label { font-size:13px; font-weight:600; color:#555; }
+    .periodo-bar select { padding:8px 12px; border:1.5px solid #ddd; border-radius:8px; font-size:13px; }
+    .periodo-bar .btn-periodo { padding:8px 16px; background:#1a1a2e; color:white; border:none; border-radius:8px; cursor:pointer; font-size:13px; }
 
     /* ── Historial de cargas ── */
     .hist-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -115,6 +122,13 @@
   <div class="tab-body">
   <div id="tab-carga" class="tab-panel active">
 
+    <!-- Selector de período -->
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:22px;padding:14px 18px;background:#f8f9fa;border-radius:10px;flex-wrap:wrap">
+      <span style="font-size:13px;font-weight:700;color:#1a1a2e">📅 Período que estás cargando:</span>
+      <select id="periodo-carga" style="padding:8px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;font-weight:600"></select>
+      <span style="font-size:12px;color:#888">Los archivos se guardan por período y se pueden actualizar en cualquier momento.</span>
+    </div>
+
     <div class="upload-grid">
 
       <!-- ARCA Recibidos -->
@@ -128,7 +142,8 @@
           <input type="file" id="f-rec" accept=".xlsx,.xls,.csv" onchange="dzSelect(event,'rec')">
         </div>
         <div class="dz-filename" id="fn-rec"></div>
-        <button class="btn-cargar" id="btn-rec" disabled onclick="cargar('rec')">Cargar →</button>
+        <button class="btn-cargar" id="btn-rec" disabled onclick="cargar('rec')">Parsear archivo →</button>
+        <button class="btn-guardar" id="grd-rec" style="display:none" onclick="guardarEnSistema('rec')">💾 Guardar en sistema</button>
         <div class="carga-estado" id="st-rec"></div>
       </div>
 
@@ -143,14 +158,15 @@
           <input type="file" id="f-emi" accept=".xlsx,.xls,.csv" onchange="dzSelect(event,'emi')">
         </div>
         <div class="dz-filename" id="fn-emi"></div>
-        <button class="btn-cargar" id="btn-emi" disabled onclick="cargar('emi')">Cargar →</button>
+        <button class="btn-cargar" id="btn-emi" disabled onclick="cargar('emi')">Parsear archivo →</button>
+        <button class="btn-guardar" id="grd-emi" style="display:none" onclick="guardarEnSistema('emi')">💾 Guardar en sistema</button>
         <div class="carga-estado" id="st-emi"></div>
       </div>
 
       <!-- Sistema Gallo -->
       <div class="upload-card">
         <h3>🏪 Sistema Gallo — Libro IVA Compras</h3>
-        <p>Exportá del sistema de Gallo el <strong>Libro de IVA Compras</strong> del período en Excel (.xls/.xlsx). Se cruza contra ARCA Recibidos para detectar diferencias.</p>
+        <p>Exportá del sistema de Gallo el <strong>Libro de IVA Compras</strong> del período. Se puede re-subir para actualizar.</p>
         <div class="drop-zone" id="dz-gal" onclick="document.getElementById('f-gal').click()"
              ondragover="dzOver(event,'gal')" ondragleave="dzLeave('gal')" ondrop="dzDrop(event,'gal')">
           <div class="dz-icon">📂</div>
@@ -158,7 +174,8 @@
           <input type="file" id="f-gal" accept=".xlsx,.xls,.csv" onchange="dzSelect(event,'gal')">
         </div>
         <div class="dz-filename" id="fn-gal"></div>
-        <button class="btn-cargar" id="btn-gal" disabled onclick="cargar('gal')">Cargar →</button>
+        <button class="btn-cargar" id="btn-gal" disabled onclick="cargar('gal')">Parsear archivo →</button>
+        <button class="btn-guardar" id="grd-gal" style="display:none" onclick="guardarEnSistema('gal')">💾 Guardar en sistema</button>
         <div class="carga-estado" id="st-gal"></div>
       </div>
     </div>
@@ -176,6 +193,14 @@
   <!-- TAB: INFORMES                                        -->
   <!-- ═══════════════════════════════════════════════════ -->
   <div id="tab-informes" class="tab-panel">
+
+    <div class="periodo-bar">
+      <label>📅 Período:</label>
+      <select id="periodo-informe" onchange="cargarPeriodo()">
+        <option value="">Cargando períodos...</option>
+      </select>
+      <span id="periodos-status" style="font-size:12px;color:#888"></span>
+    </div>
 
     <div class="sub-tabs">
       <button class="sub-tab active" onclick="subTab('iva-compras')">📥 IVA Compras</button>
@@ -292,8 +317,168 @@
   // ── Estado global ─────────────────────────────────────────────────
   const DATA = { rec: null, emi: null, gal: null };
   const FILES = { rec: null, emi: null, gal: null };
-  const historial = [];
+  const historial = [];    // cargas de esta sesión
   let _recon = [];
+  let _periodosDisponibles = { rec:[], emi:[], gal:[] };
+
+  // Llenar selector de período con últimos 18 meses
+  (function() {
+    const sel = document.getElementById('periodo-carga');
+    const hoy = new Date();
+    const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    for (let i = 0; i < 18; i++) {
+      const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+      const val = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+      const label = meses[d.getMonth()] + ' ' + d.getFullYear();
+      const opt = document.createElement('option');
+      opt.value = val; opt.textContent = label;
+      sel.appendChild(opt);
+    }
+  })();
+
+  // ── Inicio: cargar períodos disponibles y último período ──────────
+  async function iniciarSistema() {
+    try {
+      const r = await fetch('/app/oficina/periodos', { headers:{'Authorization':'Bearer '+token} });
+      const d = await r.json();
+      if(!d.ok) return;
+      _periodosDisponibles = d.periodos;
+
+      // Poblar selector de Informes
+      const todosP = [...new Set([...d.periodos.rec,...d.periodos.emi,...d.periodos.gal])].sort().reverse();
+      const sel = document.getElementById('periodo-informe');
+      if(todosP.length) {
+        sel.innerHTML = todosP.map(p=>`<option value="${p}">${formatPeriodo(p)}</option>`).join('');
+        document.getElementById('periodos-status').textContent = todosP.length + ' período(s) guardados';
+        // Auto-cargar el más reciente
+        cargarPeriodo();
+      } else {
+        sel.innerHTML = '<option value="">Sin períodos guardados</option>';
+        document.getElementById('periodos-status').textContent = 'Subí los archivos y guardalos para verlos aquí';
+      }
+
+      // Mostrar historial de períodos guardados en tab Carga
+      renderHistorialPeriodos(d.periodos);
+    } catch(e) {
+      console.error('iniciarSistema:', e);
+    }
+  }
+
+  function formatPeriodo(p) {
+    if(!p) return p;
+    const [y,m] = p.split('-');
+    const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    return (meses[parseInt(m)-1]||m) + ' ' + y;
+  }
+
+  function renderHistorialPeriodos(periodos) {
+    const wrap = document.getElementById('hist-wrap');
+    const todosP = [...new Set([...periodos.rec,...periodos.emi,...periodos.gal])].sort().reverse();
+    if(!todosP.length && !historial.length) {
+      wrap.innerHTML='<div class="sin-datos">Todavía no guardaste ningún período en el sistema.</div>';
+      return;
+    }
+    let html = '<table class="hist-table"><thead><tr><th>Período</th><th>ARCA Recibidos</th><th>ARCA Emitidos</th><th>Libro Gallo</th></tr></thead><tbody>';
+    todosP.forEach(p=>{
+      const r = periodos.rec.includes(p)?'<span class="badge-tipo bt-rec">✅ Cargado</span>':'<span style="color:#bbb;font-size:12px">—</span>';
+      const e = periodos.emi.includes(p)?'<span class="badge-tipo bt-emi">✅ Cargado</span>':'<span style="color:#bbb;font-size:12px">—</span>';
+      const g = periodos.gal.includes(p)?'<span class="badge-tipo bt-gall">✅ Cargado</span>':'<span style="color:#bbb;font-size:12px">—</span>';
+      html += `<tr><td><strong>${formatPeriodo(p)}</strong></td><td>${r}</td><td>${e}</td><td>${g}</td></tr>`;
+    });
+    // Agregar cargas de esta sesión que no están guardadas
+    historial.filter(h=>!['guardado'].includes(h.estado)).forEach(h=>{
+      html += `<tr style="background:#fffbeb"><td style="color:#888;font-size:11px">Esta sesión — ${formatPeriodo(document.getElementById('periodo-carga').value)}</td><td>${h.tipo==='rec'?'<span class="badge-tipo bt-rec">⏳ Sin guardar</span>':''}</td><td>${h.tipo==='emi'?'<span class="badge-tipo bt-emi">⏳ Sin guardar</span>':''}</td><td>${h.tipo==='gal'?'<span class="badge-tipo bt-gall">⏳ Sin guardar</span>':''}</td></tr>`;
+    });
+    html += '</tbody></table>';
+    wrap.innerHTML = html;
+  }
+
+  // ── Guardar en sistema (Google Sheets) ────────────────────────────
+  async function guardarEnSistema(tipo) {
+    const rows = DATA[tipo];
+    if(!rows||!rows.length) return;
+    const periodo = document.getElementById('periodo-carga').value;
+    if(!periodo) { alert('Seleccioná el período antes de guardar.'); return; }
+
+    const btn = document.getElementById('grd-'+tipo);
+    btn.disabled = true;
+    btn.textContent = '⏳ Guardando...';
+
+    // Preparar rows para el backend
+    const payload = rows.map(r=>({
+      fecha: r.fecha, tipo_comp: r.tipo||r.tipo_comp||'',
+      puntoNum: r.puntoNum, denom: r.denom||r.proveedor||r.cliente||'',
+      cuit: r.cuit, neto: r.neto, iva: r.iva, total: r.total,
+    }));
+
+    try {
+      const r = await fetch('/app/oficina/datos/guardar', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+        body: JSON.stringify({ tipo, periodo, rows: payload }),
+      });
+      const d = await r.json();
+      if(d.ok) {
+        btn.textContent = '✅ Guardado (' + d.guardados + ')';
+        btn.style.background = '#15803d';
+        document.getElementById('st-'+tipo).className = 'carga-estado carga-ok';
+        document.getElementById('st-'+tipo).textContent = '✅ Guardado en sistema para ' + formatPeriodo(periodo);
+        // Actualizar períodos disponibles
+        if(!_periodosDisponibles[tipo].includes(periodo)) _periodosDisponibles[tipo].push(periodo);
+        renderHistorialPeriodos(_periodosDisponibles);
+        actualizarSelectPeriodos();
+      } else {
+        throw new Error(d.error||'Error desconocido');
+      }
+    } catch(e) {
+      btn.disabled=false; btn.textContent='💾 Guardar en sistema';
+      document.getElementById('st-'+tipo).className='carga-estado carga-err';
+      document.getElementById('st-'+tipo).textContent='❌ Error al guardar: '+e.message;
+    }
+  }
+
+  function actualizarSelectPeriodos() {
+    const todosP=[...new Set([..._periodosDisponibles.rec,..._periodosDisponibles.emi,..._periodosDisponibles.gal])].sort().reverse();
+    const sel=document.getElementById('periodo-informe');
+    const current=sel.value;
+    sel.innerHTML=todosP.map(p=>`<option value="${p}" ${p===current?'selected':''}>${formatPeriodo(p)}</option>`).join('');
+    document.getElementById('periodos-status').textContent=todosP.length+' período(s) guardados';
+  }
+
+  // ── Cargar período desde sistema ──────────────────────────────────
+  async function cargarPeriodo() {
+    const periodo = document.getElementById('periodo-informe').value;
+    if(!periodo) return;
+    document.getElementById('periodos-status').textContent = '⏳ Cargando ' + formatPeriodo(periodo) + '...';
+    try {
+      const r = await fetch('/app/oficina/datos?periodo='+periodo, { headers:{'Authorization':'Bearer '+token} });
+      const d = await r.json();
+      if(!d.ok) throw new Error(d.error);
+      // Separar por tipo
+      const recs = d.rows.filter(r=>r.tipo_origen==='rec');
+      const emis = d.rows.filter(r=>r.tipo_origen==='emi');
+      const gals = d.rows.filter(r=>r.tipo_origen==='gal');
+      // Convertir al formato interno y poblar DATA
+      if(recs.length) { DATA.rec = recs.map(adaptarFila); actualizarIvaCompras(); }
+      if(emis.length) { DATA.emi = emis.map(adaptarFila); actualizarIvaVentas(); }
+      if(gals.length) { DATA.gal = gals.map(adaptarFilaGal); }
+      intentarRecon();
+      document.getElementById('periodos-status').textContent = formatPeriodo(periodo) + ' — ' +
+        [recs.length&&'recibidos: '+recs.length, emis.length&&'emitidos: '+emis.length, gals.length&&'Gallo: '+gals.length].filter(Boolean).join(', ');
+    } catch(e) {
+      document.getElementById('periodos-status').textContent = '❌ Error: '+e.message;
+    }
+  }
+
+  function adaptarFila(r) {
+    return { fecha:r.fecha, tipo:r.tipo_comp, puntoNum:r.puntoNum, denom:r.denom, cuit:r.cuit, neto:r.neto, iva:r.iva, total:r.total };
+  }
+  function adaptarFilaGal(r) {
+    return { puntoNum:r.puntoNum, comp:r.puntoNum, fecha:r.fecha, proveedor:r.denom, cuit:r.cuit, neto:r.neto, iva:r.iva, total:r.total };
+  }
+
+  // Iniciar al cargar la página
+  iniciarSistema();
 
   // ── Tabs ──────────────────────────────────────────────────────────
   function mainTab(id) {
@@ -354,12 +539,17 @@
 
         filas = rows.length;
         historial.push({ tipo: k, nombre: f.name, fecha: new Date().toLocaleTimeString('es-AR'), filas });
-        renderHistorial();
 
         document.getElementById('st-'+k).className = 'carga-estado carga-ok';
-        document.getElementById('st-'+k).textContent = '✅ ' + filas + ' comprobantes cargados';
-        btn.textContent = 'Recargar →';
+        document.getElementById('st-'+k).textContent = '✅ ' + filas + ' comprobantes. Ahora guardá en el sistema.';
+        btn.textContent = 'Re-parsear →';
         btn.disabled = false;
+        // Mostrar botón guardar
+        const grd = document.getElementById('grd-'+k);
+        grd.style.display = 'block';
+        grd.disabled = false;
+        grd.textContent = '💾 Guardar en sistema (' + formatPeriodo(document.getElementById('periodo-carga').value) + ')';
+        grd.style.background = '';
 
         // Actualizar informes automáticamente
         if (k === 'rec') { actualizarIvaCompras(); }

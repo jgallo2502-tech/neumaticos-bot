@@ -1999,6 +1999,109 @@ router.get('/oficina/presupuestos', authMiddleware, async (req, res) => {
   }
 });
 
+// ─── OFICINA: PERSISTENCIA DE DATOS ──────────────────────────────────────────
+// Hoja OficinaDatos: A=tipo B=periodo C=fecha D=tipo_comp E=puntoNum F=denom G=cuit H=neto I=iva J=total
+
+async function ensureOficinaDatosSheet(sheets) {
+  try {
+    const meta = await sheets.spreadsheets.get({ spreadsheetId: process.env.GOOGLE_SHEET_ID });
+    const exists = meta.data.sheets.some(s => s.properties.title === 'OficinaDatos');
+    if (!exists) {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: process.env.GOOGLE_SHEET_ID,
+        requestBody: { requests: [{ addSheet: { properties: { title: 'OficinaDatos' } } }] }
+      });
+    }
+  } catch(e) { console.error('ensureOficinaDatosSheet:', e.message); }
+}
+
+async function getOficinaDatos(sheets) {
+  try {
+    const r = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'OficinaDatos!A:J',
+    });
+    return r.data.values || [];
+  } catch(e) { return []; }
+}
+
+// Guardar (reemplaza ese tipo+periodo)
+router.post('/oficina/datos/guardar', express.json(), authMiddleware, async (req, res) => {
+  if (!['admin','adm'].includes(req.user.rol)) return res.status(403).json({ error: 'Sin acceso' });
+  try {
+    const { tipo, periodo, rows } = req.body;
+    if (!tipo || !periodo || !rows) return res.json({ ok: false, error: 'Datos incompletos' });
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+
+    await ensureOficinaDatosSheet(sheets);
+    const existing = await getOficinaDatos(sheets);
+    const header = ['tipo','periodo','fecha','tipo_comp','puntoNum','denom','cuit','neto','iva','total'];
+    // Conservar filas de otros tipo+periodo, reemplazar este
+    const keep = existing.filter(r => !(r[0] === tipo && r[1] === periodo) && r[0] !== 'tipo');
+    const newRows = rows.map(r => [
+      tipo, periodo,
+      r.fecha||'', r.tipo_comp||r.tipo||'', r.puntoNum||'',
+      r.denom||r.proveedor||r.cliente||'', r.cuit||'',
+      r.neto||0, r.iva||0, r.total||0
+    ]);
+    const allRows = [header, ...keep, ...newRows];
+
+    await sheets.spreadsheets.values.clear({ spreadsheetId: process.env.GOOGLE_SHEET_ID, range: 'OficinaDatos!A:J' });
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'OficinaDatos!A1',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: allRows },
+    });
+    res.json({ ok: true, guardados: newRows.length });
+  } catch(err) {
+    console.error('Error oficina/datos/guardar:', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Listar períodos disponibles por tipo
+router.get('/oficina/periodos', authMiddleware, async (req, res) => {
+  if (!['admin','adm'].includes(req.user.rol)) return res.status(403).json({ error: 'Sin acceso' });
+  try {
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const existing = await getOficinaDatos(sheets);
+    const periodos = { rec: new Set(), emi: new Set(), gal: new Set() };
+    existing.filter(r=>r[0]!=='tipo').forEach(r=>{ if(periodos[r[0]]) periodos[r[0]].add(r[1]); });
+    res.json({ ok: true, periodos: {
+      rec: [...periodos.rec].sort().reverse(),
+      emi: [...periodos.emi].sort().reverse(),
+      gal: [...periodos.gal].sort().reverse(),
+    }});
+  } catch(err) {
+    res.json({ ok: true, periodos: { rec:[], emi:[], gal:[] } });
+  }
+});
+
+// Obtener datos de un tipo+periodo
+router.get('/oficina/datos', authMiddleware, async (req, res) => {
+  if (!['admin','adm'].includes(req.user.rol)) return res.status(403).json({ error: 'Sin acceso' });
+  try {
+    const { tipo, periodo } = req.query;
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const existing = await getOficinaDatos(sheets);
+    const filtered = existing
+      .filter(r => r[0] !== 'tipo' && (!tipo||r[0]===tipo) && (!periodo||r[1]===periodo))
+      .map(r => ({
+        tipo_origen:r[0], periodo:r[1],
+        fecha:r[2], tipo_comp:r[3], puntoNum:r[4],
+        denom:r[5], cuit:r[6],
+        neto:parseFloat(r[7])||0, iva:parseFloat(r[8])||0, total:parseFloat(r[9])||0,
+      }));
+    res.json({ ok: true, rows: filtered });
+  } catch(err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // ─── ÓRDENES DE SERVICIO ─────────────────────────────────────────────────────
 
 // Traer datos del presupuesto por token (para pre-cargar en orden.html)

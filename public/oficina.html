@@ -7,517 +7,648 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Segoe UI', sans-serif; background: #f5f5f5; color: #222; }
+    body { font-family: 'Segoe UI', sans-serif; background: #f5f5f5; color: #222; font-size: 14px; }
     header { background: #1a1a2e; color: white; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; }
     header h1 { font-size: 17px; }
-    .nav { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-    .nav a { color: white; font-size: 13px; opacity: 0.8; text-decoration: none; }
+    .nav { display: flex; align-items: center; gap: 14px; }
     .logout { background: none; border: 1px solid rgba(255,255,255,0.3); color: white; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
 
-    .container { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
-    .tabs { display: flex; gap: 4px; margin-bottom: 20px; }
-    .tab-btn { padding: 10px 22px; border: none; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 14px; font-weight: 600; background: #ddd; color: #555; transition: all .2s; }
-    .tab-btn.active { background: white; color: #1a1a2e; box-shadow: 0 -2px 0 #e63946 inset; }
+    .container { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
+
+    /* ── Tabs principales ── */
+    .main-tabs { display: flex; gap: 4px; margin-bottom: 0; }
+    .main-tab { padding: 11px 26px; border: none; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 14px; font-weight: 600; background: #ddd; color: #555; }
+    .main-tab.active { background: white; color: #1a1a2e; box-shadow: 0 -3px 0 #e63946 inset; }
+    .tab-body { background: white; border-radius: 0 12px 12px 12px; padding: 28px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 24px; }
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
 
-    .card { background: white; border-radius: 0 12px 12px 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-    .card-title { font-size: 15px; font-weight: 700; color: #1a1a2e; margin-bottom: 18px; padding-bottom: 10px; border-bottom: 2px solid #f0f0f0; display: flex; align-items: center; gap: 8px; }
+    /* ── Sub-tabs (Informes) ── */
+    .sub-tabs { display: flex; gap: 6px; margin-bottom: 24px; flex-wrap: wrap; }
+    .sub-tab { padding: 8px 18px; border: 1.5px solid #ddd; border-radius: 20px; cursor: pointer; font-size: 13px; font-weight: 600; background: white; color: #555; }
+    .sub-tab.active { background: #1a1a2e; color: white; border-color: #1a1a2e; }
 
-    .upload-zone { border: 2px dashed #ccc; border-radius: 10px; padding: 32px; text-align: center; cursor: pointer; transition: border-color .2s; }
-    .upload-zone:hover, .upload-zone.dragover { border-color: #e63946; background: #fff5f5; }
-    .upload-zone input[type=file] { display: none; }
-    .upload-zone p { color: #888; font-size: 14px; margin-top: 8px; }
-    .upload-icon { font-size: 36px; }
-    .btn-upload { background: #e63946; color: white; border: none; padding: 10px 22px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; margin-top: 12px; }
-    .btn-upload:hover { background: #c62d3a; }
+    /* ── Cards de carga ── */
+    .upload-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; margin-bottom: 28px; }
+    @media(max-width:800px){ .upload-grid { grid-template-columns: 1fr; } }
+    .upload-card { border: 2px solid #eee; border-radius: 12px; padding: 20px; }
+    .upload-card h3 { font-size: 14px; font-weight: 700; margin-bottom: 4px; color: #1a1a2e; }
+    .upload-card p { font-size: 12px; color: #888; margin-bottom: 14px; line-height: 1.5; }
+    .drop-zone { border: 2px dashed #ccc; border-radius: 8px; padding: 20px; text-align: center; cursor: pointer; transition: all .2s; min-height: 90px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
+    .drop-zone:hover, .drop-zone.over { border-color: #e63946; background: #fff5f5; }
+    .drop-zone input { display: none; }
+    .drop-zone .dz-icon { font-size: 28px; }
+    .drop-zone .dz-text { font-size: 12px; color: #888; }
+    .dz-filename { font-size: 12px; font-weight: 600; color: #1a1a2e; margin-top: 6px; min-height: 18px; }
+    .btn-cargar { width: 100%; margin-top: 12px; padding: 10px; background: #e63946; color: white; border: none; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; }
+    .btn-cargar:hover { background: #c62d3a; }
+    .btn-cargar:disabled { background: #ccc; cursor: default; }
+    .carga-estado { font-size: 12px; text-align: center; margin-top: 8px; min-height: 16px; }
+    .carga-ok  { color: #16a34a; }
+    .carga-err { color: #dc2626; }
 
-    .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+    /* ── Historial de cargas ── */
+    .hist-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .hist-table th { background: #f5f5f5; padding: 8px 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: #666; }
+    .hist-table td { padding: 9px 12px; border-bottom: 1px solid #f0f0f0; }
+    .hist-table tr:last-child td { border-bottom: none; }
+    .badge-tipo { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+    .bt-rec  { background: #dbeafe; color: #1d4ed8; }
+    .bt-emi  { background: #dcfce7; color: #166534; }
+    .bt-gall { background: #fef9c3; color: #713f12; }
+
+    /* ── Stats ── */
+    .stats-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 22px; }
     @media(max-width:700px){ .stats-row { grid-template-columns: 1fr 1fr; } }
-    .stat-card { background: white; border-radius: 10px; padding: 16px; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
-    .stat-num { font-size: 28px; font-weight: 800; }
-    .stat-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: .5px; margin-top: 4px; }
-    .green { color: #16a34a; }
-    .red { color: #dc2626; }
-    .yellow { color: #d97706; }
-    .blue { color: #2563eb; }
+    .stat-card { border: 1.5px solid #f0f0f0; border-radius: 10px; padding: 16px; text-align: center; }
+    .stat-num { font-size: 26px; font-weight: 800; }
+    .stat-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: .4px; margin-top: 4px; }
+    .c-green { color: #16a34a; } .c-red { color: #dc2626; } .c-blue { color: #2563eb; } .c-gold { color: #d97706; }
 
-    /* Filtro */
+    /* ── Tablas de datos ── */
+    .tbl-wrap { overflow-x: auto; }
+    table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
+    table.data th { background: #1a1a2e; color: white; padding: 9px 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; }
+    table.data td { padding: 9px 12px; border-bottom: 1px solid #f0f0f0; white-space: nowrap; }
+    table.data tr:last-child td { border-bottom: none; }
+    table.data tr:hover td { background: #fafafa; }
+    .tr-ok   td { }
+    .tr-solo-arca td { background: #fff5f5; }
+    .tr-solo-sist td { background: #fffbeb; }
+    .tr-dif       td { background: #fff7ed; }
+    .badge-recon { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+    .br-ok        { background: #dcfce7; color: #166534; }
+    .br-solo-arca { background: #fee2e2; color: #991b1b; }
+    .br-solo-sist { background: #fef9c3; color: #713f12; }
+    .br-dif       { background: #ffedd5; color: #9a3412; }
+
+    /* ── Filtros ── */
     .filtros { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
-    .filtros select, .filtros input { padding: 8px 12px; border: 1.5px solid #ddd; border-radius: 8px; font-size: 13px; }
-    .badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
-    .badge-ok    { background: #dcfce7; color: #166534; }
-    .badge-solo-arca   { background: #fee2e2; color: #991b1b; }
-    .badge-solo-sist   { background: #fef9c3; color: #713f12; }
-    .badge-dif-monto   { background: #ffedd5; color: #9a3412; }
+    .filtros select, .filtros input[type=text], .filtros input[type=month] { padding: 8px 11px; border: 1.5px solid #ddd; border-radius: 8px; font-size: 13px; }
+    .filtros input[type=text] { flex: 1; min-width: 180px; }
 
-    /* Tabla */
-    .table-wrap { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th { background: #1a1a2e; color: white; padding: 9px 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; }
-    td { padding: 9px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
-    tr:last-child td { border-bottom: none; }
-    tr.fila-ok td { }
-    tr.fila-solo-arca td { background: #fff5f5; }
-    tr.fila-solo-sist td { background: #fffbeb; }
-    tr.fila-dif-monto td { background: #fff7ed; }
-    .empty { text-align: center; padding: 48px; color: #999; font-size: 14px; }
+    .empty { text-align: center; padding: 40px; color: #aaa; font-size: 13px; }
+    .sin-datos { border: 2px dashed #eee; border-radius: 10px; padding: 32px; text-align: center; color: #bbb; font-size: 14px; margin-bottom: 16px; }
 
-    /* IVA Compras */
-    .iva-totales { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 20px; }
-    @media(max-width:600px){ .iva-totales { grid-template-columns: 1fr; } }
-    .info-box { background: #f0f7ff; border-radius: 8px; padding: 14px 16px; font-size: 13px; }
-    .info-box strong { color: #1a1a2e; }
-
-    .periodo-sel { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
-    .periodo-sel label { font-size: 13px; font-weight: 600; color: #555; }
-    .periodo-sel input { padding: 8px 12px; border: 1.5px solid #ddd; border-radius: 8px; font-size: 13px; }
-    .btn-cargar { background: #1a1a2e; color: white; border: none; padding: 9px 18px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; }
+    .section-title { font-size: 15px; font-weight: 700; color: #1a1a2e; margin-bottom: 16px; padding-bottom: 10px; border-bottom: 2px solid #f0f0f0; }
+    hr.sep { border: none; border-top: 1px solid #eee; margin: 28px 0; }
   </style>
 </head>
 <body>
-  <header>
-    <h1>🔴 Neumáticos Gallo — Oficina Adm.</h1>
-    <div class="nav">
-      <span id="user-nombre" style="font-size:13px;opacity:0.7"></span>
-      <button class="logout" onclick="logout()">Salir</button>
-    </div>
-  </header>
+<header>
+  <h1>🔴 Neumáticos Gallo — Oficina Adm.</h1>
+  <div class="nav">
+    <span id="user-nombre" style="font-size:13px;opacity:.7"></span>
+    <button class="logout" onclick="logout()">Salir</button>
+  </div>
+</header>
 
-  <div class="container">
+<div class="container">
+  <div class="main-tabs">
+    <button class="main-tab active" onclick="mainTab('carga')">📁 Carga de datos</button>
+    <button class="main-tab" onclick="mainTab('informes')">📊 Informes</button>
+  </div>
 
-    <div class="tabs">
-      <button class="tab-btn active" onclick="switchTab('ventas')">📤 IVA Ventas (emitidos)</button>
-      <button class="tab-btn" onclick="switchTab('compras')">📥 IVA Compras (recibidos)</button>
-    </div>
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- TAB: CARGA DE DATOS                                 -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="tab-body">
+  <div id="tab-carga" class="tab-panel active">
 
-    <!-- ══════════════════════════════════════════════════════ -->
-    <!-- TAB: IVA VENTAS                                        -->
-    <!-- ══════════════════════════════════════════════════════ -->
-    <div id="tab-ventas" class="tab-panel active">
+    <div class="upload-grid">
 
-      <div class="card">
-        <div class="card-title">📤 Reconciliación IVA Ventas</div>
-        <p style="font-size:13px;color:#666;margin-bottom:16px">
-          Subí el archivo Excel de <strong>Comprobantes Emitidos</strong> que descargás de ARCA.
-          El sistema lo cruza con los presupuestos registrados y muestra diferencias.
-        </p>
-
-        <div class="periodo-sel">
-          <label>Período:</label>
-          <input type="month" id="v-periodo" value="">
-          <button class="btn-cargar" onclick="cargarPresupuestos()">Cargar sistema</button>
+      <!-- ARCA Recibidos -->
+      <div class="upload-card">
+        <h3>📥 ARCA — Comprobantes Recibidos</h3>
+        <p>IVA Compras: facturas de proveedores. Descargá el Excel desde ARCA → Comprobantes recibidos.</p>
+        <div class="drop-zone" id="dz-rec" onclick="document.getElementById('f-rec').click()"
+             ondragover="dzOver(event,'rec')" ondragleave="dzLeave('rec')" ondrop="dzDrop(event,'rec')">
+          <div class="dz-icon">📂</div>
+          <div class="dz-text">Clic o arrastrá el Excel</div>
+          <input type="file" id="f-rec" accept=".xlsx,.xls,.csv" onchange="dzSelect(event,'rec')">
         </div>
-
-        <div class="upload-zone" id="v-drop" onclick="document.getElementById('v-file').click()"
-             ondragover="ev(event,'dragover')" ondragleave="ev(event,'')" ondrop="dropFile(event,'v')">
-          <div class="upload-icon">📂</div>
-          <p>Hacé clic o arrastrá el archivo ARCA (Excel .xlsx)</p>
-          <button class="btn-upload" onclick="event.stopPropagation();document.getElementById('v-file').click()">Elegir archivo</button>
-          <input type="file" id="v-file" accept=".xlsx,.xls,.csv" onchange="parsearArca(event,'v')">
-          <div id="v-filename" style="margin-top:10px;font-size:13px;color:#333;font-weight:600"></div>
-        </div>
+        <div class="dz-filename" id="fn-rec"></div>
+        <button class="btn-cargar" id="btn-rec" disabled onclick="cargar('rec')">Cargar →</button>
+        <div class="carga-estado" id="st-rec"></div>
       </div>
 
-      <!-- Stats -->
-      <div class="stats-row" id="v-stats" style="display:none">
-        <div class="stat-card"><div class="stat-num green" id="v-cnt-ok">0</div><div class="stat-label">✅ Coinciden</div></div>
-        <div class="stat-card"><div class="stat-num red" id="v-cnt-solo-arca">0</div><div class="stat-label">⚠️ Solo en ARCA</div></div>
-        <div class="stat-card"><div class="stat-num yellow" id="v-cnt-solo-sist">0</div><div class="stat-label">❓ Solo en sistema</div></div>
-        <div class="stat-card"><div class="stat-num blue" id="v-cnt-dif">0</div><div class="stat-label">💰 Dif. de monto</div></div>
+      <!-- ARCA Emitidos -->
+      <div class="upload-card">
+        <h3>📤 ARCA — Comprobantes Emitidos</h3>
+        <p>IVA Ventas: facturas que emitió Gallo a sus clientes. Descargá el Excel desde ARCA → Comprobantes emitidos.</p>
+        <div class="drop-zone" id="dz-emi" onclick="document.getElementById('f-emi').click()"
+             ondragover="dzOver(event,'emi')" ondragleave="dzLeave('emi')" ondrop="dzDrop(event,'emi')">
+          <div class="dz-icon">📂</div>
+          <div class="dz-text">Clic o arrastrá el Excel</div>
+          <input type="file" id="f-emi" accept=".xlsx,.xls,.csv" onchange="dzSelect(event,'emi')">
+        </div>
+        <div class="dz-filename" id="fn-emi"></div>
+        <button class="btn-cargar" id="btn-emi" disabled onclick="cargar('emi')">Cargar →</button>
+        <div class="carga-estado" id="st-emi"></div>
       </div>
 
-      <!-- Tabla resultados -->
-      <div class="card" id="v-result-card" style="display:none">
-        <div class="card-title">Resultado de reconciliación</div>
+      <!-- Sistema Gallo -->
+      <div class="upload-card">
+        <h3>🏪 Sistema Gallo — Facturas emitidas</h3>
+        <p>Exportá del sistema de facturación de Gallo el listado de facturas emitidas en el período (Excel). Necesita: número, fecha, cliente, total.</p>
+        <div class="drop-zone" id="dz-gal" onclick="document.getElementById('f-gal').click()"
+             ondragover="dzOver(event,'gal')" ondragleave="dzLeave('gal')" ondrop="dzDrop(event,'gal')">
+          <div class="dz-icon">📂</div>
+          <div class="dz-text">Clic o arrastrá el Excel</div>
+          <input type="file" id="f-gal" accept=".xlsx,.xls,.csv" onchange="dzSelect(event,'gal')">
+        </div>
+        <div class="dz-filename" id="fn-gal"></div>
+        <button class="btn-cargar" id="btn-gal" disabled onclick="cargar('gal')">Cargar →</button>
+        <div class="carga-estado" id="st-gal"></div>
+      </div>
+    </div>
+
+    <hr class="sep">
+
+    <!-- Historial de cargas -->
+    <div class="section-title">📋 Archivos cargados en esta sesión</div>
+    <div id="hist-wrap">
+      <div class="sin-datos">Todavía no cargaste ningún archivo.</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- TAB: INFORMES                                        -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div id="tab-informes" class="tab-panel">
+
+    <div class="sub-tabs">
+      <button class="sub-tab active" onclick="subTab('iva-compras')">📥 IVA Compras</button>
+      <button class="sub-tab" onclick="subTab('iva-ventas')">📤 IVA Ventas</button>
+      <button class="sub-tab" onclick="subTab('recon')">🔄 Reconciliación ARCA vs Sistema</button>
+    </div>
+
+    <!-- ── IVA COMPRAS ────────────────────────────────── -->
+    <div id="sub-iva-compras" class="tab-panel active">
+      <div id="iva-c-nodatos" class="sin-datos">Cargá el archivo de ARCA Recibidos en la pestaña "Carga de datos" para ver este informe.</div>
+      <div id="iva-c-contenido" style="display:none">
+        <div class="stats-row">
+          <div class="stat-card"><div class="stat-num c-blue" id="ic-cnt">0</div><div class="stat-label">Comprobantes</div></div>
+          <div class="stat-card"><div class="stat-num" id="ic-neto" style="font-size:20px">$0</div><div class="stat-label">Neto gravado</div></div>
+          <div class="stat-card"><div class="stat-num c-red" id="ic-iva" style="font-size:20px">$0</div><div class="stat-label">IVA crédito fiscal</div></div>
+          <div class="stat-card"><div class="stat-num" id="ic-total" style="font-size:20px">$0</div><div class="stat-label">Total facturas</div></div>
+        </div>
         <div class="filtros">
-          <select id="v-filtro" onchange="renderTablaVentas()">
-            <option value="">Todos</option>
-            <option value="ok">✅ Coinciden</option>
-            <option value="solo-arca">⚠️ Solo en ARCA</option>
-            <option value="solo-sist">❓ Solo en sistema</option>
-            <option value="dif-monto">💰 Diferencia monto</option>
-          </select>
-          <input type="text" id="v-buscar" placeholder="Buscar número o cliente..." oninput="renderTablaVentas()" style="flex:1;min-width:200px">
+          <input type="text" id="ic-q" placeholder="Buscar proveedor, CUIT o número..." oninput="renderIvaCompras()">
+          <select id="ic-tipo" onchange="renderIvaCompras()"><option value="">Todos los tipos</option></select>
         </div>
-        <div class="table-wrap">
-          <table>
+        <div class="tbl-wrap">
+          <table class="data">
             <thead><tr>
-              <th>Estado</th>
-              <th>N° Comprobante</th>
-              <th>Fecha</th>
-              <th>Cliente (sistema)</th>
-              <th>Total ARCA</th>
-              <th>Total sistema</th>
-              <th>Diferencia</th>
-              <th>Tipo ARCA</th>
+              <th>Fecha</th><th>Tipo</th><th>Punto-N°</th>
+              <th>Proveedor</th><th>CUIT Proveedor</th>
+              <th style="text-align:right">Neto gravado</th>
+              <th style="text-align:right">IVA</th>
+              <th style="text-align:right">Total</th>
             </tr></thead>
-            <tbody id="v-tbody"></tbody>
+            <tbody id="ic-tbody"></tbody>
           </table>
         </div>
       </div>
     </div>
 
-    <!-- ══════════════════════════════════════════════════════ -->
-    <!-- TAB: IVA COMPRAS                                       -->
-    <!-- ══════════════════════════════════════════════════════ -->
-    <div id="tab-compras" class="tab-panel">
-
-      <div class="card">
-        <div class="card-title">📥 IVA Compras — Comprobantes Recibidos</div>
-        <p style="font-size:13px;color:#666;margin-bottom:16px">
-          Subí el archivo Excel de <strong>Comprobantes Recibidos</strong> de ARCA para ver el detalle de IVA compras del período.
-        </p>
-
-        <div class="upload-zone" id="c-drop" onclick="document.getElementById('c-file').click()"
-             ondragover="ev(event,'dragover')" ondragleave="ev(event,'')" ondrop="dropFile(event,'c')">
-          <div class="upload-icon">📂</div>
-          <p>Hacé clic o arrastrá el archivo ARCA (Excel .xlsx)</p>
-          <button class="btn-upload" onclick="event.stopPropagation();document.getElementById('c-file').click()">Elegir archivo</button>
-          <input type="file" id="c-file" accept=".xlsx,.xls,.csv" onchange="parsearArca(event,'c')">
-          <div id="c-filename" style="margin-top:10px;font-size:13px;color:#333;font-weight:600"></div>
+    <!-- ── IVA VENTAS ─────────────────────────────────── -->
+    <div id="sub-iva-ventas" class="tab-panel">
+      <div id="iva-v-nodatos" class="sin-datos">Cargá el archivo de ARCA Emitidos en la pestaña "Carga de datos" para ver este informe.</div>
+      <div id="iva-v-contenido" style="display:none">
+        <div class="stats-row">
+          <div class="stat-card"><div class="stat-num c-blue" id="iv-cnt">0</div><div class="stat-label">Comprobantes</div></div>
+          <div class="stat-card"><div class="stat-num" id="iv-neto" style="font-size:20px">$0</div><div class="stat-label">Neto gravado</div></div>
+          <div class="stat-card"><div class="stat-num c-red" id="iv-iva" style="font-size:20px">$0</div><div class="stat-label">IVA débito fiscal</div></div>
+          <div class="stat-card"><div class="stat-num" id="iv-total" style="font-size:20px">$0</div><div class="stat-label">Total facturas</div></div>
         </div>
-      </div>
-
-      <!-- Totales IVA Compras -->
-      <div id="c-totales" style="display:none">
-        <div class="iva-totales">
-          <div class="stat-card"><div class="stat-num blue" id="c-cnt">0</div><div class="stat-label">Comprobantes</div></div>
-          <div class="stat-card"><div class="stat-num" id="c-neto" style="font-size:20px">$0</div><div class="stat-label">Neto gravado total</div></div>
-          <div class="stat-card"><div class="stat-num red" id="c-iva" style="font-size:20px">$0</div><div class="stat-label">IVA total</div></div>
+        <div class="filtros">
+          <input type="text" id="iv-q" placeholder="Buscar cliente o número..." oninput="renderIvaVentas()">
+          <select id="iv-tipo" onchange="renderIvaVentas()"><option value="">Todos los tipos</option></select>
         </div>
-
-        <div class="card">
-          <div class="card-title">Detalle de comprobantes recibidos</div>
-          <div class="filtros">
-            <input type="text" id="c-buscar" placeholder="Buscar proveedor o número..." oninput="renderTablaCompras()" style="flex:1;min-width:200px">
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr>
-                <th>Fecha</th>
-                <th>Tipo</th>
-                <th>N° Comprobante</th>
-                <th>Proveedor</th>
-                <th>CUIT</th>
-                <th>Neto Gravado</th>
-                <th>IVA</th>
-                <th>Total</th>
-              </tr></thead>
-              <tbody id="c-tbody"></tbody>
-            </table>
-          </div>
+        <div class="tbl-wrap">
+          <table class="data">
+            <thead><tr>
+              <th>Fecha</th><th>Tipo</th><th>Punto-N°</th>
+              <th>Cliente</th><th>CUIT Cliente</th>
+              <th style="text-align:right">Neto gravado</th>
+              <th style="text-align:right">IVA</th>
+              <th style="text-align:right">Total</th>
+            </tr></thead>
+            <tbody id="iv-tbody"></tbody>
+          </table>
         </div>
       </div>
     </div>
 
-  </div><!-- /container -->
+    <!-- ── RECONCILIACIÓN ─────────────────────────────── -->
+    <div id="sub-recon" class="tab-panel">
+      <div id="recon-nodatos" class="sin-datos">Cargá ARCA Emitidos y el archivo del Sistema Gallo para ver la reconciliación.</div>
+      <div id="recon-contenido" style="display:none">
+        <div class="stats-row">
+          <div class="stat-card"><div class="stat-num c-green" id="rc-ok">0</div><div class="stat-label">✅ Coinciden</div></div>
+          <div class="stat-card"><div class="stat-num c-red" id="rc-solo-arca">0</div><div class="stat-label">⚠️ Solo en ARCA</div></div>
+          <div class="stat-card"><div class="stat-num c-gold" id="rc-solo-sist">0</div><div class="stat-label">❓ Solo en sistema</div></div>
+          <div class="stat-card"><div class="stat-num c-blue" id="rc-dif">0</div><div class="stat-label">💰 Dif. de monto</div></div>
+        </div>
+        <div class="filtros">
+          <select id="rc-filtro" onchange="renderRecon()">
+            <option value="">Todos</option>
+            <option value="ok">✅ Coinciden</option>
+            <option value="solo-arca">⚠️ Solo en ARCA</option>
+            <option value="solo-sist">❓ Solo en sistema</option>
+            <option value="dif">💰 Diferencia monto</option>
+          </select>
+          <input type="text" id="rc-q" placeholder="Buscar número o cliente..." oninput="renderRecon()">
+        </div>
+        <div class="tbl-wrap">
+          <table class="data">
+            <thead><tr>
+              <th>Estado</th><th>N° Comprobante</th><th>Fecha</th>
+              <th>Cliente / ARCA</th>
+              <th style="text-align:right">Total ARCA</th>
+              <th style="text-align:right">Total sistema</th>
+              <th style="text-align:right">Diferencia</th>
+            </tr></thead>
+            <tbody id="rc-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
 
-  <script>
-    const token = localStorage.getItem('token');
-    const rol   = localStorage.getItem('rol');
-    if (!token) window.location.href = '/app/login.html';
-    if (!['adm','admin'].includes(rol)) window.location.href = '/app/dashboard.html';
-    document.getElementById('user-nombre').textContent = localStorage.getItem('vendedor') || '';
+  </div><!-- /tab-informes -->
+  </div><!-- /tab-body -->
+</div><!-- /container -->
 
-    function logout() { localStorage.clear(); window.location.href = '/app/login.html'; }
+<script>
+  // ── Auth ──────────────────────────────────────────────────────────
+  const token = localStorage.getItem('token');
+  const rol   = localStorage.getItem('rol');
+  if (!token) window.location.href = '/app/login.html';
+  if (!['adm','admin'].includes(rol)) window.location.href = '/app/dashboard.html';
+  document.getElementById('user-nombre').textContent = localStorage.getItem('vendedor') || '';
+  function logout() { localStorage.clear(); window.location.href = '/app/login.html'; }
 
-    // Inicializar período con el mes actual
-    const hoy = new Date();
-    document.getElementById('v-periodo').value = hoy.toISOString().slice(0, 7);
+  // ── Estado global ─────────────────────────────────────────────────
+  const DATA = { rec: null, emi: null, gal: null };
+  const FILES = { rec: null, emi: null, gal: null };
+  const historial = [];
+  let _recon = [];
 
-    // ── Tabs ─────────────────────────────────────────────────
-    function switchTab(tab) {
-      document.querySelectorAll('.tab-btn').forEach((b, i) => b.classList.toggle('active', (i===0&&tab==='ventas')||(i===1&&tab==='compras')));
-      document.getElementById('tab-ventas').classList.toggle('active', tab === 'ventas');
-      document.getElementById('tab-compras').classList.toggle('active', tab === 'compras');
-    }
+  // ── Tabs ──────────────────────────────────────────────────────────
+  function mainTab(id) {
+    ['carga','informes'].forEach(t => {
+      document.getElementById('tab-'+t).classList.toggle('active', t===id);
+      document.querySelectorAll('.main-tab').forEach((b,i) => b.classList.toggle('active', (i===0&&id==='carga')||(i===1&&id==='informes')));
+    });
+  }
+  function subTab(id) {
+    ['iva-compras','iva-ventas','recon'].forEach(t => {
+      document.getElementById('sub-'+t).classList.toggle('active', t===id);
+    });
+    document.querySelectorAll('.sub-tab').forEach((b,i) => {
+      const ids = ['iva-compras','iva-ventas','recon'];
+      b.classList.toggle('active', ids[i]===id);
+    });
+  }
 
-    // ── Drag & Drop helpers ──────────────────────────────────
-    function ev(event, cls) {
-      event.preventDefault();
-      const id = event.currentTarget.id;
-      document.getElementById(id).className = 'upload-zone' + (cls ? ' ' + cls : '');
-    }
-    function dropFile(event, prefix) {
-      event.preventDefault();
-      const id = prefix + '-drop';
-      document.getElementById(id).className = 'upload-zone';
-      const file = event.dataTransfer.files[0];
-      if (file) procesarArchivo(file, prefix);
-    }
+  // ── Drop zones ────────────────────────────────────────────────────
+  function dzOver(e,k){ e.preventDefault(); document.getElementById('dz-'+k).classList.add('over'); }
+  function dzLeave(k){ document.getElementById('dz-'+k).classList.remove('over'); }
+  function dzDrop(e,k){ e.preventDefault(); dzLeave(k); const f=e.dataTransfer.files[0]; if(f) setFile(f,k); }
+  function dzSelect(e,k){ const f=e.target.files[0]; if(f) setFile(f,k); }
+  function setFile(f,k){
+    FILES[k]=f;
+    document.getElementById('fn-'+k).textContent = f.name;
+    document.getElementById('btn-'+k).disabled = false;
+    document.getElementById('st-'+k).textContent = '';
+  }
 
-    // ── Datos del sistema ────────────────────────────────────
-    let _presupuestos = []; // { numero (string), fecha, cliente, total }
-    let _arcaVentas   = []; // filas parseadas del Excel de emitidos
-    let _arcaCompras  = []; // filas parseadas del Excel de recibidos
-    let _recon        = []; // resultado reconciliación
+  // ── Cargar archivo ────────────────────────────────────────────────
+  function cargar(k) {
+    const f = FILES[k];
+    if (!f) return;
+    const btn = document.getElementById('btn-'+k);
+    btn.disabled = true;
+    btn.textContent = 'Procesando...';
+    document.getElementById('st-'+k).textContent = '';
 
-    async function cargarPresupuestos() {
+    const reader = new FileReader();
+    reader.onload = function(e) {
       try {
-        const r = await fetch('/app/oficina/presupuestos', {
-          headers: { 'Authorization': 'Bearer ' + token }
-        });
-        const d = await r.json();
-        if (!d.ok) throw new Error(d.error);
-        _presupuestos = d.presupuestos;
-        // Filtrar por período seleccionado si ya hay datos ARCA
-        if (_arcaVentas.length) reconciliarVentas();
-        else alert('✅ Sistema cargado: ' + _presupuestos.length + ' presupuestos. Ahora subí el Excel de ARCA.');
-      } catch (e) {
-        alert('Error al cargar sistema: ' + e.message);
-      }
-    }
+        const wb = XLSX.read(e.target.result, { type:'array', cellDates:true, raw:false });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const raw = XLSX.utils.sheet_to_json(ws, { header:1, raw:false, defval:'' });
 
-    // Cargar presupuestos automáticamente al entrar
-    cargarPresupuestos();
-
-    // ── Parsear archivo ARCA ─────────────────────────────────
-    function parsearArca(event, prefix) {
-      const file = event.target.files[0];
-      if (!file) return;
-      procesarArchivo(file, prefix);
-    }
-
-    function procesarArchivo(file, prefix) {
-      document.getElementById(prefix + '-filename').textContent = '⏳ Procesando ' + file.name + '...';
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        try {
-          const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
-          const ws = wb.Sheets[wb.SheetNames[0]];
-          const data = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false });
-
-          document.getElementById(prefix + '-filename').textContent = '✅ ' + file.name + ' (' + (data.length - 1) + ' filas)';
-
-          if (prefix === 'v') {
-            _arcaVentas = data;
-            if (_presupuestos.length) reconciliarVentas();
-            else { cargarPresupuestos(); }
-          } else {
-            _arcaCompras = data;
-            mostrarCompras();
-          }
-        } catch(err) {
-          document.getElementById(prefix + '-filename').textContent = '❌ Error: ' + err.message;
-          console.error(err);
-        }
-      };
-      reader.readAsArrayBuffer(file);
-    }
-
-    // ── Detectar columnas del Excel ARCA ────────────────────
-    // ARCA puede tener distintos headers; busco por palabras clave
-    function encontrarCol(headers, ...keywords) {
-      for (const kw of keywords) {
-        const idx = headers.findIndex(h => h && h.toLowerCase().includes(kw.toLowerCase()));
-        if (idx >= 0) return idx;
-      }
-      return -1;
-    }
-
-    function limpiarNumero(s) {
-      // "00001-00000042" → "42" | "0042" → "42"
-      const str = String(s || '').trim();
-      const m = str.match(/(?:.*-)?0*(\d+)$/);
-      return m ? m[1] : str.replace(/^0+/, '') || str;
-    }
-
-    function parsearMonto(s) {
-      const str = String(s || '').replace(/[^0-9,.-]/g, '').replace(',', '.');
-      return parseFloat(str) || 0;
-    }
-
-    function formatPeso(n) {
-      return '$' + Math.round(n).toLocaleString('es-AR');
-    }
-
-    // ── IVA VENTAS: Reconciliación ───────────────────────────
-    function reconciliarVentas() {
-      if (!_arcaVentas.length) return;
-
-      const headers = (_arcaVentas[0] || []).map(h => String(h || ''));
-      const filas   = _arcaVentas.slice(1).filter(r => r.some(c => c));
-
-      // Detectar columnas
-      const colNum   = encontrarCol(headers, 'número hasta', 'numero hasta', 'número', 'numero', 'nro');
-      const colFecha = encontrarCol(headers, 'fecha');
-      const colTotal = encontrarCol(headers, 'importe total', 'total');
-      const colTipo  = encontrarCol(headers, 'tipo');
-      const colDenom = encontrarCol(headers, 'denominación', 'denominacion', 'razón', 'nombre');
-
-      // Índice de presupuestos por número
-      const mapSist = {};
-      const periodo = document.getElementById('v-periodo').value; // "2025-06"
-      _presupuestos.forEach(p => {
-        if (!periodo || fechaEnPeriodo(p.fecha, periodo)) {
-          const num = limpiarNumero(p.numero);
-          mapSist[num] = p;
-        }
-      });
-
-      // Filas ARCA indexadas por número
-      const arcaRows = filas.map(r => ({
-        numero: colNum >= 0 ? limpiarNumero(r[colNum]) : '',
-        fecha:  colFecha >= 0 ? String(r[colFecha] || '') : '',
-        total:  colTotal >= 0 ? parsearMonto(r[colTotal]) : 0,
-        tipo:   colTipo >= 0 ? String(r[colTipo] || '') : '',
-        denom:  colDenom >= 0 ? String(r[colDenom] || '') : '',
-        _raw:   r,
-      })).filter(r => r.numero);
-
-      const mapArca = {};
-      arcaRows.forEach(r => { mapArca[r.numero] = r; });
-
-      // Cruzar
-      const todos = new Set([...Object.keys(mapArca), ...Object.keys(mapSist)]);
-      _recon = [];
-
-      todos.forEach(num => {
-        const a = mapArca[num];
-        const s = mapSist[num];
-        let estado;
-        if (a && s) {
-          const dif = Math.abs(a.total - s.total);
-          estado = dif > 50 ? 'dif-monto' : 'ok'; // tolerancia $50
-        } else if (a && !s) {
-          estado = 'solo-arca';
+        let rows, filas;
+        if (k === 'rec') {
+          rows = parsearArca(raw, 'recibido');
+          DATA.rec = rows;
+        } else if (k === 'emi') {
+          rows = parsearArca(raw, 'emitido');
+          DATA.emi = rows;
         } else {
-          estado = 'solo-sist';
+          rows = parsearSistema(raw);
+          DATA.gal = rows;
         }
-        _recon.push({
-          num, estado,
-          fecha:       a?.fecha || s?.fecha || '',
-          cliente:     s?.cliente || a?.denom || '',
-          totalArca:   a?.total || 0,
-          totalSist:   s?.total || 0,
-          tipo:        a?.tipo || '',
-        });
-      });
 
-      _recon.sort((a, b) => Number(a.num) - Number(b.num));
+        filas = rows.length;
+        historial.push({ tipo: k, nombre: f.name, fecha: new Date().toLocaleTimeString('es-AR'), filas });
+        renderHistorial();
 
-      // Stats
-      const cnt = { ok:0, 'solo-arca':0, 'solo-sist':0, 'dif-monto':0 };
-      _recon.forEach(r => cnt[r.estado]++);
-      document.getElementById('v-cnt-ok').textContent        = cnt['ok'];
-      document.getElementById('v-cnt-solo-arca').textContent = cnt['solo-arca'];
-      document.getElementById('v-cnt-solo-sist').textContent = cnt['solo-sist'];
-      document.getElementById('v-cnt-dif').textContent       = cnt['dif-monto'];
-      document.getElementById('v-stats').style.display       = 'grid';
-      document.getElementById('v-result-card').style.display = 'block';
+        document.getElementById('st-'+k).className = 'carga-estado carga-ok';
+        document.getElementById('st-'+k).textContent = '✅ ' + filas + ' comprobantes cargados';
+        btn.textContent = 'Recargar →';
+        btn.disabled = false;
 
-      renderTablaVentas();
-    }
+        // Actualizar informes automáticamente
+        if (k === 'rec') { actualizarIvaCompras(); }
+        if (k === 'emi') { actualizarIvaVentas(); intentarRecon(); }
+        if (k === 'gal') { intentarRecon(); }
 
-    function fechaEnPeriodo(fechaStr, periodo) {
-      // fechaStr puede ser "2025-06-15" o "15/06/2025"
-      const [anio, mes] = periodo.split('-');
-      if (fechaStr.includes('-')) return fechaStr.startsWith(periodo);
-      if (fechaStr.includes('/')) {
-        const partes = fechaStr.split('/');
-        // dd/mm/yyyy
-        return partes[2] === anio && partes[1] === mes;
+      } catch(err) {
+        document.getElementById('st-'+k).className = 'carga-estado carga-err';
+        document.getElementById('st-'+k).textContent = '❌ Error: ' + err.message;
+        btn.disabled = false;
+        btn.textContent = 'Reintentar →';
+        console.error(err);
       }
-      return true;
+    };
+    reader.readAsArrayBuffer(f);
+  }
+
+  // ── Historial ─────────────────────────────────────────────────────
+  const TIPO_INFO = {
+    rec: { label:'ARCA Recibidos', cls:'bt-rec' },
+    emi: { label:'ARCA Emitidos',  cls:'bt-emi' },
+    gal: { label:'Sistema Gallo',  cls:'bt-gall' },
+  };
+  function renderHistorial() {
+    const wrap = document.getElementById('hist-wrap');
+    if (!historial.length) { wrap.innerHTML='<div class="sin-datos">Todavía no cargaste ningún archivo.</div>'; return; }
+    wrap.innerHTML = `<table class="hist-table">
+      <thead><tr><th>Tipo</th><th>Archivo</th><th>Hora</th><th>Comprobantes</th></tr></thead>
+      <tbody>${historial.map(h=>`<tr>
+        <td><span class="badge-tipo ${TIPO_INFO[h.tipo].cls}">${TIPO_INFO[h.tipo].label}</span></td>
+        <td>${h.nombre}</td><td>${h.fecha}</td><td>${h.filas}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  }
+
+  // ── PARSER ARCA (emitidos / recibidos) ────────────────────────────
+  // El formato ARCA tiene columnas fijas; detectamos por encabezado normalizado.
+  function norm(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim(); }
+  function findCol(headers, ...kws){
+    for(const kw of kws){
+      const nkw = norm(kw);
+      const i = headers.findIndex(h => norm(h).includes(nkw));
+      if(i>=0) return i;
     }
+    return -1;
+  }
+  function toNum(s){ return parseFloat(String(s||'0').replace(/[^0-9.,-]/g,'').replace(',','.')) || 0; }
+  function fmtPeso(n){ return n ? '$'+Math.round(n).toLocaleString('es-AR') : '—'; }
 
-    function renderTablaVentas() {
-      const filtro = document.getElementById('v-filtro').value;
-      const q = (document.getElementById('v-buscar').value || '').toLowerCase();
+  function parsearArca(raw, modo) {
+    // Buscar la fila de encabezados (primera fila no vacía)
+    let hdrIdx = 0;
+    for(let i=0;i<Math.min(5,raw.length);i++){ if(raw[i].some(c=>c)) { hdrIdx=i; break; } }
+    const hdr = raw[hdrIdx];
+    const data = raw.slice(hdrIdx+1).filter(r=>r.some(c=>c));
 
-      let lista = _recon;
-      if (filtro) lista = lista.filter(r => r.estado === filtro);
-      if (q) lista = lista.filter(r =>
-        r.num.includes(q) || r.cliente.toLowerCase().includes(q)
-      );
+    // Columnas ARCA estándar
+    const cFecha  = findCol(hdr,'fecha de emi','fecha');
+    const cTipo   = findCol(hdr,'tipo de comp','tipo');
+    const cPtoV   = findCol(hdr,'punto de ven','punto');
+    const cNumD   = findCol(hdr,'numero des','número des','nro. desde','desde');
+    const cNumH   = findCol(hdr,'numero has','número has','nro. hasta','hasta');
+    // En recibidos: "Nro. Doc. Emi" es el CUIT del proveedor; "Denominaci" es el nombre
+    // En emitidos:  "Nro. Doc. Rec" es el CUIT del cliente; "Denominaci" es el nombre
+    const cCuitEmi= findCol(hdr,'nro. doc. emi','nro doc emi');
+    const cCuitRec= findCol(hdr,'nro. doc. rec','nro doc rec');
+    const cDenom  = findCol(hdr,'denominaci');
 
-      const BADGES = {
-        'ok':        '<span class="badge badge-ok">✅ Coincide</span>',
-        'solo-arca': '<span class="badge badge-solo-arca">⚠️ Solo ARCA</span>',
-        'solo-sist': '<span class="badge badge-solo-sist">❓ Solo sistema</span>',
-        'dif-monto': '<span class="badge badge-dif-monto">💰 Dif. monto</span>',
+    // IVA: sumar todas las columnas que digan "iva" pero NO "neto" ni "gravado"
+    const colsIva = hdr.reduce((acc,h,i)=>{
+      const n=norm(h); if(n.includes('iva')&&!n.includes('neto')&&!n.includes('gravado')) acc.push(i); return acc;
+    },[]);
+    // Neto: todas las columnas "imp. neto gra" o "neto gravado"
+    const colsNeto = hdr.reduce((acc,h,i)=>{
+      const n=norm(h); if((n.includes('neto')&&n.includes('grav'))||n.includes('base imponible')) acc.push(i); return acc;
+    },[]);
+    // Total: buscar "imp. total" o "importe total" o última columna con "total"
+    let cTotal = findCol(hdr,'imp. total','importe total');
+    if(cTotal<0) cTotal = findCol(hdr,'total');
+
+    return data.map(r=>{
+      const numD = r[cNumD]||'';
+      const numH = r[cNumH]||'';
+      const num  = numH||numD; // usar "hasta" como número principal
+      const pto  = r[cPtoV]||'';
+
+      const iva   = colsIva.reduce((s,i)=>s+toNum(r[i]),0);
+      const neto  = colsNeto.reduce((s,i)=>s+toNum(r[i]),0);
+      let total   = cTotal>=0 ? toNum(r[cTotal]) : 0;
+      if(!total) total = neto + iva;
+
+      const cuitEmi = r[cCuitEmi]||'';
+      const cuitRec = r[cCuitRec]||'';
+      const cuit = modo==='recibido' ? cuitEmi : cuitRec;
+      const denom = r[cDenom]||'';
+
+      return {
+        fecha: r[cFecha]||'',
+        tipo: r[cTipo]||'',
+        pto: pto,
+        num: num,
+        puntoNum: String(pto).padStart(4,'0')+'-'+String(num).padStart(8,'0'),
+        numLimpio: limpiarNum(num),
+        denom, cuit, iva, neto, total
       };
+    }).filter(r=>r.num);
+  }
 
-      const tbody = document.getElementById('v-tbody');
-      if (!lista.length) {
-        tbody.innerHTML = '<tr><td colspan="8" class="empty">Sin resultados</td></tr>';
-        return;
-      }
-      tbody.innerHTML = lista.map(r => {
-        const dif = r.totalArca - r.totalSist;
-        const difStr = dif !== 0 ? (dif > 0 ? '+' : '') + formatPeso(dif) : '—';
-        return `<tr class="fila-${r.estado}">
-          <td>${BADGES[r.estado]}</td>
-          <td><strong>${r.num}</strong></td>
-          <td style="white-space:nowrap">${r.fecha}</td>
-          <td>${r.cliente || '—'}</td>
-          <td>${r.totalArca ? formatPeso(r.totalArca) : '—'}</td>
-          <td>${r.totalSist ? formatPeso(r.totalSist) : '—'}</td>
-          <td style="color:${dif>50?'#dc2626':dif<-50?'#d97706':'#888'}">${difStr}</td>
-          <td style="font-size:11px;color:#666">${r.tipo}</td>
-        </tr>`;
-      }).join('');
+  function limpiarNum(s){
+    const str=String(s||'').trim();
+    const m=str.match(/(?:.*-)?0*(\d+)$/);
+    return m?m[1]:str.replace(/^0+/,'')||str;
+  }
+
+  // ── PARSER Sistema Gallo (flexible) ──────────────────────────────
+  function parsearSistema(raw) {
+    let hdrIdx=0;
+    for(let i=0;i<Math.min(5,raw.length);i++){ if(raw[i].some(c=>c)){hdrIdx=i;break;} }
+    const hdr = raw[hdrIdx];
+    const data = raw.slice(hdrIdx+1).filter(r=>r.some(c=>c));
+
+    const cNum   = findCol(hdr,'numero','número','nro','comprobante','fact');
+    const cFecha = findCol(hdr,'fecha');
+    const cClien = findCol(hdr,'cliente','razon','denominacion','nombre');
+    const cCuit  = findCol(hdr,'cuit','rut','doc');
+    const cTotal = findCol(hdr,'total','importe','monto');
+
+    return data.map(r=>{
+      const num = cNum>=0 ? String(r[cNum]||'').trim() : '';
+      return {
+        num, numLimpio: limpiarNum(num),
+        fecha: cFecha>=0?String(r[cFecha]||''):'',
+        cliente: cClien>=0?String(r[cClien]||''):'',
+        cuit: cCuit>=0?String(r[cCuit]||''):'',
+        total: cTotal>=0?toNum(r[cTotal]):0,
+      };
+    }).filter(r=>r.num);
+  }
+
+  // ── IVA COMPRAS ───────────────────────────────────────────────────
+  function actualizarIvaCompras() {
+    const rows = DATA.rec;
+    if(!rows||!rows.length){ document.getElementById('iva-c-nodatos').style.display='block'; document.getElementById('iva-c-contenido').style.display='none'; return; }
+    document.getElementById('iva-c-nodatos').style.display='none';
+    document.getElementById('iva-c-contenido').style.display='block';
+
+    const totalNeto  = rows.reduce((s,r)=>s+r.neto,0);
+    const totalIva   = rows.reduce((s,r)=>s+r.iva,0);
+    const totalTotal = rows.reduce((s,r)=>s+r.total,0);
+    document.getElementById('ic-cnt').textContent   = rows.length;
+    document.getElementById('ic-neto').textContent  = fmtPeso(totalNeto);
+    document.getElementById('ic-iva').textContent   = fmtPeso(totalIva);
+    document.getElementById('ic-total').textContent = fmtPeso(totalTotal);
+
+    // Poblar select tipos
+    const tipos = [...new Set(rows.map(r=>r.tipo).filter(Boolean))];
+    const sel = document.getElementById('ic-tipo');
+    sel.innerHTML = '<option value="">Todos los tipos</option>' + tipos.map(t=>`<option>${t}</option>`).join('');
+
+    renderIvaCompras();
+  }
+  function renderIvaCompras(){
+    const q    = norm(document.getElementById('ic-q').value);
+    const tipo = document.getElementById('ic-tipo').value;
+    let rows = DATA.rec||[];
+    if(tipo) rows=rows.filter(r=>r.tipo===tipo);
+    if(q) rows=rows.filter(r=>norm(r.denom).includes(q)||norm(r.cuit).includes(q)||norm(r.num).includes(q));
+    const tbody=document.getElementById('ic-tbody');
+    if(!rows.length){tbody.innerHTML='<tr><td colspan="8" class="empty">Sin resultados.</td></tr>';return;}
+    tbody.innerHTML=rows.map(r=>`<tr>
+      <td>${r.fecha}</td><td style="font-size:11px">${r.tipo}</td>
+      <td><code>${r.puntoNum}</code></td>
+      <td>${r.denom||'—'}</td><td style="font-size:12px;color:#666">${r.cuit||'—'}</td>
+      <td style="text-align:right">${fmtPeso(r.neto)}</td>
+      <td style="text-align:right;color:#dc2626">${fmtPeso(r.iva)}</td>
+      <td style="text-align:right;font-weight:700">${fmtPeso(r.total)}</td>
+    </tr>`).join('');
+  }
+
+  // ── IVA VENTAS ────────────────────────────────────────────────────
+  function actualizarIvaVentas(){
+    const rows = DATA.emi;
+    if(!rows||!rows.length){document.getElementById('iva-v-nodatos').style.display='block';document.getElementById('iva-v-contenido').style.display='none';return;}
+    document.getElementById('iva-v-nodatos').style.display='none';
+    document.getElementById('iva-v-contenido').style.display='block';
+
+    const totalNeto  = rows.reduce((s,r)=>s+r.neto,0);
+    const totalIva   = rows.reduce((s,r)=>s+r.iva,0);
+    const totalTotal = rows.reduce((s,r)=>s+r.total,0);
+    document.getElementById('iv-cnt').textContent   = rows.length;
+    document.getElementById('iv-neto').textContent  = fmtPeso(totalNeto);
+    document.getElementById('iv-iva').textContent   = fmtPeso(totalIva);
+    document.getElementById('iv-total').textContent = fmtPeso(totalTotal);
+
+    const tipos=[...new Set(rows.map(r=>r.tipo).filter(Boolean))];
+    const sel=document.getElementById('iv-tipo');
+    sel.innerHTML='<option value="">Todos los tipos</option>'+tipos.map(t=>`<option>${t}</option>`).join('');
+
+    renderIvaVentas();
+  }
+  function renderIvaVentas(){
+    const q    = norm(document.getElementById('iv-q').value);
+    const tipo = document.getElementById('iv-tipo').value;
+    let rows = DATA.emi||[];
+    if(tipo) rows=rows.filter(r=>r.tipo===tipo);
+    if(q) rows=rows.filter(r=>norm(r.denom).includes(q)||norm(r.cuit).includes(q)||norm(r.num).includes(q));
+    const tbody=document.getElementById('iv-tbody');
+    if(!rows.length){tbody.innerHTML='<tr><td colspan="8" class="empty">Sin resultados.</td></tr>';return;}
+    tbody.innerHTML=rows.map(r=>`<tr>
+      <td>${r.fecha}</td><td style="font-size:11px">${r.tipo}</td>
+      <td><code>${r.puntoNum}</code></td>
+      <td>${r.denom||'—'}</td><td style="font-size:12px;color:#666">${r.cuit||'—'}</td>
+      <td style="text-align:right">${fmtPeso(r.neto)}</td>
+      <td style="text-align:right;color:#dc2626">${fmtPeso(r.iva)}</td>
+      <td style="text-align:right;font-weight:700">${fmtPeso(r.total)}</td>
+    </tr>`).join('');
+  }
+
+  // ── RECONCILIACIÓN ────────────────────────────────────────────────
+  function intentarRecon(){
+    const emi = DATA.emi;
+    const gal = DATA.gal;
+    if(!emi||!gal){
+      document.getElementById('recon-nodatos').style.display='block';
+      document.getElementById('recon-contenido').style.display='none';
+      return;
     }
+    document.getElementById('recon-nodatos').style.display='none';
+    document.getElementById('recon-contenido').style.display='block';
 
-    // ── IVA COMPRAS ──────────────────────────────────────────
-    function mostrarCompras() {
-      const headers = (_arcaCompras[0] || []).map(h => String(h || ''));
-      const filas   = _arcaCompras.slice(1).filter(r => r.some(c => c));
+    const mapEmi={}, mapGal={};
+    emi.forEach(r=>{ mapEmi[r.numLimpio]=r; });
+    gal.forEach(r=>{ mapGal[r.numLimpio]=r; });
 
-      const colNum   = encontrarCol(headers, 'número', 'numero', 'nro');
-      const colFecha = encontrarCol(headers, 'fecha');
-      const colTotal = encontrarCol(headers, 'importe total', 'total');
-      const colNeto  = encontrarCol(headers, 'neto', 'gravado', 'base imponible');
-      const colIva   = encontrarCol(headers, 'iva', 'impuesto');
-      const colTipo  = encontrarCol(headers, 'tipo');
-      const colDenom = encontrarCol(headers, 'denominación', 'denominacion', 'razón', 'nombre', 'proveedor', 'vendedor');
-      const colCuit  = encontrarCol(headers, 'cuit');
+    const todos=new Set([...Object.keys(mapEmi),...Object.keys(mapGal)]);
+    _recon=[];
+    todos.forEach(num=>{
+      const a=mapEmi[num], g=mapGal[num];
+      let estado;
+      if(a&&g){ const dif=Math.abs(a.total-g.total); estado=dif>100?'dif':'ok'; }
+      else if(a&&!g) estado='solo-arca';
+      else estado='solo-sist';
+      _recon.push({
+        num,estado,
+        fecha:a?.fecha||g?.fecha||'',
+        denom:g?.cliente||a?.denom||'',
+        totalArca:a?.total||0,
+        totalSist:g?.total||0,
+      });
+    });
+    _recon.sort((a,b)=>Number(a.num)-Number(b.num));
 
-      const rows = filas.map(r => ({
-        fecha:  colFecha >= 0 ? String(r[colFecha] || '') : '',
-        tipo:   colTipo  >= 0 ? String(r[colTipo]  || '') : '',
-        numero: colNum   >= 0 ? String(r[colNum]   || '') : '',
-        denom:  colDenom >= 0 ? String(r[colDenom] || '') : '',
-        cuit:   colCuit  >= 0 ? String(r[colCuit]  || '') : '',
-        neto:   colNeto  >= 0 ? parsearMonto(r[colNeto])  : 0,
-        iva:    colIva   >= 0 ? parsearMonto(r[colIva])   : 0,
-        total:  colTotal >= 0 ? parsearMonto(r[colTotal]) : 0,
-      }));
+    const cnt={ok:0,'solo-arca':0,'solo-sist':0,dif:0};
+    _recon.forEach(r=>cnt[r.estado]++);
+    document.getElementById('rc-ok').textContent        = cnt.ok;
+    document.getElementById('rc-solo-arca').textContent = cnt['solo-arca'];
+    document.getElementById('rc-solo-sist').textContent = cnt['solo-sist'];
+    document.getElementById('rc-dif').textContent       = cnt.dif;
+    renderRecon();
+  }
 
-      const totalNeto = rows.reduce((s,r) => s + r.neto, 0);
-      const totalIva  = rows.reduce((s,r) => s + r.iva, 0);
-
-      document.getElementById('c-cnt').textContent  = rows.length;
-      document.getElementById('c-neto').textContent = formatPeso(totalNeto);
-      document.getElementById('c-iva').textContent  = formatPeso(totalIva);
-      document.getElementById('c-totales').style.display = 'block';
-
-      window._comprasRows = rows;
-      renderTablaCompras();
-    }
-
-    function renderTablaCompras() {
-      const q = (document.getElementById('c-buscar').value || '').toLowerCase();
-      const rows = (window._comprasRows || []).filter(r =>
-        !q || r.denom.toLowerCase().includes(q) || r.numero.includes(q) || r.cuit.includes(q)
-      );
-      const tbody = document.getElementById('c-tbody');
-      if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="8" class="empty">Sin resultados</td></tr>';
-        return;
-      }
-      tbody.innerHTML = rows.map(r => `<tr>
-        <td style="white-space:nowrap">${r.fecha}</td>
-        <td style="font-size:12px">${r.tipo}</td>
-        <td>${r.numero}</td>
-        <td>${r.denom || '—'}</td>
-        <td style="font-size:12px;color:#666">${r.cuit}</td>
-        <td style="text-align:right">${r.neto ? formatPeso(r.neto) : '—'}</td>
-        <td style="text-align:right;color:#dc2626">${r.iva ? formatPeso(r.iva) : '—'}</td>
-        <td style="text-align:right;font-weight:700">${r.total ? formatPeso(r.total) : '—'}</td>
-      </tr>`).join('');
-    }
-  </script>
+  function renderRecon(){
+    const filtro=document.getElementById('rc-filtro').value;
+    const q=norm(document.getElementById('rc-q').value);
+    let rows=_recon;
+    if(filtro) rows=rows.filter(r=>r.estado===filtro);
+    if(q) rows=rows.filter(r=>r.num.includes(q)||norm(r.denom).includes(q));
+    const tbody=document.getElementById('rc-tbody');
+    const BADGE={
+      ok:'<span class="badge-recon br-ok">✅ Coincide</span>',
+      'solo-arca':'<span class="badge-recon br-solo-arca">⚠️ Solo ARCA</span>',
+      'solo-sist':'<span class="badge-recon br-solo-sist">❓ Solo sistema</span>',
+      dif:'<span class="badge-recon br-dif">💰 Dif. monto</span>',
+    };
+    if(!rows.length){tbody.innerHTML='<tr><td colspan="7" class="empty">Sin resultados.</td></tr>';return;}
+    tbody.innerHTML=rows.map(r=>{
+      const dif=r.totalArca-r.totalSist;
+      const difStr=dif?((dif>0?'+':'')+fmtPeso(dif)):'—';
+      return `<tr class="tr-${r.estado}">
+        <td>${BADGE[r.estado]}</td>
+        <td><strong>${r.num}</strong></td>
+        <td style="color:#666">${r.fecha}</td>
+        <td>${r.denom||'—'}</td>
+        <td style="text-align:right">${fmtPeso(r.totalArca)}</td>
+        <td style="text-align:right">${fmtPeso(r.totalSist)}</td>
+        <td style="text-align:right;color:${Math.abs(dif)>100?'#dc2626':'#888'}">${difStr}</td>
+      </tr>`;
+    }).join('');
+  }
+</script>
 </body>
 </html>

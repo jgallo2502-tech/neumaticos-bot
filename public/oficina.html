@@ -650,12 +650,12 @@
       const cuit = modo==='recibido' ? cuitEmi : cuitRec;
       const denom = r[cDenom]||'';
 
+      const puntoNum = String(parseInt(pto,10)||0).padStart(4,'0')+'-'+String(parseInt(num,10)||0).padStart(8,'0');
+      if(norm(denom).includes('cambacara')) console.log('[ARCA Cambacara]', { pto, num, puntoNum, cuit, denom, total });
       return {
         fecha: r[cFecha]||'',
         tipo: r[cTipo]||'',
-        pto: pto,
-        num: num,
-        puntoNum: String(pto).padStart(4,'0')+'-'+String(num).padStart(8,'0'),
+        pto, num, puntoNum,
         numLimpio: limpiarNum(num),
         denom, cuit, iva, neto, total
       };
@@ -687,17 +687,24 @@
 
     return data.map(r=>{
       const comp = String(r[2]||'').trim();
-      // Extraer punto-numero: "FA  0061-00010297" → "0061-00010297"
-      const mPN  = comp.match(/(\d{4})-(\d{8})/);
-      const puntoNum = mPN ? mPN[0] : '';
+      // Extraer punto-numero flexible: "FA  0061-00010297", "FA 61-10297", etc.
+      const mPN  = comp.match(/(\d+)-(\d+)/);
+      const puntoNum = mPN
+        ? String(parseInt(mPN[1],10)).padStart(4,'0') + '-' + String(parseInt(mPN[2],10)).padStart(8,'0')
+        : '';
       // Normalizar CUIT: "30-65547034-0" → "30655470340"
       const cuitRaw = String(r[12]||'').replace(/[^0-9]/g,'');
+      const proveedor = String(r[5]||'').trim();
+
+      // Debug: log Cambacara y cualquier fila sin puntoNum
+      if(!puntoNum) console.warn('[Gallo sin puntoNum] comp:', comp, '| row:', r);
+      if(norm(proveedor).includes('cambacara')) console.log('[Gallo Cambacara]', { comp, puntoNum, cuitRaw, proveedor });
 
       return {
-        puntoNum,                           // clave de match contra ARCA
+        puntoNum,
         comp,
         fecha:     String(r[0]||'').trim(),
-        proveedor: String(r[5]||'').trim(),
+        proveedor,
         cuit:      cuitRaw,
         total:     toNum(r[17]),
         neto:      toNum(r[19]),

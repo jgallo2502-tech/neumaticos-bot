@@ -276,7 +276,7 @@
           <div class="stat-card"><div class="stat-num c-gold" id="rc-solo-sist">0</div><div class="stat-label">❓ Solo en sistema</div></div>
           <div class="stat-card"><div class="stat-num c-blue" id="rc-dif">0</div><div class="stat-label">💰 Dif. de monto</div></div>
         </div>
-        <div class="filtros">
+        <div class="filtros" style="flex-wrap:wrap;gap:8px">
           <select id="rc-filtro" onchange="renderRecon()">
             <option value="">Todos</option>
             <option value="ok">✅ Coinciden</option>
@@ -286,6 +286,8 @@
             <option value="nc">✅ Notas de crédito</option>
           </select>
           <input type="text" id="rc-q" placeholder="Buscar número o cliente..." oninput="renderRecon()">
+          <button onclick="exportarRecon(false)" style="padding:7px 14px;background:#1a1a2e;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600">⬇ Exportar vista</button>
+          <button onclick="exportarRecon(true)" style="padding:7px 14px;background:#fff;color:#1a1a2e;border:1.5px solid #1a1a2e;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600">⬇ Exportar todo</button>
         </div>
         <div class="tbl-wrap">
           <table class="data">
@@ -870,6 +872,38 @@
     document.getElementById('rc-solo-sist').textContent = cnt['solo-sist'];
     document.getElementById('rc-dif').textContent       = cnt.dif;
     renderRecon();
+  }
+
+  function exportarRecon(todo) {
+    const filtro = document.getElementById('rc-filtro').value;
+    const q = norm(document.getElementById('rc-q').value);
+    let rows = _recon;
+    if (!todo) {
+      if (filtro) rows = rows.filter(r => r.estado === filtro);
+      if (q) rows = rows.filter(r => (r.puntoNum||'').includes(q) || norm(r.denom).includes(q));
+    }
+    const ESTADO_LABEL = { ok:'Coincide', nc:'Nota de crédito', 'solo-arca':'Solo en ARCA', 'solo-sist':'Solo en sistema', dif:'Dif. de monto' };
+    const periodo = document.getElementById('periodo-informe').value || '';
+    const cabecera = ['Estado','N° Comprobante','Fecha','Proveedor / ARCA','Total ARCA','Total Sistema','Diferencia'];
+    const data = rows.map(r => {
+      const dif = r.totalArca - r.totalSist;
+      return [
+        ESTADO_LABEL[r.estado] || r.estado,
+        r.puntoNum, r.fecha, r.denom,
+        r.totalArca, r.totalSist, dif
+      ];
+    });
+    // Armar CSV
+    const esc = v => { const s = String(v??''); return s.includes(',') || s.includes('"') || s.includes('\n') ? '"'+s.replace(/"/g,'""')+'"' : s; };
+    const csv = [cabecera, ...data].map(row => row.map(esc).join(',')).join('\r\n');
+    const bom = '﻿'; // BOM para que Excel abra en UTF-8
+    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `reconciliacion_${periodo}_${todo?'completa':filtro||'filtrada'}_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   function renderRecon(){

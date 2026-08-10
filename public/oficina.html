@@ -283,6 +283,7 @@
             <option value="solo-arca">⚠️ Solo en ARCA</option>
             <option value="solo-sist">❓ Solo en sistema</option>
             <option value="dif">💰 Diferencia monto</option>
+            <option value="nc">✅ Notas de crédito</option>
           </select>
           <input type="text" id="rc-q" placeholder="Buscar número o cliente..." oninput="renderRecon()">
         </div>
@@ -840,7 +841,12 @@
       const g = mapGal[key]  || mapGalPN[pn];
 
       let estado;
-      if(a&&g){ const dif=Math.abs(a.total-g.total); estado=dif>50?'dif':'ok'; }
+      if(a&&g){
+        const dif=Math.abs(a.total-g.total);
+        if(dif<=50) estado='ok';
+        else if(Math.abs(Math.abs(a.total)-Math.abs(g.total))<=50) estado='nc'; // nota de crédito: mismo valor, signo opuesto
+        else estado='dif';
+      }
       else if(a&&!g) estado='solo-arca';
       else estado='solo-sist';
 
@@ -857,9 +863,9 @@
     // Ordenar por punto-numero
     _recon.sort((a,b)=>a.puntoNum.localeCompare(b.puntoNum));
 
-    const cnt={ok:0,'solo-arca':0,'solo-sist':0,dif:0};
+    const cnt={ok:0,nc:0,'solo-arca':0,'solo-sist':0,dif:0};
     _recon.forEach(r=>cnt[r.estado]++);
-    document.getElementById('rc-ok').textContent        = cnt.ok;
+    document.getElementById('rc-ok').textContent        = cnt.ok + cnt.nc;
     document.getElementById('rc-solo-arca').textContent = cnt['solo-arca'];
     document.getElementById('rc-solo-sist').textContent = cnt['solo-sist'];
     document.getElementById('rc-dif').textContent       = cnt.dif;
@@ -875,6 +881,7 @@
     const tbody=document.getElementById('rc-tbody');
     const BADGE={
       ok:'<span class="badge-recon br-ok">✅ Coincide</span>',
+      nc:'<span class="badge-recon br-ok" title="Nota de crédito — mismo valor, signo opuesto">✅ Nota de crédito</span>',
       'solo-arca':'<span class="badge-recon br-solo-arca">⚠️ Solo ARCA</span>',
       'solo-sist':'<span class="badge-recon br-solo-sist">❓ Solo sistema</span>',
       dif:'<span class="badge-recon br-dif">💰 Dif. monto</span>',

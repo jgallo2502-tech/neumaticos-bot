@@ -27,6 +27,8 @@ const USUARIOS = [
   { usuario: 'nruiz',      password: '12345',     nombre: 'N. Ruiz',       rol: 'vendedor',  sucursal: 'Victoria' },
   { usuario: 'hvillalobos',password: '12345',     nombre: 'H. Villalobos', rol: 'vendedor',  sucursal: 'Victoria' },
   { usuario: 'prueba',     password: '12345',     nombre: 'Prueba',        rol: 'vendedor',  sucursal: 'Victoria' },
+  { usuario: 'romina',     password: 'romina123', nombre: 'Romina',        rol: 'adm',       sucursal: null },
+  { usuario: 'mara',       password: 'mara123',   nombre: 'Mara',          rol: 'adm',       sucursal: null },
 ];
 
 // Mapa vendedor -> sucursal
@@ -1964,6 +1966,36 @@ router.get('/reventa/lista', reventaAuthMiddleware, async (req, res) => {
   } catch (err) {
     console.error('Error lista reventa:', err.message);
     res.status(500).send('Error generando la lista');
+  }
+});
+
+// ─── OFICINA ADM. ────────────────────────────────────────────────────────────
+
+// Traer todos los presupuestos para reconciliación ARCA
+router.get('/oficina/presupuestos', authMiddleware, async (req, res) => {
+  if (!['admin', 'adm'].includes(req.user.rol)) return res.status(403).json({ error: 'Sin acceso' });
+  try {
+    const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const result = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Presupuestos!A:J',
+    });
+    const rows = (result.data.values || []).slice(1).filter(r => r[1]);
+    const presupuestos = rows.map(r => ({
+      fecha:    r[0] || '',
+      numero:   r[1] || '',
+      vendedor: r[2] || '',
+      cliente:  r[3] || '',
+      tel:      r[4] || '',
+      productos:r[5] || '',
+      total:    parseFloat((r[6]||'0').replace(/[^0-9.-]/g,'')) || 0,
+      estado:   r[7] || '',
+      token:    r[8] || '',
+    }));
+    res.json({ ok: true, presupuestos });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 

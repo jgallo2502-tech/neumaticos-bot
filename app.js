@@ -2026,7 +2026,7 @@ async function getOficinaDatos(sheets) {
 }
 
 // Guardar (reemplaza ese tipo+periodo)
-router.post('/oficina/datos/guardar', express.json(), authMiddleware, async (req, res) => {
+router.post('/oficina/datos/guardar', express.json({ limit: '10mb' }), authMiddleware, async (req, res) => {
   if (!['admin','adm'].includes(req.user.rol)) return res.status(403).json({ error: 'Sin acceso' });
   try {
     const { tipo, periodo, rows } = req.body;

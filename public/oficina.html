@@ -149,8 +149,8 @@
 
       <!-- Sistema Gallo -->
       <div class="upload-card">
-        <h3>🏪 Sistema Gallo — Facturas emitidas</h3>
-        <p>Exportá del sistema de facturación de Gallo el listado de facturas emitidas en el período (Excel). Necesita: número, fecha, cliente, total.</p>
+        <h3>🏪 Sistema Gallo — Libro IVA Compras</h3>
+        <p>Exportá del sistema de Gallo el <strong>Libro de IVA Compras</strong> del período en Excel (.xls/.xlsx). Se cruza contra ARCA Recibidos para detectar diferencias.</p>
         <div class="drop-zone" id="dz-gal" onclick="document.getElementById('f-gal').click()"
              ondragover="dzOver(event,'gal')" ondragleave="dzLeave('gal')" ondrop="dzDrop(event,'gal')">
           <div class="dz-icon">📂</div>
@@ -243,7 +243,7 @@
 
     <!-- ── RECONCILIACIÓN ─────────────────────────────── -->
     <div id="sub-recon" class="tab-panel">
-      <div id="recon-nodatos" class="sin-datos">Cargá ARCA Emitidos y el archivo del Sistema Gallo para ver la reconciliación.</div>
+      <div id="recon-nodatos" class="sin-datos">Cargá <strong>ARCA Recibidos</strong> y el <strong>Libro IVA Compras del Sistema Gallo</strong> para ver la reconciliación.</div>
       <div id="recon-contenido" style="display:none">
         <div class="stats-row">
           <div class="stat-card"><div class="stat-num c-green" id="rc-ok">0</div><div class="stat-label">✅ Coinciden</div></div>
@@ -474,29 +474,42 @@
     return m?m[1]:str.replace(/^0+/,'')||str;
   }
 
-  // ── PARSER Sistema Gallo (flexible) ──────────────────────────────
+  // ── PARSER Sistema Gallo — Libro IVA Compras ─────────────────────
+  // Formato conocido: filas de encabezado en las primeras 5-6 filas.
+  // Columnas fijas del libro Gallo:
+  //   0=Fecha, 2=Comprobante ("FA  0061-00010297"), 5=Proveedor,
+  //   12=CUIT, 17=Total, 19=Neto gravado, 20=IVA
   function parsearSistema(raw) {
-    let hdrIdx=0;
-    for(let i=0;i<Math.min(5,raw.length);i++){ if(raw[i].some(c=>c)){hdrIdx=i;break;} }
-    const hdr = raw[hdrIdx];
-    const data = raw.slice(hdrIdx+1).filter(r=>r.some(c=>c));
-
-    const cNum   = findCol(hdr,'numero','número','nro','comprobante','fact');
-    const cFecha = findCol(hdr,'fecha');
-    const cClien = findCol(hdr,'cliente','razon','denominacion','nombre');
-    const cCuit  = findCol(hdr,'cuit','rut','doc');
-    const cTotal = findCol(hdr,'total','importe','monto');
+    // Detectar la primera fila con fecha dd/mm/yyyy en col 0
+    let dataStart = 0;
+    for(let i=0;i<Math.min(10,raw.length);i++){
+      const v = String(raw[i][0]||'').trim();
+      if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(v)){ dataStart=i; break; }
+    }
+    const data = raw.slice(dataStart).filter(r=>{
+      const v = String(r[0]||'').trim();
+      return /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(v);
+    });
 
     return data.map(r=>{
-      const num = cNum>=0 ? String(r[cNum]||'').trim() : '';
+      const comp = String(r[2]||'').trim();
+      // Extraer punto-numero: "FA  0061-00010297" → "0061-00010297"
+      const mPN  = comp.match(/(\d{4})-(\d{8})/);
+      const puntoNum = mPN ? mPN[0] : '';
+      // Normalizar CUIT: "30-65547034-0" → "30655470340"
+      const cuitRaw = String(r[12]||'').replace(/[^0-9]/g,'');
+
       return {
-        num, numLimpio: limpiarNum(num),
-        fecha: cFecha>=0?String(r[cFecha]||''):'',
-        cliente: cClien>=0?String(r[cClien]||''):'',
-        cuit: cCuit>=0?String(r[cCuit]||''):'',
-        total: cTotal>=0?toNum(r[cTotal]):0,
+        puntoNum,                           // clave de match contra ARCA
+        comp,
+        fecha:     String(r[0]||'').trim(),
+        proveedor: String(r[5]||'').trim(),
+        cuit:      cuitRaw,
+        total:     toNum(r[17]),
+        neto:      toNum(r[19]),
+        iva:       toNum(r[20]),
       };
-    }).filter(r=>r.num);
+    }).filter(r=>r.puntoNum);
   }
 
   // ── IVA COMPRAS ───────────────────────────────────────────────────
@@ -578,11 +591,11 @@
     </tr>`).join('');
   }
 
-  // ── RECONCILIACIÓN ────────────────────────────────────────────────
+  // ── RECONCILIACIÓN: ARCA Recibidos vs Libro IVA Compras Gallo ────
   function intentarRecon(){
-    const emi = DATA.emi;
-    const gal = DATA.gal;
-    if(!emi||!gal){
+    const rec = DATA.rec;  // ARCA recibidos
+    const gal = DATA.gal;  // Libro IVA Compras del sistema Gallo
+    if(!rec||!gal){
       document.getElementById('recon-nodatos').style.display='block';
       document.getElementById('recon-contenido').style.display='none';
       return;
@@ -590,27 +603,69 @@
     document.getElementById('recon-nodatos').style.display='none';
     document.getElementById('recon-contenido').style.display='block';
 
-    const mapEmi={}, mapGal={};
-    emi.forEach(r=>{ mapEmi[r.numLimpio]=r; });
-    gal.forEach(r=>{ mapGal[r.numLimpio]=r; });
+    // Normalizar CUIT ARCA: puede venir como número flotante (scientific notation)
+    // Ej: "3.07154E+10" → "30715400000" – usar CUIT+puntoNum como clave
+    function normCuit(s){
+      const n = parseFloat(String(s||'').replace(/[^0-9.eE+-]/g,''));
+      if(!isNaN(n)&&n>1e9) return String(Math.round(n));
+      return String(s||'').replace(/[^0-9]/g,'');
+    }
 
-    const todos=new Set([...Object.keys(mapEmi),...Object.keys(mapGal)]);
+    // Clave de match: puntoNum (XXXX-YYYYYYYY) + CUIT (para evitar colisiones entre proveedores)
+    // ARCA: puntoNum ya viene formateado
+    // Gallo: puntoNum extraído del comprobante
+    const mapArca={};
+    rec.forEach(r=>{
+      const cuit = normCuit(r.cuit);
+      const key  = r.puntoNum + '|' + cuit;
+      mapArca[key] = r;
+    });
+
+    const mapGal={};
+    gal.forEach(r=>{
+      const key = r.puntoNum + '|' + r.cuit;
+      mapGal[key] = r;
+    });
+
+    // También intentar match solo por puntoNum (por si CUIT tiene formato diferente)
+    const mapArcaPN={}, mapGalPN={};
+    rec.forEach(r=>{ mapArcaPN[r.puntoNum]=r; });
+    gal.forEach(r=>{ mapGalPN[r.puntoNum]=r; });
+
+    const todos=new Set([...Object.keys(mapArca),...Object.keys(mapGal)]);
+    // Si hay pocos matches completos, agregar los de puntoNum solo
+    const todosPN=new Set([...Object.keys(mapArcaPN),...Object.keys(mapGalPN)]);
+    const clavesFull=new Set([...todos].map(k=>k.split('|')[0]));
+    todosPN.forEach(pn=>{ if(!clavesFull.has(pn)) todos.add(pn+'|?'); });
+
     _recon=[];
-    todos.forEach(num=>{
-      const a=mapEmi[num], g=mapGal[num];
+    const vistas=new Set();
+
+    todos.forEach(key=>{
+      const pn = key.split('|')[0];
+      if(vistas.has(pn)) return;
+      vistas.add(pn);
+
+      const a = mapArca[key] || mapArcaPN[pn];
+      const g = mapGal[key]  || mapGalPN[pn];
+
       let estado;
-      if(a&&g){ const dif=Math.abs(a.total-g.total); estado=dif>100?'dif':'ok'; }
+      if(a&&g){ const dif=Math.abs(a.total-g.total); estado=dif>50?'dif':'ok'; }
       else if(a&&!g) estado='solo-arca';
       else estado='solo-sist';
+
       _recon.push({
-        num,estado,
-        fecha:a?.fecha||g?.fecha||'',
-        denom:g?.cliente||a?.denom||'',
-        totalArca:a?.total||0,
-        totalSist:g?.total||0,
+        puntoNum: pn, estado,
+        fecha:     a?.fecha||g?.fecha||'',
+        denom:     g?.proveedor||a?.denom||'',
+        cuit:      g?.cuit||normCuit(a?.cuit)||'',
+        totalArca: a?.total||0,
+        totalSist: g?.total||0,
       });
     });
-    _recon.sort((a,b)=>Number(a.num)-Number(b.num));
+
+    // Ordenar por punto-numero
+    _recon.sort((a,b)=>a.puntoNum.localeCompare(b.puntoNum));
 
     const cnt={ok:0,'solo-arca':0,'solo-sist':0,dif:0};
     _recon.forEach(r=>cnt[r.estado]++);
@@ -626,7 +681,7 @@
     const q=norm(document.getElementById('rc-q').value);
     let rows=_recon;
     if(filtro) rows=rows.filter(r=>r.estado===filtro);
-    if(q) rows=rows.filter(r=>r.num.includes(q)||norm(r.denom).includes(q));
+    if(q) rows=rows.filter(r=>(r.puntoNum||'').includes(q)||norm(r.denom).includes(q));
     const tbody=document.getElementById('rc-tbody');
     const BADGE={
       ok:'<span class="badge-recon br-ok">✅ Coincide</span>',
@@ -640,12 +695,12 @@
       const difStr=dif?((dif>0?'+':'')+fmtPeso(dif)):'—';
       return `<tr class="tr-${r.estado}">
         <td>${BADGE[r.estado]}</td>
-        <td><strong>${r.num}</strong></td>
-        <td style="color:#666">${r.fecha}</td>
+        <td><code style="font-size:12px">${r.puntoNum}</code></td>
+        <td style="color:#666;font-size:12px">${r.fecha}</td>
         <td>${r.denom||'—'}</td>
         <td style="text-align:right">${fmtPeso(r.totalArca)}</td>
         <td style="text-align:right">${fmtPeso(r.totalSist)}</td>
-        <td style="text-align:right;color:${Math.abs(dif)>100?'#dc2626':'#888'}">${difStr}</td>
+        <td style="text-align:right;color:${Math.abs(dif)>50?'#dc2626':'#888'}">${difStr}</td>
       </tr>`;
     }).join('');
   }

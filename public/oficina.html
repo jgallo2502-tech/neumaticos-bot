@@ -286,6 +286,7 @@
             <option value="nc">✅ Notas de crédito</option>
           </select>
           <input type="text" id="rc-q" placeholder="Buscar número o cliente..." oninput="renderRecon()">
+          <button onclick="diagRecon()" style="padding:7px 14px;background:#f0f4ff;color:#1a1a2e;border:1.5px solid #c7d2fe;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600">🔍 Diagnóstico</button>
           <button onclick="exportarRecon(false)" style="padding:7px 14px;background:#1a1a2e;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600">⬇ Exportar vista</button>
           <button onclick="exportarRecon(true)" style="padding:7px 14px;background:#fff;color:#1a1a2e;border:1.5px solid #1a1a2e;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600">⬇ Exportar todo</button>
           <button id="btn-wsp" onclick="copiarWhatsapp()" style="padding:7px 14px;background:#25d366;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600">📋 Copiar para WhatsApp</button>
@@ -301,6 +302,21 @@
             </tr></thead>
             <tbody id="rc-tbody"></tbody>
           </table>
+        </div>
+
+        <!-- Panel diagnóstico -->
+        <div id="diag-panel" style="display:none;margin-top:18px;padding:16px;background:#f8f9fa;border-radius:10px;border:1.5px solid #e5e7eb">
+          <div style="font-weight:700;font-size:13px;margin-bottom:10px">🔍 Diagnóstico — lo que tiene cada archivo para "<span id="diag-q"></span>"</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div>
+              <div style="font-size:12px;font-weight:700;color:#1a1a2e;margin-bottom:6px">ARCA Recibidos</div>
+              <div id="diag-arca" style="font-size:12px;font-family:monospace"></div>
+            </div>
+            <div>
+              <div style="font-size:12px;font-weight:700;color:#1a1a2e;margin-bottom:6px">Sistema Gallo</div>
+              <div id="diag-gal" style="font-size:12px;font-family:monospace"></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -910,6 +926,39 @@
     document.getElementById('rc-solo-sist').textContent = cnt['solo-sist'];
     document.getElementById('rc-dif').textContent       = cnt.dif;
     renderRecon();
+  }
+
+  function diagRecon() {
+    const q = document.getElementById('rc-q').value.trim();
+    if(!q) { alert('Escribí algo en la búsqueda primero (ej: "cambacara")'); return; }
+    const qn = norm(q);
+    const panel = document.getElementById('diag-panel');
+    document.getElementById('diag-q').textContent = q;
+    panel.style.display = 'block';
+
+    // ARCA side
+    const arcaRows = (DATA.rec||[]).filter(r => norm(r.denom||'').includes(qn) || (r.puntoNum||'').includes(q));
+    const arcaHtml = arcaRows.length
+      ? arcaRows.map(r=>`<div style="margin-bottom:6px;padding:6px 8px;background:#fff;border-radius:6px;border:1px solid #e5e7eb">
+          <b>${r.puntoNum}</b> — ${r.fecha}<br>
+          ${r.denom||'—'} | CUIT: ${r.cuit||'—'}<br>
+          Total: $${Number(r.total).toLocaleString('es-AR')}
+        </div>`).join('')
+      : '<div style="color:#888;font-style:italic">No encontrado en ARCA Recibidos (los datos pueden estar cargados desde el sistema, no re-parseados en esta sesión)</div>';
+
+    // Gallo side — buscar en DATA.gal
+    const galRows = (DATA.gal||[]).filter(r => norm(r.proveedor||'').includes(qn) || (r.puntoNum||'').includes(q) || norm(r.comp||'').includes(qn));
+    const galHtml = galRows.length
+      ? galRows.map(r=>`<div style="margin-bottom:6px;padding:6px 8px;background:#fff;border-radius:6px;border:1px solid #e5e7eb">
+          <b>${r.puntoNum}</b> — ${r.fecha}<br>
+          Comp raw: <code>${r.comp}</code><br>
+          ${r.proveedor||'—'} | CUIT: ${r.cuit||'—'}<br>
+          Total: $${Number(r.total).toLocaleString('es-AR')}
+        </div>`).join('')
+      : '<div style="color:#dc2626;font-weight:600">⚠️ No encontrado en Sistema Gallo en esta sesión.<br><span style="font-weight:400;color:#666">Re-parseá el archivo de Gallo para ver el diagnóstico completo.</span></div>';
+
+    document.getElementById('diag-arca').innerHTML = arcaHtml;
+    document.getElementById('diag-gal').innerHTML = galHtml;
   }
 
   function copiarWhatsapp() {

@@ -451,6 +451,7 @@
     if(!periodo) { alert('Seleccioná el período antes de guardar.'); return; }
 
     const btn = document.getElementById('grd-'+tipo);
+    btn.style.display = 'block';
     btn.disabled = true;
     btn.textContent = '⏳ Guardando...';
 
@@ -469,11 +470,9 @@
       });
       const d = await r.json();
       if(d.ok) {
-        btn.textContent = '✅ Guardado (' + d.guardados + ')';
-        btn.style.background = '#15803d';
         document.getElementById('st-'+tipo).className = 'carga-estado carga-ok';
-        document.getElementById('st-'+tipo).textContent = '✅ Guardado en sistema para ' + formatPeriodo(periodo);
-        // Actualizar períodos disponibles
+        document.getElementById('st-'+tipo).textContent = '✅ ' + d.guardados + ' comprobantes guardados para ' + formatPeriodo(periodo);
+        btn.style.display = 'none'; // ocultar botón — guardado automático exitoso
         if(!_periodosDisponibles[tipo].includes(periodo)) _periodosDisponibles[tipo].push(periodo);
         renderHistorialPeriodos(_periodosDisponibles);
         actualizarSelectPeriodos();
@@ -481,9 +480,12 @@
         throw new Error(d.error||'Error desconocido');
       }
     } catch(e) {
-      btn.disabled=false; btn.textContent='💾 Guardar en sistema';
-      document.getElementById('st-'+tipo).className='carga-estado carga-err';
-      document.getElementById('st-'+tipo).textContent='❌ Error al guardar: '+e.message;
+      // En error: mostrar botón para reintentar manualmente
+      btn.disabled = false;
+      btn.textContent = '🔄 Reintentar guardar';
+      btn.style.background = '#dc2626';
+      document.getElementById('st-'+tipo).className = 'carga-estado carga-err';
+      document.getElementById('st-'+tipo).textContent = '❌ Error al guardar: ' + e.message;
     }
   }
 
@@ -591,20 +593,17 @@
         historial.push({ tipo: k, nombre: f.name, fecha: new Date().toLocaleTimeString('es-AR'), filas });
 
         document.getElementById('st-'+k).className = 'carga-estado carga-ok';
-        document.getElementById('st-'+k).textContent = '✅ ' + filas + ' comprobantes. Ahora guardá en el sistema.';
+        document.getElementById('st-'+k).textContent = '✅ ' + filas + ' comprobantes — guardando...';
         btn.textContent = 'Re-parsear →';
         btn.disabled = false;
-        // Mostrar botón guardar
-        const grd = document.getElementById('grd-'+k);
-        grd.style.display = 'block';
-        grd.disabled = false;
-        grd.textContent = '💾 Guardar en sistema (' + formatPeriodo(document.getElementById('periodo-carga').value) + ')';
-        grd.style.background = '';
 
         // Actualizar informes automáticamente
         if (k === 'rec') { actualizarIvaCompras(); }
         if (k === 'emi') { actualizarIvaVentas(); intentarRecon(); }
         if (k === 'gal') { intentarRecon(); }
+
+        // Auto-guardar en sistema
+        guardarEnSistema(k);
 
       } catch(err) {
         document.getElementById('st-'+k).className = 'carga-estado carga-err';
@@ -946,16 +945,28 @@
         </div>`).join('')
       : '<div style="color:#888;font-style:italic">No encontrado en ARCA Recibidos (los datos pueden estar cargados desde el sistema, no re-parseados en esta sesión)</div>';
 
-    // Gallo side — buscar en DATA.gal
-    const galRows = (DATA.gal||[]).filter(r => norm(r.proveedor||'').includes(qn) || (r.puntoNum||'').includes(q) || norm(r.comp||'').includes(qn));
-    const galHtml = galRows.length
-      ? galRows.map(r=>`<div style="margin-bottom:6px;padding:6px 8px;background:#fff;border-radius:6px;border:1px solid #e5e7eb">
+    // Gallo side — buscar en DATA.gal (proveedor puede ser r.proveedor o r.denom según origen)
+    const galData = DATA.gal || [];
+    const galRows = galData.filter(r =>
+      norm(r.proveedor||r.denom||'').includes(qn) ||
+      (r.puntoNum||'').includes(q) ||
+      norm(r.comp||'').includes(qn)
+    );
+    let galHtml = `<div style="font-size:11px;color:#888;margin-bottom:6px">${galData.length} filas cargadas en memoria</div>`;
+    if(!galData.length) {
+      galHtml += '<div style="color:#dc2626;font-weight:600">⚠️ DATA.gal está vacío — re-parseá el archivo de Gallo en Carga de datos.</div>';
+    } else if(!galRows.length) {
+      galHtml += `<div style="color:#dc2626;font-weight:600">⚠️ "${q}" no encontrado en las ${galData.length} filas de Gallo.</div>
+        <div style="margin-top:8px;font-size:11px;color:#666">Ejemplos de proveedores en Gallo:<br>
+        ${[...new Set(galData.slice(0,200).map(r=>r.proveedor||r.denom||'').filter(Boolean))].slice(0,8).join(', ')}</div>`;
+    } else {
+      galHtml += galRows.map(r=>`<div style="margin-bottom:6px;padding:6px 8px;background:#fff;border-radius:6px;border:1px solid #e5e7eb">
           <b>${r.puntoNum}</b> — ${r.fecha}<br>
-          Comp raw: <code>${r.comp}</code><br>
-          ${r.proveedor||'—'} | CUIT: ${r.cuit||'—'}<br>
+          ${r.comp ? `Comp raw: <code>${r.comp}</code><br>` : ''}
+          ${r.proveedor||r.denom||'—'} | CUIT: ${r.cuit||'—'}<br>
           Total: $${Number(r.total).toLocaleString('es-AR')}
-        </div>`).join('')
-      : '<div style="color:#dc2626;font-weight:600">⚠️ No encontrado en Sistema Gallo en esta sesión.<br><span style="font-weight:400;color:#666">Re-parseá el archivo de Gallo para ver el diagnóstico completo.</span></div>';
+        </div>`).join('');
+    }
 
     document.getElementById('diag-arca').innerHTML = arcaHtml;
     document.getElementById('diag-gal').innerHTML = galHtml;

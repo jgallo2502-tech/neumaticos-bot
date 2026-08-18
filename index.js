@@ -408,7 +408,7 @@ const PIE = `📌 *Precio unitario. Promociones por compra de 2 o más neumátic
 🤖 _Soy un asistente automático. Para hablar con una persona contactá nuestras sucursales._`;
 
 // --- Armar lista de mensajes (uno por categoría) ---
-function armarMensajes(productos, medidaOriginal, esRev = false) {
+function armarMensajes(productos, medidaOriginal, esRev = false, sinLimite = false) {
   if (productos.length === 0) {
     return [`No encontré neumáticos *${medidaOriginal}* con stock disponible.\n\nContactá nuestras sucursales para consultar disponibilidad:\n${WA_SUCURSALES}`];
   }
@@ -464,7 +464,7 @@ function armarMensajes(productos, medidaOriginal, esRev = false) {
     mensajes.push(msg.trim());
   }
 
-  if (total > 8) {
+  if (total > 8 && !sinLimite) {
     mensajes.push(`_...y ${total - 8} opciones más. Filtrá por marca, ej: "${medidaOriginal} Michelin"_`);
   }
 
@@ -485,12 +485,14 @@ Cero texto antes. Cero texto después. Solo esa línea.
 • Cliente da la medida → BUSCAR_MEDIDA:medida (el sistema muestra los precios)
 • Después de los precios, si preguntan por una marca específica → BUSCAR_MEDIDA:medida marca
 • Después de los precios, si piden "la más barata" / "la más cara" / "solo Michelin" etc → BUSCAR_MEDIDA:medida [marca o vacío]
+• Después de los precios, si piden "ver más", "mostrame más", "las otras opciones", "el resto" → BUSCAR_MEDIDA:ultima_medida_buscada (sin marca)
 • Después de los precios, si preguntan sobre una sucursal → dar dirección y teléfono
 
 ═══ PROHIBIDO ═══
 ✗ Nunca preguntes modelo de auto, uso, preferencias antes de mostrar precios
 ✗ Nunca listes marcas disponibles ni describas marcas antes de mostrar precios
 ✗ Nunca inventes precios ni describas productos — los precios vienen del sistema
+✗ Nunca listes "opciones restantes" ni inventes productos extras — si piden ver más, usá BUSCAR_MEDIDA
 ✗ Nunca escribas BUSCAR_MEDIDA dentro de un párrafo largo
 ✗ Nunca des información de marcas que el cliente no pidió
 
@@ -656,6 +658,21 @@ app.post('/webhook', async (req, res) => {
     // Si el cliente pide filtrar por marca o "la más barata/cara" y hay medida en contexto
     const pideMarca = medidaContexto && !medidaDirecta && extraerMarca(body);
     const matchMedida = medidaDirecta ? [null, medidaDirecta] : (pideMarca ? [null, medidaContexto] : null);
+
+    // Detectar "ver más opciones" para evitar que Claude invente productos
+    const esVerMas = !medidaDirecta && medidaContexto && /ver\s+m[aá]s|mostr[aá]?me\s+m[aá]s|las\s+dem[aá]s|el\s+resto|todas\s+las\s+opciones|las\s+otras|las\s+5|las\s+dem[aá]s\s+opciones|opciones\s+restantes|quiero\s+ver\s+todas/i.test(body);
+    if (esVerMas) {
+      const productos = await obtenerPrecios(medidaContexto, null, false);
+      registrarConsulta(fromNumber, medidaContexto, null, productos);
+      const mensajes = armarMensajes(productos, medidaContexto, esRev, true);
+      const todosBot = [...mensajes];
+      if (!esRev && productos.length > 0)
+        todosBot.push('¿Te puedo ayudar con algo más? 😊\n\n¿Cuál sucursal te queda más cómoda?\n• *Victoria* — wa.me/541137735246\n• *Nordelta* — wa.me/541157347692\n\nColocación *sin cargo* en ambas sucursales. 🔧');
+      todosBot.forEach(m => twiml.message(m));
+      guardarMensajes(todosBot.map(m => [fromNumber, 'bot', m])).catch(() => {});
+      todosBot.forEach(m => sesionActual.mensajes?.push({ rol: 'bot', texto: m }));
+      return res.type('text/xml').send(twiml.toString());
+    }
 
     if (!matchMedida) {
       // Solo llamamos a Claude si no hay medida detectada

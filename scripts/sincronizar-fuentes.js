@@ -502,12 +502,15 @@ async function main() {
   const archivoNeumasur   = encontrarArchivo(archivos, ['neumasur']);
   const archivoSJYSPrecios = encontrarArchivo(archivos, ['sjys', 'precio'])
     || encontrarArchivo(archivos, ['sjys', 'lista'])
-    || encontrarArchivo(archivos, ['giti', 'precio'])
-    || encontrarArchivo(archivos, ['gtradial', 'precio']);
+    || encontrarArchivo(archivos, ['giti', 'pmg'])
+    || encontrarArchivo(archivos, ['gtradial', 'pmg'])
+    || encontrarArchivo(archivos, ['lista', 'giti'])
+    || encontrarArchivo(archivos, ['lista', 'gtradial']);
   const archivoSJYSStock   = encontrarArchivo(archivos, ['sjys', 'stock'])
     || encontrarArchivo(archivos, ['giti', 'stock'])
     || encontrarArchivo(archivos, ['gtradial', 'stock'])
-    || encontrarArchivo(archivos, ['sjys'], ['precio', 'lista']);
+    || encontrarArchivo(archivos, ['stock_cotiz'])
+    || encontrarArchivo(archivos, ['cotiz_arg']);
 
   for (const [nombre, archivo] of [
     ['Inventario Gallo', archivoInventario],

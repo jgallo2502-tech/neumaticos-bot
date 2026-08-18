@@ -2374,8 +2374,8 @@ const DRIVE_KEYWORDS = {
   yokohama: { include: [['yokohama']], exclude: [] },
   linglong:    { include: [['ling']], exclude: [] },
   michelin:    { include: [['michelin', 'con descripcion'], ['michelin', 'bfgoodrich']], exclude: [] },
-  sjysprecios: { include: [['sjys', 'precio'], ['sjys', 'lista'], ['giti', 'precio'], ['gtradial', 'precio']], exclude: [] },
-  sjysstock:   { include: [['sjys', 'stock'], ['giti', 'stock'], ['gtradial', 'stock']], exclude: ['precio', 'lista'] },
+  sjysprecios: { include: [['sjys', 'precio'], ['sjys', 'lista'], ['giti', 'pmg'], ['gtradial', 'pmg'], ['lista', 'giti'], ['lista', 'gtradial']], exclude: [] },
+  sjysstock:   { include: [['sjys', 'stock'], ['giti', 'stock'], ['gtradial', 'stock'], ['stock_cotiz'], ['cotiz_arg']], exclude: ['precio', 'lista', 'pmg'] },
 };
 
 function detectarTipoFuente(nombre) {

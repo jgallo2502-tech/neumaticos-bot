@@ -126,6 +126,22 @@
           <input type="file" class="fuente-file" accept=".xlsx,.xls" data-nombre="Michelin BFGoodrich">
           <div class="fuente-status" id="st-michelin"></div>
         </div>
+        <div class="fuente-row">
+          <div>
+            <div class="fuente-label">SJYS — Giti/GTRadial precios <span class="badge badge-opt">Opcional</span></div>
+            <div class="fuente-desc">Lista de precios SJYS (columnas "descripción con modelo" y PMG)</div>
+          </div>
+          <input type="file" class="fuente-file" accept=".xlsx,.xls" data-nombre="SJYS precios">
+          <div class="fuente-status" id="st-sjysprecios"></div>
+        </div>
+        <div class="fuente-row">
+          <div>
+            <div class="fuente-label">SJYS — Giti/GTRadial stock <span class="badge badge-opt">Opcional</span></div>
+            <div class="fuente-desc">Stock SJYS (columnas Cód. Artículo, EZEIZA, BSAS)</div>
+          </div>
+          <input type="file" class="fuente-file" accept=".xlsx,.xls" data-nombre="SJYS stock">
+          <div class="fuente-status" id="st-sjysstock"></div>
+        </div>
       </div>
       <div class="upload-actions">
         <button class="btn btn-primary" id="btn-upload" onclick="subirArchivos()">⬆️ Subir archivos seleccionados</button>
@@ -189,8 +205,10 @@
       celsur:   'Stock Celsur',
       hankook:  'Hankook',
       yokohama: 'Yokohama',
-      linglong: 'Linglong',
-      michelin: 'Michelin / BFGoodrich',
+      linglong:    'Linglong',
+      michelin:    'Michelin / BFGoodrich',
+      sjysprecios: 'SJYS — Giti/GTRadial precios',
+      sjysstock:   'SJYS — Giti/GTRadial stock',
     };
 
     async function cargarEstado() {

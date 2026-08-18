@@ -2372,8 +2372,10 @@ const DRIVE_KEYWORDS = {
   celsur:   { include: [['celsur'], ['stock_disponible'], ['stock disponible']], exclude: [] },
   hankook:  { include: [['hankook']], exclude: [] },
   yokohama: { include: [['yokohama']], exclude: [] },
-  linglong: { include: [['ling']], exclude: [] },
-  michelin: { include: [['michelin', 'con descripcion'], ['michelin', 'bfgoodrich']], exclude: [] },
+  linglong:    { include: [['ling']], exclude: [] },
+  michelin:    { include: [['michelin', 'con descripcion'], ['michelin', 'bfgoodrich']], exclude: [] },
+  sjysprecios: { include: [['sjys', 'precio'], ['sjys', 'lista'], ['giti', 'precio'], ['gtradial', 'precio']], exclude: [] },
+  sjysstock:   { include: [['sjys', 'stock'], ['giti', 'stock'], ['gtradial', 'stock']], exclude: ['precio', 'lista'] },
 };
 
 function detectarTipoFuente(nombre) {

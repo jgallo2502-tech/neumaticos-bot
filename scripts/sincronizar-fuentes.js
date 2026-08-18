@@ -370,6 +370,75 @@ function leerLinglong(wb) {
   return { skuMap, medidaMap };
 }
 
+// ─── Leer SJYS precios (Giti / GTRadial) — columnas "descripción con modelo" y PMG ──
+function leerSJYSPrecios(wb) {
+  const sheetName = wb.SheetNames[0];
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1 });
+
+  const pmgInfo = encontrarColumna(rows, [/^pmg$/i, /precio mostrador gallo/i]);
+  if (!pmgInfo) { console.error('❌ SJYS precios: no se encontró columna PMG'); return {}; }
+
+  const header = rows[pmgInfo.headerIdx];
+  const col = patron => header.findIndex(h => patron.test((h || '').toString()));
+
+  const colPMG  = pmgInfo.colIdx;
+  const colDesc = col(/descripci[oó]n.*modelo|desc.*modelo/i);
+  const colCod  = col(/c[oó]d\.?\s*art[íi]?culo|^c[oó]digo$|^cod\.?$/i);
+
+  const colCodFinal  = colCod  !== -1 ? colCod  : 0;
+  const colDescFinal = colDesc !== -1 ? colDesc : (colCodFinal === 0 ? 1 : 0);
+
+  console.log(`  SJYS precios cols — PMG:${colPMG} Cod:${colCodFinal} Desc:${colDescFinal}`);
+
+  const codMap = {};
+  for (let i = pmgInfo.headerIdx + 1; i < rows.length; i++) {
+    const r = rows[i];
+    const cod   = (r[colCodFinal] || '').toString().trim();
+    const precio = r[colPMG];
+    if (!cod || typeof precio !== 'number' || precio <= 0) continue;
+    const desc = (r[colDescFinal] || '').toString().trim();
+    const medida = normalizarMedida(desc) || '';
+    codMap[cod] = { precio, desc, medida };
+  }
+  return codMap;
+}
+
+// ─── Leer SJYS stock (Giti / GTRadial) — Cód. Artículo, EZEIZA + BSAS ──────
+function leerSJYSStock(wb) {
+  const sheetName = wb.SheetNames[0];
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1 });
+
+  // Buscar fila header
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(10, rows.length); i++) {
+    if (rows[i].some(h => /c[oó]d\.?\s*art[íi]?culo/i.test((h || '').toString()))) {
+      headerIdx = i; break;
+    }
+  }
+  if (headerIdx === -1) { console.error('❌ SJYS stock: no se encontró columna Cód. Artículo'); return {}; }
+
+  const header = rows[headerIdx];
+  const col = patron => header.findIndex(h => patron.test((h || '').toString()));
+
+  const colCod   = col(/c[oó]d\.?\s*art[íi]?culo/i);
+  const colEze   = col(/ezeiza/i);
+  const colBsas  = col(/bsas|buenos\s*aires/i);
+
+  if (colEze === -1 && colBsas === -1) { console.error('❌ SJYS stock: no se encontraron columnas EZEIZA/BSAS'); return {}; }
+  console.log(`  SJYS stock cols — Cod:${colCod} Ezeiza:${colEze} BSAS:${colBsas}`);
+
+  const stockMap = {};
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const r = rows[i];
+    const cod = (r[colCod] || '').toString().trim();
+    if (!cod) continue;
+    const eze  = colEze  !== -1 ? parseNum(r[colEze])  : 0;
+    const bsas = colBsas !== -1 ? parseNum(r[colBsas]) : 0;
+    stockMap[cod] = Math.max(0, eze + bsas);
+  }
+  return stockMap;
+}
+
 // ─── Leer Neumasur (Nexen) — match por SKU (CodAlt = "NE" + codigo) ──────────
 function leerNeumasur(wb) {
   const sheetName = wb.SheetNames.find(s => /nexen/i.test(s)) || wb.SheetNames[0];
@@ -431,6 +500,14 @@ async function main() {
   const archivoYokohama   = encontrarArchivo(archivos, ['yokohama']);
   const archivoLinglong   = encontrarArchivo(archivos, ['ling']);
   const archivoNeumasur   = encontrarArchivo(archivos, ['neumasur']);
+  const archivoSJYSPrecios = encontrarArchivo(archivos, ['sjys', 'precio'])
+    || encontrarArchivo(archivos, ['sjys', 'lista'])
+    || encontrarArchivo(archivos, ['giti', 'precio'])
+    || encontrarArchivo(archivos, ['gtradial', 'precio']);
+  const archivoSJYSStock   = encontrarArchivo(archivos, ['sjys', 'stock'])
+    || encontrarArchivo(archivos, ['giti', 'stock'])
+    || encontrarArchivo(archivos, ['gtradial', 'stock'])
+    || encontrarArchivo(archivos, ['sjys'], ['precio', 'lista']);
 
   for (const [nombre, archivo] of [
     ['Inventario Gallo', archivoInventario],
@@ -442,7 +519,9 @@ async function main() {
   ]) {
     if (!archivo) console.warn(`⚠️  No se encontró archivo en Drive: ${nombre} — se omitirá`);
   }
-  if (!archivoNeumasur) console.log('⚠️  Neumasur no encontrado — Nexen sin actualizar');
+  if (!archivoNeumasur)    console.log('⚠️  Neumasur no encontrado — Nexen sin actualizar');
+  if (!archivoSJYSPrecios) console.log('⚠️  SJYS precios no encontrado — Giti/GTRadial sin precio externo');
+  if (!archivoSJYSStock)   console.log('⚠️  SJYS stock no encontrado — Giti/GTRadial sin stock express');
 
   console.log('📥 Descargando archivos desde Drive...');
   const cargar = (archivo) => archivo ? descargarXlsx(drive, archivo.id) : null;
@@ -454,7 +533,9 @@ async function main() {
     cargar(archivoYokohama),
     cargar(archivoLinglong),
   ]);
-  const wbNex = archivoNeumasur ? await descargarXlsx(drive, archivoNeumasur.id) : null;
+  const wbNex      = archivoNeumasur    ? await descargarXlsx(drive, archivoNeumasur.id)    : null;
+  const wbSJYSPre  = archivoSJYSPrecios ? await descargarXlsx(drive, archivoSJYSPrecios.id) : null;
+  const wbSJYSSto  = archivoSJYSStock   ? await descargarXlsx(drive, archivoSJYSStock.id)   : null;
 
   console.log('🔄 Procesando fuentes...');
   const { vicMap, norMap, precioMap, productos } = wbInv ? leerInventarioGallo(wbInv) : { vicMap: {}, norMap: {}, precioMap: {}, productos: {} };
@@ -463,7 +544,9 @@ async function main() {
   const hankookData     = wbHank ? leerHankook(wbHank)         : { skuMap: {}, medidaMap: {} };
   const yokoData        = wbYoko ? leerYokohama(wbYoko)        : { skuMap: {}, medidaMap: {} };
   const llData          = wbLL   ? leerLinglong(wbLL)          : { skuMap: {}, medidaMap: {} };
-  const nexenData       = wbNex  ? leerNeumasur(wbNex)         : { skuMap: {}, medidaMap: {} };
+  const nexenData       = wbNex     ? leerNeumasur(wbNex)       : { skuMap: {}, medidaMap: {} };
+  const sjysPrecios     = wbSJYSPre ? leerSJYSPrecios(wbSJYSPre) : {};
+  const sjysStock       = wbSJYSSto ? leerSJYSStock(wbSJYSSto)   : {};
 
   console.log(`  Gallo Victoria: ${Object.keys(vicMap).length} productos`);
   console.log(`  Gallo Nordelta: ${Object.keys(norMap).length} productos`);
@@ -473,6 +556,7 @@ async function main() {
   console.log(`  Yokohama: ${Object.keys(yokoData.skuMap).length} SKUs`);
   console.log(`  Linglong: ${Object.keys(llData.skuMap).length} SKUs`);
   console.log(`  Nexen: ${Object.keys(nexenData.skuMap).length} SKUs (${wbNex ? 'actualizado' : 'sin archivo'})`);
+  console.log(`  SJYS (Giti/GTRadial): ${Object.keys(sjysPrecios).length} precios, ${Object.keys(sjysStock).length} stocks`);
 
   console.log('📊 Leyendo hoja Bot WhatsApp...');
   const sheetRes = await sheets.spreadsheets.values.get({
@@ -548,6 +632,18 @@ async function main() {
       const d = dSku || (!codArt ? llData.medidaMap[medida] : null);
       if (d) {
         stockExpr = d.stock;
+        if (precio === null) precio = d.precio || 0;
+      } else {
+        stockExpr = 0;
+        if (precio === null) precio = 0;
+        sinStock++;
+      }
+
+    } else if (marca === 'GITI' || marca === 'GTRADIAL') {
+      const d = sjysPrecios[codAlt];
+      if (d) {
+        const stockExpr_ = sjysStock[codAlt] !== undefined ? sjysStock[codAlt] : 0;
+        stockExpr = stockExpr_;
         if (precio === null) precio = d.precio || 0;
       } else {
         stockExpr = 0;
@@ -671,6 +767,14 @@ async function main() {
     const codAlt = 'NE' + sku;
     if (codAltsEnHoja.has(codAlt) || entry.stock <= 0) continue;
     agregarNuevo('', codAlt, entry.desc || '', 0, 0, entry.stock, entry.precio);
+  }
+
+  // 7. SJYS (Giti / GTRadial): códigos con stock no están en la hoja
+  for (const [cod, entry] of Object.entries(sjysPrecios)) {
+    if (codAltsEnHoja.has(cod)) continue;
+    const stockExpr = sjysStock[cod] || 0;
+    if (stockExpr <= 0) continue;
+    agregarNuevo('', cod, entry.desc || '', 0, 0, stockExpr, entry.precio);
   }
 
   if (nuevos.length > 0) {

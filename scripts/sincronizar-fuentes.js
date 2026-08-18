@@ -383,7 +383,9 @@ function leerSJYSPrecios(wb) {
 
   const colPMG  = pmgInfo.colIdx;
   const colDesc = col(/descripci[oó]n.*modelo|desc.*modelo/i);
-  const colCod  = col(/c[oó]d\.?\s*art[íi]?culo|^c[oó]digo$|^cod\.?$/i);
+  // Preferir "CODIGO LOCAL" sobre "CODIGO" — en el archivo SJYS, col0=CODIGO LOCAL es el que matchea con el stock
+  const colCodLocal = col(/^codigo local$/i);
+  const colCod      = colCodLocal !== -1 ? colCodLocal : col(/c[oó]d\.?\s*art[íi]?culo|^c[oó]digo$|^cod\.?$/i);
 
   const colCodFinal  = colCod  !== -1 ? colCod  : 0;
   const colDescFinal = colDesc !== -1 ? colDesc : (colCodFinal === 0 ? 1 : 0);

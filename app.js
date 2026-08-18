@@ -2450,14 +2450,27 @@ router.post('/admin/upload', adminMiddleware, upload.single('archivo'), async (r
     const { Readable } = require('stream');
     const { drive, archivos } = await listarDrive();
     const archivo = encontrarEnDrive(archivos, DRIVE_KEYWORDS[tipo]);
-    if (!archivo) return res.status(404).json({ ok: false, error: `No se encontró el archivo de ${tipo} en Drive` });
-
     const mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-    await drive.files.update({
-      fileId: archivo.id,
-      media: { mimeType, body: Readable.from(req.file.buffer) },
-    });
-    res.json({ ok: true, accion: 'actualizado en Drive', nombre: archivo.name, tipo });
+
+    if (archivo) {
+      // Archivo ya existe en Drive → actualizar contenido
+      await drive.files.update({
+        fileId: archivo.id,
+        media: { mimeType, body: Readable.from(req.file.buffer) },
+      });
+      res.json({ ok: true, accion: 'actualizado en Drive', nombre: archivo.name, tipo });
+    } else {
+      // Archivo nuevo → crear en la carpeta Drive
+      const created = await drive.files.create({
+        requestBody: {
+          name: req.file.originalname,
+          parents: [DRIVE_FOLDER_ID],
+        },
+        media: { mimeType, body: Readable.from(req.file.buffer) },
+        fields: 'id, name',
+      });
+      res.json({ ok: true, accion: 'creado en Drive', nombre: created.data.name, tipo });
+    }
   } catch(e) {
     console.error('Admin upload Drive error:', e.message);
     res.status(500).json({ ok: false, error: e.message });

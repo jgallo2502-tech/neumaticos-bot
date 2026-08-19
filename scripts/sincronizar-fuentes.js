@@ -686,10 +686,12 @@ async function main() {
         const stockExpr_ = sjysStock[dCod] !== undefined ? sjysStock[dCod] : 0;
         stockExpr = stockExpr_;
         if (precio === null) precio = d.precio || 0;
+        if (marca === 'GTRADIAL') console.log(`  ✅ GTRADIAL row${fila} CodAlt:${codAlt} medida:${medida} → cod:${dCod} stock:${stockExpr_} precio:${Math.round(d.precio||0)}`);
       } else {
         stockExpr = 0;
         if (precio === null) precio = 0;
         sinStock++;
+        if (marca === 'GTRADIAL') console.log(`  ❌ GTRADIAL row${fila} CodAlt:${codAlt} medida:${medida} → sin match en sjys`);
       }
 
     } else if (marca === 'NEXEN') {
@@ -895,6 +897,21 @@ async function main() {
       process.stdout.write(`  ${Math.min(i + 100, requests.length)}/${requests.length} filas eliminadas\r`);
     }
     console.log('\n✅ Duplicados eliminados.');
+  }
+
+  // ── Diagnóstico GTRADIAL/GITI ────────────────────────────────────────────────
+  {
+    const finalRes = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'Bot WhatsApp!A:K' });
+    const finalRows = (finalRes.data.values || []).slice(1);
+    const gtRows = finalRows.filter(r => /GTRADIAL|GITI/i.test(r[3] || ''));
+    console.log(`\n🔍 GTRADIAL/GITI en hoja: ${gtRows.length} filas`);
+    gtRows.slice(0, 10).forEach(r => {
+      console.log(`   CodArt:${r[0]||''} CodAlt:${r[1]||''} | ${(r[3]||'')} ${(r[5]||'')} | Vic:${r[6]||0} Nor:${r[7]||0} Expr:${r[8]||0} $${r[9]||0}`);
+    });
+    if (gtRows.length > 10) console.log(`   ... y ${gtRows.length - 10} más`);
+    const conPrecio = gtRows.filter(r => parseInt(r[9]||0) > 0);
+    const conStock  = gtRows.filter(r => (parseInt(r[6]||0)+parseInt(r[7]||0)+parseInt(r[8]||0)) >= 4);
+    console.log(`   Con precio>0: ${conPrecio.length} | Con stock>=4: ${conStock.length} | Listos para bot: ${gtRows.filter(r=>parseInt(r[9]||0)>0&&(parseInt(r[6]||0)+parseInt(r[7]||0)+parseInt(r[8]||0))>=4).length}`);
   }
 
   console.log('\n✅ Sincronización completa.');

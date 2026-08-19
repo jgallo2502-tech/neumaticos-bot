@@ -161,10 +161,15 @@ function leerInventarioGallo(wb) {
 function parsearDesc(desc) {
   // Descripción típica: "N. MICHELIN 225/40 R18 92Y ZR PILOT SPORT 4S" o "N. TRACMAX 205/55 R16 91V XL X-PRIVILO ZR"
   const marcas = ['MICHELIN','BFGOODRICH','YOKOHAMA','HANKOOK','LINGLONG','NEXEN','TRACMAX','GITI','GTRADIAL','CONTINENTAL','BRIDGESTONE','GOODYEAR','PIRELLI','DUNLOP','TOYO','NITTO','KUMHO','SUNNY','WESTLAKE','ROUTE'];
-  const upper = desc.toUpperCase().replace(/^N\.\s*/,'');
+  const upper = desc.toUpperCase().replace(/^N\.\s*/,'').replace(/\bGT\s+RADIAL\b/g, 'GTRADIAL').replace(/\bBF\s+GOODRICH\b/g, 'BFGOODRICH');
   let marca = '';
   for (const m of marcas) {
-    if (upper.includes(m)) { marca = m === 'BFGOODRICH' ? 'BFGoodrich' : m.charAt(0) + m.slice(1).toLowerCase(); break; }
+    if (upper.includes(m)) {
+      if (m === 'BFGOODRICH') marca = 'BFGoodrich';
+      else if (m === 'GTRADIAL') marca = 'GTRADIAL';
+      else marca = m.charAt(0) + m.slice(1).toLowerCase();
+      break;
+    }
   }
   const medida = normalizarMedida(desc) || '';
   // Modelo: todo lo que viene después de la medida + índice de carga/velocidad + XL/RF opcional
@@ -392,6 +397,9 @@ function leerSJYSPrecios(wb) {
 
   console.log(`  SJYS precios cols — PMG:${colPMG} Cod:${colCodFinal} Desc:${colDescFinal}`);
 
+  // También detectar columna CODIGO secundario (col 1 típicamente) para doble indexación
+  const colCodSec = header.findIndex((h, i) => i !== colCodFinal && /^c[oó]digo$|^cod\.?$/i.test((h || '').toString()));
+
   const codMap = {};
   for (let i = pmgInfo.headerIdx + 1; i < rows.length; i++) {
     const r = rows[i];
@@ -400,7 +408,13 @@ function leerSJYSPrecios(wb) {
     if (!cod || typeof precio !== 'number' || precio <= 0) continue;
     const desc = (r[colDescFinal] || '').toString().trim();
     const medida = normalizarMedida(desc) || '';
-    codMap[cod] = { precio, desc, medida };
+    const entry = { precio, desc, medida };
+    codMap[cod] = entry;
+    // Indexar también por CODIGO secundario si existe (para productos ya en hoja con ese código)
+    if (colCodSec !== -1) {
+      const cod2 = (r[colCodSec] || '').toString().trim();
+      if (cod2 && cod2 !== cod && !codMap[cod2]) codMap[cod2] = entry;
+    }
   }
   return codMap;
 }

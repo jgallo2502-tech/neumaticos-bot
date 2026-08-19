@@ -674,8 +674,10 @@ async function main() {
       }
 
     } else if (marca === 'GITI' || marca === 'GTRADIAL') {
-      let d = sjysPrecios[codAlt];
-      let dCod = codAlt;
+      // Los CodAlts de Gallo tienen prefijo "GT" (ej: GT22261376) pero sjysPrecios usa el código sin prefijo
+      const rawCod = /^GT\d/i.test(codAlt) ? codAlt.slice(2) : codAlt;
+      let d = sjysPrecios[rawCod] || sjysPrecios[codAlt];
+      let dCod = sjysPrecios[rawCod] ? rawCod : codAlt;
       // Fallback: buscar por medida + marca si CodAlt no matchea
       if (!d && medida) {
         const k = `${marca}_${medida}`;
@@ -686,12 +688,10 @@ async function main() {
         const stockExpr_ = sjysStock[dCod] !== undefined ? sjysStock[dCod] : 0;
         stockExpr = stockExpr_;
         if (precio === null) precio = d.precio || 0;
-        if (marca === 'GTRADIAL') console.log(`  ✅ GTRADIAL row${fila} CodAlt:${codAlt} medida:${medida} → cod:${dCod} stock:${stockExpr_} precio:${Math.round(d.precio||0)}`);
       } else {
         stockExpr = 0;
         if (precio === null) precio = 0;
         sinStock++;
-        if (marca === 'GTRADIAL') console.log(`  ❌ GTRADIAL row${fila} CodAlt:${codAlt} medida:${medida} → sin match en sjys`);
       }
 
     } else if (marca === 'NEXEN') {
@@ -912,6 +912,8 @@ async function main() {
     const conPrecio = gtRows.filter(r => parseInt(r[9]||0) > 0);
     const conStock  = gtRows.filter(r => (parseInt(r[6]||0)+parseInt(r[7]||0)+parseInt(r[8]||0)) >= 4);
     console.log(`   Con precio>0: ${conPrecio.length} | Con stock>=4: ${conStock.length} | Listos para bot: ${gtRows.filter(r=>parseInt(r[9]||0)>0&&(parseInt(r[6]||0)+parseInt(r[7]||0)+parseInt(r[8]||0))>=4).length}`);
+    const at3 = gtRows.filter(r => /265.70R17/i.test(r[5]||'') && /GTRADIAL/i.test(r[3]||''));
+    if (at3.length) at3.forEach(r => console.log(`   🔎 265/70R17 GTRADIAL: CodAlt:${r[1]} Expr:${r[8]||0} Precio:${r[9]||0}`));
   }
 
   console.log('\n✅ Sincronización completa.');

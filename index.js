@@ -736,5 +736,23 @@ app.post('/webhook', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Bot corriendo en puerto ${PORT}`));
 
+// ── Reporte diario de chats por email ─────────────────────────────────────────
+// Corre todos los días a las 8:00 AM hora Argentina (UTC-3 → 11:00 UTC)
+try {
+  const cron = require('node-cron');
+  const { execFile } = require('child_process');
+  const path = require('path');
+  cron.schedule('0 11 * * *', () => {
+    console.log('📊 Enviando reporte diario de chats...');
+    execFile('node', [path.join(__dirname, 'scripts/reporte-chats.js')], (err, stdout, stderr) => {
+      if (err) console.error('❌ Error reporte chats:', err.message, stderr);
+      else console.log(stdout.trim());
+    });
+  }, { timezone: 'UTC' });
+  console.log('⏰ Cron de reporte diario activo (8:00 AM ART)');
+} catch (e) {
+  console.warn('⚠️  node-cron no disponible, reporte diario desactivado:', e.message);
+}
+
 // Exportar funciones para uso en app.js
 module.exports = { obtenerPrecios, normalizarMedida };

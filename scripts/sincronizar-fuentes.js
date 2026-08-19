@@ -171,6 +171,11 @@ function parsearDesc(desc) {
       break;
     }
   }
+  // Fallback por nombres de modelo GTRadial/GITI si la marca no se encontró por nombre directo
+  if (!marca) {
+    if (/\b(CHAMPIRO|SAVERO|ADVTURO|ADVENTURO|MAXMILER|SPORTACTIVE)\b/i.test(upper)) marca = 'GTRADIAL';
+    else if (/\b(GITICOMFORT|GITI4X4|GITIXCURSION|GITICONTROL|GITIXROSS)\b/i.test(upper)) marca = 'GITI';
+  }
   const medida = normalizarMedida(desc) || '';
   // Modelo: todo lo que viene después de la medida + índice de carga/velocidad + XL/RF opcional
   // Ej: "225/40 R18 92Y ZR ..." → captura "ZR ..."
@@ -408,7 +413,9 @@ function leerSJYSPrecios(wb) {
     if (!cod || typeof precio !== 'number' || precio <= 0) continue;
     const desc = (r[colDescFinal] || '').toString().trim();
     const medida = normalizarMedida(desc) || '';
-    const entry = { precio, desc, medida };
+    // Detectar marca: GITI si tiene "GITI" en la descripción, sino GTRADIAL (todo lo demás en este archivo)
+    const marcaEntry = /giti/i.test(desc) ? 'GITI' : 'GTRADIAL';
+    const entry = { precio, desc, medida, marca: marcaEntry };
     codMap[cod] = entry;
     // Indexar también por CODIGO secundario si existe (para productos ya en hoja con ese código)
     if (colCodSec !== -1) {
@@ -577,6 +584,14 @@ async function main() {
   console.log(`  Nexen: ${Object.keys(nexenData.skuMap).length} SKUs (${wbNex ? 'actualizado' : 'sin archivo'})`);
   console.log(`  SJYS (Giti/GTRadial): ${Object.keys(sjysPrecios).length} precios, ${Object.keys(sjysStock).length} stocks`);
 
+  // Índice secundario de SJYS por (marca + medida) para fallback cuando CodAlt no matchea
+  const sjysMedidaMap = {}; // key: "GITI_205/55R16" → entry con mejor precio (primer match)
+  for (const [cod, entry] of Object.entries(sjysPrecios)) {
+    if (!entry.medida) continue;
+    const k = `${entry.marca}_${entry.medida}`;
+    if (!sjysMedidaMap[k]) sjysMedidaMap[k] = { ...entry, cod };
+  }
+
   console.log('📊 Leyendo hoja Bot WhatsApp...');
   const sheetRes = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
@@ -659,9 +674,16 @@ async function main() {
       }
 
     } else if (marca === 'GITI' || marca === 'GTRADIAL') {
-      const d = sjysPrecios[codAlt];
+      let d = sjysPrecios[codAlt];
+      let dCod = codAlt;
+      // Fallback: buscar por medida + marca si CodAlt no matchea
+      if (!d && medida) {
+        const k = `${marca}_${medida}`;
+        const fb = sjysMedidaMap[k];
+        if (fb) { d = fb; dCod = fb.cod; }
+      }
       if (d) {
-        const stockExpr_ = sjysStock[codAlt] !== undefined ? sjysStock[codAlt] : 0;
+        const stockExpr_ = sjysStock[dCod] !== undefined ? sjysStock[dCod] : 0;
         stockExpr = stockExpr_;
         if (precio === null) precio = d.precio || 0;
       } else {
@@ -793,7 +815,7 @@ async function main() {
     if (codAltsEnHoja.has(cod)) continue;
     const stockExpr = sjysStock[cod] || 0;
     if (stockExpr <= 0) continue;
-    agregarNuevo('', cod, entry.desc || '', 0, 0, stockExpr, entry.precio);
+    agregarNuevo('', cod, entry.desc || '', 0, 0, stockExpr, entry.precio, entry.marca || 'GTRADIAL');
   }
 
   if (nuevos.length > 0) {

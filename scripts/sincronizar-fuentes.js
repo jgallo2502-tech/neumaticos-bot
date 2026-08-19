@@ -831,8 +831,10 @@ async function main() {
   }
 
   // 7. SJYS (Giti / GTRadial): códigos con stock no están en la hoja
+  // Saltar si ya existe fila Gallo con prefijo GT (evita duplicados GT25681034 vs 25681034)
   for (const [cod, entry] of Object.entries(sjysPrecios)) {
     if (codAltsEnHoja.has(cod)) continue;
+    if (codAltsEnHoja.has('GT' + cod)) continue;
     const stockExpr = sjysStock[cod] || 0;
     if (stockExpr <= 0) continue;
     agregarNuevo('', cod, entry.desc || '', 0, 0, stockExpr, entry.precio, entry.marca || 'GTRADIAL');
@@ -874,12 +876,21 @@ async function main() {
   // Limpiar duplicados por CodAlt para que el archivo quede depurado
   const filasDuplicadas = [];
   const keep = new Map();
+  // Primero, recolectar todos los codAlts con prefijo GT (filas Gallo)
+  const galloGTCodes = new Set(
+    sheetRows.slice(1).map(r => normalizarCodAlt((r[1] || '').toString().trim())).filter(c => /^GT\d/i.test(c))
+  );
   for (let i = 1; i < sheetRows.length; i++) {
     const fila = i + 1;
     const codArt = (sheetRows[i][0] || '').toString().trim();
     const codAltRaw = (sheetRows[i][1] || '').toString().trim();
     const codAlt = normalizarCodAlt(codAltRaw);
     if (!codAlt) continue;
+    // Si esta fila SJYS (dígitos puros) tiene una fila Gallo gemela (GT+cod), es duplicado
+    if (/^\d+$/.test(codAlt) && galloGTCodes.has('GT' + codAlt)) {
+      filasDuplicadas.push(fila);
+      continue;
+    }
     const tieneCodArt = Boolean(codArt);
     if (!keep.has(codAlt)) {
       keep.set(codAlt, { fila, tieneCodArt });

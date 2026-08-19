@@ -405,12 +405,19 @@ function leerSJYSPrecios(wb) {
   // También detectar columna CODIGO secundario (col 1 típicamente) para doble indexación
   const colCodSec = header.findIndex((h, i) => i !== colCodFinal && /^c[oó]digo$|^cod\.?$/i.test((h || '').toString()));
 
+  const parsePMG = v => {
+    if (typeof v === 'number') return v;
+    // Formato argentino: "$133.974" → 133974 (punto = miles, coma = decimal)
+    const s = String(v || '').replace(/\$|\s/g, '').replace(/\./g, '').replace(',', '.');
+    return parseFloat(s) || 0;
+  };
+
   const codMap = {};
   for (let i = pmgInfo.headerIdx + 1; i < rows.length; i++) {
     const r = rows[i];
     const cod   = (r[colCodFinal] || '').toString().trim();
-    const precio = r[colPMG];
-    if (!cod || typeof precio !== 'number' || precio <= 0) continue;
+    const precio = parsePMG(r[colPMG]);
+    if (!cod || precio <= 0) continue;
     const desc = (r[colDescFinal] || '').toString().trim();
     const medida = normalizarMedida(desc) || '';
     // Detectar marca: GITI si tiene "GITI" en la descripción, sino GTRADIAL (todo lo demás en este archivo)

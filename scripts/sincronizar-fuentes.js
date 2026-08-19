@@ -613,9 +613,20 @@ async function main() {
     const r      = sheetRows[i];
     const codArt = (r[0] || '').toString().trim();
     const codAlt = (r[1] || '').toString().trim();
-    const marca  = (r[3] || '').toUpperCase().trim();
+    let marca    = (r[3] || '').toUpperCase().trim();
     const medida = normalizarMedida(r[5]) || (r[5] || '').replace(/\s/g, '').toUpperCase();
     const fila   = i + 1;
+
+    // Si marca vacía, intentar inferirla desde sjysPrecios (filas agregadas sin marcaOverride)
+    if (!marca && codAlt) {
+      const rawCodAlt = /^GT\d/i.test(codAlt) ? codAlt.slice(2) : codAlt;
+      const sjysEntry = sjysPrecios[rawCodAlt] || sjysPrecios[codAlt];
+      if (sjysEntry) {
+        marca = (sjysEntry.marca || 'GTRADIAL').toUpperCase();
+        updates.push({ range: `Bot WhatsApp!D${fila}`, values: [[sjysEntry.marca || 'GTRADIAL']] });
+        console.log(`  🔧 Marca corregida fila ${fila} CodAlt:${codAlt} → ${marca}`);
+      }
+    }
 
     let stockVic = 0, stockNor = 0, stockExpr = null, precio = null;
 

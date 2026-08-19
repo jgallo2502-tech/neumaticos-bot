@@ -4,11 +4,13 @@ const nodemailer = require('nodemailer');
 const fs = require('fs');
 const path = require('path');
 
-const SHEET_ID   = process.env.GOOGLE_SHEET_ID;
-const EMAIL_TO   = process.env.REPORTE_EMAIL   || 'j.gallo2502@gmail.com';
-const EMAIL_FROM = process.env.GMAIL_USER;
-const GMAIL_PASS = process.env.GMAIL_APP_PASS;
-const BOT_NUMBER = process.env.TWILIO_PHONE || '+15559870287'; // número del bot
+const SHEET_ID    = process.env.GOOGLE_SHEET_ID;
+const EMAIL_TO    = process.env.REPORTE_EMAIL   || 'j.gallo2502@gmail.com';
+const EMAIL_FROM  = process.env.GMAIL_USER;
+const GMAIL_PASS  = process.env.GMAIL_APP_PASS;
+const BOT_NUMBER  = (process.env.TWILIO_WHATSAPP_NUMBER || process.env.TWILIO_PHONE || '').replace('whatsapp:', '').replace('+', '');
+const TWILIO_SID  = process.env.TWILIO_ACCOUNT_SID;
+const TWILIO_TOK  = process.env.TWILIO_AUTH_TOKEN;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -112,6 +114,54 @@ async function leerDesdeSheets() {
   return (res.data.values || []).slice(1).map(r => ({
     fecha: r[0] || '', hora: r[1] || '', numero: r[2] || '', rol: r[3] === 'bot' ? 'bot' : 'cliente', texto: r[4] || '', ts: 0,
   }));
+}
+
+// ── Leer desde API de Twilio ──────────────────────────────────────────────────
+async function leerDesdeTwilio(fechaDD_MM_YYYY) {
+  if (!TWILIO_SID || !TWILIO_TOK) throw new Error('Faltan TWILIO_ACCOUNT_SID o TWILIO_AUTH_TOKEN en .env');
+
+  // Convertir DD/MM/YYYY → YYYY-MM-DD para la API
+  const [d, mo, a] = fechaDD_MM_YYYY.split('/');
+  const fechaISO = `${a}-${mo}-${d}`;
+
+  // Twilio filtra por DateSent >= fecha y < fecha+1
+  const fechaSig = new Date(Number(a), Number(mo)-1, Number(d)+1);
+  const fechaSigISO = `${fechaSig.getFullYear()}-${String(fechaSig.getMonth()+1).padStart(2,'0')}-${String(fechaSig.getDate()).padStart(2,'0')}`;
+
+  const base = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json`;
+  const auth = Buffer.from(`${TWILIO_SID}:${TWILIO_TOK}`).toString('base64');
+  const headers = { Authorization: `Basic ${auth}` };
+
+  const mensajes = [];
+  let nextUrl = `${base}?DateSent>=${fechaISO}&DateSent<${fechaSigISO}&PageSize=1000`;
+
+  while (nextUrl) {
+    const res = await fetch(nextUrl, { headers });
+    if (!res.ok) throw new Error(`Twilio API error: ${res.status} ${await res.text()}`);
+    const data = await res.json();
+
+    for (const msg of (data.messages || [])) {
+      const from = limpiarNumero(msg.from || '');
+      const to   = limpiarNumero(msg.to   || '');
+      const esBot = msg.direction === 'outbound-api' || msg.direction === 'outbound-reply';
+      const cliente = esBot ? to : from;
+      if (!cliente || cliente === BOT_NUMBER) continue;
+
+      // Fecha/hora en Argentina desde msg.date_sent (viene en UTC)
+      const dt = new Date(msg.date_sent);
+      const iso = new Date(dt.getTime() - 3*60*60*1000).toISOString();
+      const fecha = `${iso.slice(8,10)}/${iso.slice(5,7)}/${iso.slice(0,4)}`;
+      const hora  = iso.slice(11,16);
+
+      mensajes.push({ fecha, hora, numero: cliente, rol: esBot ? 'bot' : 'cliente', texto: msg.body || '', ts: dt.getTime() });
+    }
+
+    // Paginación
+    nextUrl = data.next_page_uri ? `https://api.twilio.com${data.next_page_uri}` : null;
+  }
+
+  mensajes.sort((a, b) => a.ts - b.ts);
+  return mensajes;
 }
 
 async function leerRevendedores() {
@@ -220,10 +270,11 @@ async function enviarEmail(html, { numeros, numerosRev, numerosParticular, total
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
-  // Uso: node reporte-chats.js [fecha DD/MM/YYYY] [ruta-csv]
-  //   node reporte-chats.js 19/08/2026
-  //   node reporte-chats.js 19/08/2026 ~/Downloads/messaging-logs.csv
-  //   node reporte-chats.js ~/Downloads/messaging-logs.csv   ← todos los días del CSV
+  // Uso:
+  //   node reporte-chats.js                          ← ayer, desde Twilio API (automático)
+  //   node reporte-chats.js 19/08/2026               ← fecha específica, desde Twilio API
+  //   node reporte-chats.js archivo.csv              ← todos los días del CSV
+  //   node reporte-chats.js 19/08/2026 archivo.csv   ← fecha específica del CSV
   const args = process.argv.slice(2);
   let csvPath = null, targetFecha = null;
 
@@ -233,13 +284,12 @@ async function main() {
   }
 
   // Si no hay fecha, usar ayer
-  if (!targetFecha && !csvPath) {
-    const ayer = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const d = ayer.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' });
-    targetFecha = d;
+  if (!targetFecha) {
+    const ayer = new Date(Date.now() - 3*60*60*1000 - 24*60*60*1000); // ayer en ART
+    targetFecha = `${String(ayer.getUTCDate()).padStart(2,'0')}/${String(ayer.getUTCMonth()+1).padStart(2,'0')}/${ayer.getUTCFullYear()}`;
   }
 
-  console.log('📊 Generando reporte de chats...');
+  console.log(`📊 Generando reporte de chats para ${targetFecha}...`);
 
   let mensajes;
   if (csvPath) {
@@ -249,8 +299,9 @@ async function main() {
     mensajes = parsearCSV(contenido);
     console.log(`📄 CSV: ${mensajes.length} mensajes cargados`);
   } else {
-    mensajes = await leerDesdeSheets();
-    console.log(`📄 Sheets: ${mensajes.length} mensajes cargados`);
+    console.log('📡 Consultando API de Twilio...');
+    mensajes = await leerDesdeTwilio(targetFecha);
+    console.log(`📄 Twilio: ${mensajes.length} mensajes cargados`);
   }
 
   console.log('👥 Cargando lista de revendedores...');

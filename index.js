@@ -744,10 +744,13 @@ try {
   const path = require('path');
   cron.schedule('0 11 * * *', () => {
     console.log('📊 Enviando reporte diario de chats...');
-    execFile('node', [path.join(__dirname, 'scripts/reporte-chats.js')], (err, stdout, stderr) => {
-      if (err) console.error('❌ Error reporte chats:', err.message, stderr);
-      else console.log(stdout.trim());
-    });
+    execFile('node', [path.join(__dirname, 'scripts/reporte-chats.js')],
+      { cwd: path.join(__dirname), env: process.env },
+      (err, stdout, stderr) => {
+        if (stdout) console.log(stdout.trim());
+        if (err) console.error('❌ Error reporte chats:\n' + (stderr || err.message));
+      }
+    );
   }, { timezone: 'UTC' });
   console.log('⏰ Cron de reporte diario activo (8:00 AM ART)');
 } catch (e) {

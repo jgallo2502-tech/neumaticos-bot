@@ -16,7 +16,9 @@
       align-items: center;
     }
     header h1 { font-size: 18px; }
-    header span { font-size: 13px; opacity: 0.7; }
+    .nav { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .nav a { color: white; font-size: 13px; opacity: 0.8; text-decoration: none; }
+    .nav a:hover { opacity: 1; }
     .logout { background: none; border: 1px solid rgba(255,255,255,0.3); color: white; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
     .container { max-width: 900px; margin: 24px auto; padding: 0 16px; }
     .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
@@ -136,16 +138,17 @@
 <body>
   <header>
     <h1>🔴 Neumáticos Gallo</h1>
-    <div style="display:flex;align-items:center;gap:12px">
-      <a href="/app/presupuesto-lubri.html" style="color:white;font-size:13px;opacity:0.8;text-decoration:none">🔧 Presupuesto Lubri</a>
-      <a href="/app/presupuesto-baterias.html" style="color:white;font-size:13px;opacity:0.8;text-decoration:none">🔋 Presupuesto Baterías</a>
-      <a href="/app/presupuesto-frenos.html" style="color:white;font-size:13px;opacity:0.8;text-decoration:none">🛑 Presupuesto Frenos</a>
-      <a href="/app/dashboard.html" style="color:white;font-size:13px;opacity:0.8;text-decoration:none">🏠 Dashboard</a>
-      <a href="/app/seguimiento.html" style="color:white;font-size:13px;opacity:0.8;text-decoration:none">📊 Seguimiento</a>
-      <a href="/app/conversaciones.html" style="color:white;font-size:13px;opacity:0.8;text-decoration:none">💬 Conversaciones</a>
-      <a href="/app/campana.html" id="nav-campana" style="color:white;font-size:13px;opacity:0.8;text-decoration:none">📞 Campaña</a>
-      <a href="/app/broadcast.html" id="nav-broadcast" style="display:none;color:white;font-size:13px;opacity:0.8;text-decoration:none">📢 Broadcast</a>
-      <span id="vendedor-nombre" style="color:white;font-size:13px;opacity:0.7"></span>
+    <div class="nav">
+      <a href="/app/dashboard.html">🏠 Principal</a>
+      <a href="/app/presupuesto.html" style="opacity:1;font-weight:600">🔴 Neumáticos</a>
+      <a href="/app/presupuesto-lubri.html">🔧 Lubri</a>
+      <a href="/app/presupuesto-baterias.html">🔋 Baterías</a>
+      <a href="/app/presupuesto-frenos.html">🛑 Frenos</a>
+      <a href="/app/seguimiento.html">📋 Mis presupuestos</a>
+      <a href="/app/ordenes.html">🔩 Órdenes</a>
+      <a href="/app/campana.html">📞 Campaña</a>
+      <a href="/app/broadcast.html" id="nav-broadcast" style="display:none">📢 Broadcast</a>
+      <span id="vendedor-nombre" style="font-size:13px;opacity:0.7"></span>
       <button class="logout" onclick="logout()">Salir</button>
     </div>
   </header>

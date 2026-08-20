@@ -76,12 +76,13 @@
   <header>
     <h1>🔴 Neumáticos Gallo</h1>
     <div class="nav">
-      <a href="/app/presupuesto.html">📋 Nuevo presupuesto</a>
-      <a href="/app/presupuesto-lubri.html">🔧 Presupuesto Lubri</a>
-      <a href="/app/presupuesto-baterias.html">🔋 Presupuesto Baterías</a>
-      <a href="/app/presupuesto-frenos.html">🛑 Presupuesto Frenos</a>
-      <a href="/app/seguimiento.html">📊 Seguimiento</a>
-      <a href="/app/conversaciones.html">💬 Conversaciones</a>
+      <a href="/app/dashboard.html" style="opacity:1;font-weight:600">🏠 Principal</a>
+      <a href="/app/presupuesto.html">🔴 Neumáticos</a>
+      <a href="/app/presupuesto-lubri.html">🔧 Lubri</a>
+      <a href="/app/presupuesto-baterias.html">🔋 Baterías</a>
+      <a href="/app/presupuesto-frenos.html">🛑 Frenos</a>
+      <a href="/app/seguimiento.html">📋 Mis presupuestos</a>
+      <a href="/app/ordenes.html">🔩 Órdenes</a>
       <a href="/app/campana.html">📞 Campaña</a>
       <a href="/app/broadcast.html" id="nav-broadcast" style="display:none">📢 Broadcast</a>
       <span id="vendedor-nombre" style="font-size:13px;opacity:0.7"></span>
@@ -93,7 +94,7 @@
     <div class="bienvenida">Buenos días, <span id="nombre-usuario"></span> 👋</div>
     <div class="fecha" id="fecha-hoy"></div>
 
-    <!-- Alertas de ayuda humana -->
+    <!-- Alertas de ayuda humana (solo admin) -->
     <div id="seccion-alertas" style="display:none;background:#fff3cd;border:1.5px solid #ffc107;border-radius:12px;padding:16px 20px;margin-bottom:18px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <span style="font-weight:700;color:#856404;font-size:15px">🚨 Clientes que solicitan atención humana</span>
@@ -125,15 +126,22 @@
       <div class="stat-card vencido"><div class="stat-num" id="s-vencido">-</div><div class="stat-label">Sin respuesta +48hs</div></div>
     </div>
 
-    <!-- Solo admin: Acciones del día, En seguimiento, Presupuestos de hoy -->
-    <div id="seccion-admin-detalle" style="display:none">
+    <!-- Recuperación de ventas (todos los usuarios) -->
+    <div id="seccion-recuperacion">
+      <div style="font-size:15px;font-weight:700;color:#1a1a2e;margin:0 0 12px;display:flex;align-items:center;gap:8px">
+        🔄 Recuperación de ventas
+      </div>
+
+      <!-- 48hs sin respuesta -->
       <div class="seccion">
         <div class="seccion-titulo">
-          🔔 Acciones del día — Sin respuesta hace más de 48hs
+          🔔 Acción requerida — Sin respuesta +48hs
           <span class="badge-count" id="cnt-urgente">0</span>
         </div>
         <div id="tabla-urgente"><div class="loading">Cargando...</div></div>
       </div>
+
+      <!-- En seguimiento activo (≤10 días) -->
       <div class="seccion">
         <div class="seccion-titulo">
           📌 En seguimiento
@@ -141,27 +149,28 @@
         </div>
         <div id="tabla-seguimiento"><div class="loading">Cargando...</div></div>
       </div>
-      <div class="seccion">
+
+      <!-- No cerrados (>10 días) — colapsado -->
+      <div class="seccion" style="padding:0;overflow:hidden">
+        <div class="seccion-titulo" id="toggle-no-cerrados"
+          style="margin:0;padding:16px 20px;cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center"
+          onclick="toggleNoCerrados()">
+          <span>🗂 No cerrados <span class="badge-count" id="cnt-no-cerrados" style="background:#888">0</span></span>
+          <span id="icono-no-cerrados" style="font-size:12px;color:#888">▼ Ver</span>
+        </div>
+        <div id="tabla-no-cerrados" style="display:none;padding:0 20px 16px">
+          <div class="loading">Cargando...</div>
+        </div>
+      </div>
+
+      <!-- Presupuestos de hoy (solo admin) -->
+      <div class="seccion" id="seccion-hoy-admin" style="display:none">
         <div class="seccion-titulo">
           📋 Presupuestos de hoy
           <span class="badge-count" id="cnt-hoy">0</span>
         </div>
         <div id="tabla-hoy"><div class="loading">Cargando...</div></div>
       </div>
-    </div>
-
-    <!-- Solo vendedor: Mis presupuestos con búsqueda -->
-    <div class="seccion" id="seccion-mis-presupuestos" style="display:none">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px">
-        <div class="seccion-titulo" style="margin:0">
-          📋 Mis presupuestos
-          <span class="badge-count" id="cnt-mis-presup">0</span>
-        </div>
-        <input type="text" id="buscador-presup" placeholder="🔍 Buscar por cliente, teléfono o medida..."
-          oninput="filtrarPresupuestos()"
-          style="padding:9px 14px;border:2px solid #e8e8e8;border-radius:8px;font-size:14px;width:320px;max-width:100%">
-      </div>
-      <div id="tabla-mis-presupuestos"><div class="loading">Cargando...</div></div>
     </div>
 
     <!-- Resumen vendedores (solo admin) -->
@@ -207,14 +216,10 @@
     if (esAdmin) {
       document.getElementById('nav-broadcast').style.display = 'inline';
       document.getElementById('seccion-vendedores').style.display = '';
-      document.getElementById('seccion-admin-detalle').style.display = '';
-      cargarStatsVendedores();
     } else {
-      document.getElementById('seccion-mis-presupuestos').style.display = '';
+      document.getElementById('seccion-alertas').style.display = 'none !important';
     }
 
-    // Almacén global para filtrar sin re-fetch
-    let _todosPresupuestos = [];
 
     async function cargarStatsVendedores() {
       try {
@@ -383,66 +388,36 @@
       document.getElementById('s-seguim').textContent = enSeguim.length;
       document.getElementById('s-vencido').textContent = sinResp.length;
 
+      // Filtrar por vendedor si no es admin
+      const misTodos = esAdmin ? todos : todos.filter(p => p.vendedor === vendedor);
+
+      const misSinResp   = misTodos.filter(p => p.estado === 'Enviado' && horasDiff(p.fecha) >= 48);
+      const misSeguim    = misTodos.filter(p => p.estado === 'En seguimiento' && horasDiff(p.fecha) <= 240);
+      const misNoCerrado = misTodos.filter(p =>
+        (p.estado === 'No cerrado') || (p.estado === 'En seguimiento' && horasDiff(p.fecha) > 240)
+      );
+
+      document.getElementById('cnt-urgente').textContent    = misSinResp.length;
+      document.getElementById('cnt-seguim').textContent     = misSeguim.length;
+      document.getElementById('cnt-no-cerrados').textContent = misNoCerrado.length;
+
+      renderTabla('tabla-urgente',    misSinResp,    true);
+      renderTabla('tabla-seguimiento', misSeguim,    true);
+      renderTabla('tabla-no-cerrados', misNoCerrado, true);
+
       if (esAdmin) {
-        document.getElementById('cnt-urgente').textContent = sinResp.length;
-        document.getElementById('cnt-seguim').textContent = enSeguim.length;
+        document.getElementById('seccion-hoy-admin').style.display = '';
         document.getElementById('cnt-hoy').textContent = hoy.length;
-        renderTabla('tabla-urgente', sinResp, true);
-        renderTabla('tabla-seguimiento', enSeguim, true);
         renderTabla('tabla-hoy', hoy, false);
-      } else {
-        // Vendedor: ocultar No cerrado y mostrar con búsqueda
-        _todosPresupuestos = todos.filter(p => p.estado !== 'No cerrado');
-        document.getElementById('cnt-mis-presup').textContent = todos.length;
-        filtrarPresupuestos();
       }
     }
 
-    function filtrarPresupuestos() {
-      const q = (document.getElementById('buscador-presup')?.value || '').toLowerCase().trim();
-      const lista = q
-        ? _todosPresupuestos.filter(p =>
-            (p.cliente||'').toLowerCase().includes(q) ||
-            (p.tel||'').replace(/\D/g,'').includes(q.replace(/\D/g,'')) ||
-            (p.productos||'').toLowerCase().includes(q)
-          )
-        : _todosPresupuestos;
-
-      document.getElementById('cnt-mis-presup').textContent = lista.length;
-
-      if (lista.length === 0) {
-        document.getElementById('tabla-mis-presupuestos').innerHTML = '<div class="empty">Sin resultados</div>';
-        return;
-      }
-
-      const headers = '<tr><th>Fecha</th><th>N°</th><th>Cliente</th><th>Tel</th><th>Productos</th><th>Estado</th><th>Acciones</th></tr>';
-      const filas = lista.map(p => {
-        const tel = (p.tel||'').replace(/\D/g,'');
-        let telWA = tel.startsWith('549') ? tel : tel.startsWith('54') ? '549'+tel.slice(2) : '549'+tel;
-        const nombreVend = vendedor.split(' ')[0];
-        const msg = encodeURIComponent('Hola ' + p.cliente + ' cómo estás? Soy ' + nombreVend + ' de Neumáticos Gallo, quería saber qué te había parecido el presupuesto que te pasamos 😊');
-        return `<tr>
-          <td style="white-space:nowrap">${p.fecha}</td>
-          <td style="font-weight:600">${p.numero}</td>
-          <td>${p.cliente}</td>
-          <td style="white-space:nowrap">${p.tel||'-'}</td>
-          <td style="font-size:12px;max-width:220px">${p.productos||''}</td>
-          <td>${badgeEstado(p.estado)}</td>
-          <td style="white-space:nowrap;display:flex;gap:6px;flex-wrap:wrap">
-            ${tel ? `<button class="btn-wa" onclick="window.open('https://wa.me/${telWA}?text=${msg}','_blank')">💬</button>` : ''}
-            <select onchange="cambiarEstado(${p.fila}, this.value)" style="font-size:12px;padding:3px 6px;border:1px solid #e8e8e8;border-radius:4px">
-              <option value="Enviado" ${p.estado==='Enviado'?'selected':''}>Enviado</option>
-              <option value="En seguimiento" ${p.estado==='En seguimiento'?'selected':''}>En seguimiento</option>
-              <option value="Vendido" ${p.estado==='Vendido'?'selected':''}>Vendido</option>
-              <option value="No cerrado" ${p.estado==='No cerrado'?'selected':''}>No cerrado</option>
-            </select>
-            <a href="/app/orden.html?token=${encodeURIComponent(p.token||'')}&numero=${encodeURIComponent(p.numero||'')}&cliente=${encodeURIComponent(p.cliente||'')}&tel=${encodeURIComponent(p.tel||'')}&productos=${encodeURIComponent(p.productos||'')}&total=${encodeURIComponent(p.total||'')}" style="background:#1a1a2e;color:white;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none;display:inline-flex;align-items:center">🔧 OS</a>
-          </td>
-        </tr>`;
-      }).join('');
-
-      document.getElementById('tabla-mis-presupuestos').innerHTML =
-        '<table><thead>' + headers + '</thead><tbody>' + filas + '</tbody></table>';
+    function toggleNoCerrados() {
+      const div = document.getElementById('tabla-no-cerrados');
+      const icono = document.getElementById('icono-no-cerrados');
+      const visible = div.style.display !== 'none';
+      div.style.display = visible ? 'none' : '';
+      icono.textContent = visible ? '▼ Ver' : '▲ Ocultar';
     }
 
     function logout() { localStorage.clear(); window.location.href = '/app/login.html'; }

@@ -736,25 +736,34 @@ app.post('/webhook', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Bot corriendo en puerto ${PORT}`));
 
-// ── Reporte diario de chats por email ─────────────────────────────────────────
-// Corre todos los días a las 8:00 AM hora Argentina (UTC-3 → 11:00 UTC)
-try {
-  const cron = require('node-cron');
+// ── Reporte diario de chats — endpoint HTTP (llamado por cron-job.org) ────────
+{
   const { execFile } = require('child_process');
   const path = require('path');
-  cron.schedule('0 11 * * *', () => {
-    console.log('📊 Enviando reporte diario de chats...');
-    execFile('node', [path.join(__dirname, 'scripts/reporte-chats.js')],
+  const REPORTE_SECRET = process.env.REPORTE_SECRET || 'gallo2025';
+
+  function correrReporte(fecha) {
+    const args = [path.join(__dirname, 'scripts/reporte-chats.js')];
+    if (fecha) args.push(fecha);
+    console.log('📊 Enviando reporte diario de chats' + (fecha ? ` (${fecha})` : '') + '...');
+    execFile('node', args,
       { cwd: path.join(__dirname), env: process.env },
       (err, stdout, stderr) => {
         if (stdout) console.log(stdout.trim());
         if (err) console.error('❌ Error reporte chats:\n' + (stderr || err.message));
       }
     );
-  }, { timezone: 'UTC' });
-  console.log('⏰ Cron de reporte diario activo (8:00 AM ART)');
-} catch (e) {
-  console.warn('⚠️  node-cron no disponible, reporte diario desactivado:', e.message);
+  }
+
+  app.get('/admin/reporte-diario', (req, res) => {
+    const secret = req.query.secret || req.headers['x-secret'];
+    if (secret !== REPORTE_SECRET) return res.status(401).json({ error: 'No autorizado' });
+    const fecha = req.query.fecha || null; // opcional: DD/MM/YYYY
+    correrReporte(fecha);
+    res.json({ ok: true, mensaje: 'Reporte iniciado', fecha: fecha || 'ayer' });
+  });
+
+  console.log('📧 Endpoint reporte activo: GET /admin/reporte-diario?secret=...');
 }
 
 // Exportar funciones para uso en app.js

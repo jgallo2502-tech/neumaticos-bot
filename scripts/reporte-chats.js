@@ -255,16 +255,37 @@ function generarHTML(mensajes, targetFecha, revendedores) {
   };
 }
 
-// ── Enviar email ──────────────────────────────────────────────────────────────
+// ── Enviar email via Gmail API OAuth2 (evita bloqueo SMTP de Railway) ────────
 async function enviarEmail(html, { numeros, numerosRev, numerosParticular, totalMensajes, fechaLabel }) {
-  if (!EMAIL_FROM || !GMAIL_PASS) { console.error('❌ Faltan GMAIL_USER o GMAIL_APP_PASS en .env'); process.exit(1); }
-  const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: EMAIL_FROM, pass: GMAIL_PASS } });
-  await transporter.sendMail({
-    from: `"Bot Neumáticos Gallo" <${EMAIL_FROM}>`,
-    to: EMAIL_TO,
-    subject: `📊 Chats ${fechaLabel} — ${numeros} convs (🏪${numerosRev} rev · 👤${numerosParticular} part)`,
-    html,
-  });
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GMAIL_CLIENT_ID,
+    process.env.GMAIL_CLIENT_SECRET,
+    'https://developers.google.com/oauthplayground'
+  );
+  oauth2Client.setCredentials({ refresh_token: process.env.GMAIL_REFRESH_TOKEN });
+
+  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+  const from = EMAIL_FROM || 'j.gallo2502@gmail.com';
+  const subject = `📊 Chats ${fechaLabel} — ${numeros} convs (🏪${numerosRev} rev · 👤${numerosParticular} part)`;
+
+  const boundary = 'boundary_gallo_' + Date.now();
+  const raw = [
+    `From: "Bot Neumáticos Gallo" <${from}>`,
+    `To: ${EMAIL_TO}`,
+    `Subject: =?UTF-8?B?${Buffer.from(subject).toString('base64')}?=`,
+    `MIME-Version: 1.0`,
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    ``,
+    `--${boundary}`,
+    `Content-Type: text/html; charset=UTF-8`,
+    `Content-Transfer-Encoding: base64`,
+    ``,
+    Buffer.from(html, 'utf8').toString('base64'),
+    `--${boundary}--`,
+  ].join('\r\n');
+
+  const encoded = Buffer.from(raw).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  await gmail.users.messages.send({ userId: 'me', requestBody: { raw: encoded } });
   console.log(`✅ Reporte enviado a ${EMAIL_TO} (${numeros} conversaciones: ${numerosRev} revendedores, ${numerosParticular} particulares)`);
 }
 

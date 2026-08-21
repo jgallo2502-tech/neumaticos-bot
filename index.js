@@ -29,6 +29,9 @@ const appRouter = require('./app');
 const reventaRouter = require('./reventa');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+// Número de WhatsApp del bot (sin prefijo whatsapp:)
+const BOT_PHONE = (process.env.TWILIO_WHATSAPP_NUMBER || process.env.TWILIO_PHONE || '').replace('whatsapp:', '');
 
 const app = express();
 app.use(express.urlencoded({ extended: false }));
@@ -110,7 +113,7 @@ async function enviarEncuesta(numero) {
   encuestasPendientes.add(numero);
   const msg = `¡Hola! Esperamos haber podido ayudarte 😊\n\n¿Cómo fue tu experiencia?\n\n1️⃣ Me sirvió la ayuda\n2️⃣ Quiero hablar con alguien\n3️⃣ No encontré lo que buscaba`;
   try {
-    await client.messages.create({ from: `whatsapp:${process.env.TWILIO_PHONE}`, to: `whatsapp:${numero}`, body: msg });
+    await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${numero}`, body: msg });
     guardarMensaje(numero, 'bot', msg).catch(() => {});
   } catch(e) { console.error('Error enviando encuesta:', e.message); }
   // Si no responden en 10 min, cerrar igual
@@ -586,7 +589,7 @@ app.post('/webhook', async (req, res) => {
     else if (mediaType.startsWith('image')) tipoMsg = 'imágenes';
     else if (mediaType.startsWith('video')) tipoMsg = 'videos';
     const msg = `Hola! Por el momento solo puedo leer mensajes de texto. No puedo escuchar ${tipoMsg}.\n\n¿Qué medida de neumático necesitás? (ej: 205/55R16)`;
-    await client.messages.create({ from: `whatsapp:${process.env.TWILIO_PHONE}`, to: `whatsapp:${fromNumber}`, body: msg });
+    await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${fromNumber}`, body: msg });
     registrarMensajeSesion(fromNumber, 'bot', msg);
     guardarMensaje(fromNumber, 'bot', msg).catch(() => {});
     return res.sendStatus(200);
@@ -609,7 +612,7 @@ app.post('/webhook', async (req, res) => {
       encuestasPendientes.delete(fromNumber);
     }
     if (msg) {
-      await client.messages.create({ from: `whatsapp:${process.env.TWILIO_PHONE}`, to: `whatsapp:${fromNumber}`, body: msg });
+      await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${fromNumber}`, body: msg });
       guardarMensaje(fromNumber, 'bot', msg).catch(() => {});
       cerrarSesion(fromNumber);
       return res.sendStatus(200);
@@ -620,7 +623,7 @@ app.post('/webhook', async (req, res) => {
   if (/hablar|persona|alguien|humano|asesor|vendedor/i.test(lower)) {
     guardarAlerta(fromNumber, body).catch(() => {});
     const msg = `Te pasamos los contactos de nuestras sucursales para que te atiendan:\n\n${WA_SUCURSALES}`;
-    await client.messages.create({ from: `whatsapp:${process.env.TWILIO_PHONE}`, to: `whatsapp:${fromNumber}`, body: msg });
+    await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${fromNumber}`, body: msg });
     registrarMensajeSesion(fromNumber, 'bot', msg);
     guardarMensaje(fromNumber, 'bot', msg).catch(() => {});
     return res.sendStatus(200);
@@ -631,7 +634,7 @@ app.post('/webhook', async (req, res) => {
   if (esMecanica) {
     guardarAlerta(fromNumber, body).catch(() => {});
     const msg = `Sí, hacemos ese servicio! 🔧 Contactá directamente a la sucursal que te quede más cerca:\n\n${WA_SUCURSALES}`;
-    await client.messages.create({ from: `whatsapp:${process.env.TWILIO_PHONE}`, to: `whatsapp:${fromNumber}`, body: msg });
+    await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${fromNumber}`, body: msg });
     registrarMensajeSesion(fromNumber, 'bot', msg);
     guardarMensaje(fromNumber, 'bot', msg).catch(() => {});
     return res.sendStatus(200);

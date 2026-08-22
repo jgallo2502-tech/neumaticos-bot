@@ -2659,22 +2659,24 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
     const r = await sheets.spreadsheets.values.get({ spreadsheetId: process.env.GOOGLE_SHEET_ID, range: 'Bot WhatsApp!A:J' });
     const sheetRows = r.data.values || [];
 
-    // Mapa codArt → datos
-    const sheetMap = {};
+    // Mapa codArt → datos  +  mapa codAlt (CAI) → datos para productos Express
+    const sheetMap = {}, sheetMapByCAI = {};
     for (let i = 1; i < sheetRows.length; i++) {
       const row = sheetRows[i];
       const codArt = (row[0] || '').trim();
       if (!codArt) continue;
-      sheetMap[codArt] = {
-        codAlt:   (row[1] || '').trim(),
-        desc:     (row[2] || '').trim(),
-        marca:    (row[3] || '').trim(),
-        medida:   (row[5] || '').trim(),
-        stockVic: parseInt(row[6]) || 0,
-        stockNor: parseInt(row[7]) || 0,
-        stockExpr:parseInt(row[8]) || 0,
-        precio:   parseInt(row[9]) || 0,
+      const entry = {
+        codAlt:    (row[1] || '').trim(),
+        desc:      (row[2] || '').trim(),
+        marca:     (row[3] || '').trim(),
+        medida:    (row[5] || '').trim(),
+        stockVic:  parseInt(row[6]) || 0,
+        stockNor:  parseInt(row[7]) || 0,
+        stockExpr: parseInt(row[8]) || 0,
+        precio:    parseInt(row[9]) || 0,
       };
+      sheetMap[codArt] = entry;
+      if (entry.codAlt) sheetMapByCAI[entry.codAlt] = entry;
     }
 
     const content = req.file.buffer.toString('latin1');
@@ -2682,14 +2684,15 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
     const header = lines[0];
     const headerParts = splitCSVLine(header);
     // Detectar columnas de descripción e imagen dinámicamente
-    const COL_NOMBRE = headerParts.findIndex(h => /nombre/i.test(h.replace(/"/g,'')));
-    const COL_DESC   = headerParts.findIndex(h => /descripci/i.test(h.replace(/"/g,'')));
-    const COL_IMG    = headerParts.findIndex(h => /imagen/i.test(h.replace(/"/g,'')));
+    const COL_NOMBRE  = headerParts.findIndex(h => /nombre/i.test(h.replace(/"/g,'')));
+    const COL_DESC    = headerParts.findIndex(h => /descripci/i.test(h.replace(/"/g,'')));
+    const COL_IMG     = headerParts.findIndex(h => /imagen/i.test(h.replace(/"/g,'')));
+    const COL_VISIBLE = headerParts.findIndex(h => /^"?visible"?$/i.test(h.trim()));
 
     const tnCodArts = new Set();   // códigos que ya existen en TN (col 0)
     const updatedLines = [header];
     let actualizados = 0, sinDatos = 0;
-    const cambios = [];
+    const cambios = [], discontinuados = [];
     const sinFoto = [], sinDesc = [];
 
     for (let i = 1; i < lines.length; i++) {
@@ -2713,8 +2716,19 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
       if (!img)  sinFoto.push({ codArt, nombre });
       if (!desc) sinDesc.push({ codArt, nombre });
 
-      const prod = sheetMap[codArt];
-      if (!prod || prod.precio <= 0) { sinDatos++; updatedLines.push(lines[i]); continue; }
+      // Buscar primero por codArt, luego por CAI (para productos Express Michelin/BFG)
+      const prod = sheetMap[codArt] || sheetMapByCAI[codArt];
+      if (!prod || prod.precio <= 0) {
+        // Discontinuado: poner stock 0 e inactivo
+        sinDatos++;
+        const nombreDisc = COL_NOMBRE >= 0 ? (parts[COL_NOMBRE]||'').replace(/"/g,'').trim() : codArt;
+        discontinuados.push({ codArt, nombre: nombreDisc });
+        parts[15] = '0';
+        if (parts[16] && parts[16] !== 'ND') parts[16] = '0';
+        if (COL_VISIBLE >= 0) parts[COL_VISIBLE] = '"Oculto"';
+        updatedLines.push(parts.join(';'));
+        continue;
+      }
 
       const isExpress = (parts[2] || '').replace(/"/g, '').includes('Pedido Express');
       const precioPromo = prod.precio;
@@ -2750,8 +2764,8 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
       }
     }
 
-    // Marcas que no se suben a Tienda Nube
-    const MARCAS_EXCLUIR_TN = ['FATE', 'PIRELLI', 'BRIDGESTONE', 'GOODYEAR'];
+    // Marcas que no se agregan como productos NUEVOS a TN (ya están o se manejan por separado)
+    const MARCAS_EXCLUIR_TN = ['FATE'];
     // Marcas que se suben como Pedido Especial (solo Express/Celsur)
     const MARCAS_PEDIDO_ESPECIAL = ['MICHELIN', 'BFGOODRICH'];
 
@@ -2819,7 +2833,7 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
     const lineasTxt = [
       `CAMBIOS TIENDA NUBE — ${fecha}`,
       `${'='.repeat(60)}`,
-      `Total productos: ${lines.length - 1} | Actualizados: ${actualizados} | Sin datos: ${sinDatos} | Nuevos: ${nuevos.length} | Pedidos especiales: ${nuevosEspeciales.length}`,
+      `Total productos: ${lines.length - 1} | Actualizados: ${actualizados} | Discontinuados (stock 0): ${discontinuados.length} | Nuevos: ${nuevos.length} | Pedidos especiales: ${nuevosEspeciales.length}`,
       '',
     ];
     const soloPrecio   = cambios.filter(c => c.precioCambio && !c.stockCambio);
@@ -2862,7 +2876,8 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
 
     res.json({
       ok: true,
-      stats: { actualizados, sinDatos, nuevos: nuevos.length, especiales: nuevosEspeciales.length, total: lines.length - 1, cambios: cambios.length, sinFoto: sinFoto.length, sinDesc: sinDesc.length },
+      stats: { actualizados, discontinuados: discontinuados.length, nuevos: nuevos.length, especiales: nuevosEspeciales.length, total: lines.length - 1, cambios: cambios.length, sinFoto: sinFoto.length, sinDesc: sinDesc.length },
+      discontinuados: discontinuados.slice(0, 200),
       nuevos: nuevos.map(p => ({ codArt: p.codArt, desc: p.desc, medida: p.medida, marca: p.marca, stock: p.totalStock, precio: p.precio })),
       especiales: nuevosEspeciales.map(p => ({ codArt: p.codArt, desc: p.desc, medida: p.medida, marca: p.marca, stockExpr: p.stockExpr, precio: p.precio })),
       sinFoto,

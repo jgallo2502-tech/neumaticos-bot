@@ -396,11 +396,11 @@
 
         const s = d.stats;
         document.getElementById('tn-stats').innerHTML =
-          `✅ <b>${s.actualizados}</b> productos actualizados · ` +
+          `✅ <b>${s.actualizados}</b> actualizados · ` +
           `🔄 <b>${s.cambios || 0}</b> con diferencias · ` +
-          `⚠️ <b>${s.sinDatos}</b> sin datos en sheet · ` +
+          `🔴 <b>${s.discontinuados || 0}</b> discontinuados (stock 0) · ` +
           `🆕 <b>${s.nuevos}</b> nuevos · ` +
-          `⭐ <b>${s.especiales || 0}</b> pedidos especiales (incluidos en el CSV)`;
+          `⭐ <b>${s.especiales || 0}</b> pedidos especiales`;
 
         if (d.nuevos && d.nuevos.length > 0) {
           const tbody = document.getElementById('tn-nuevos-body');

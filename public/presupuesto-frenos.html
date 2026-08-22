@@ -157,14 +157,26 @@
       <div class="row" style="margin-top:16px">
         <div>
           <label>Mano de obra</label>
-          <select id="mo-precio-frenos" onchange="actualizarBotonGenerarFrenos()">
+          <select id="mo-precio-frenos" onchange="toggleMoManualFrenos(); actualizarBotonGenerarFrenos()">
             <option value="0">No incluir</option>
-            <option value="15000">$15.000</option>
-            <option value="20000">$20.000</option>
-            <option value="25000">$25.000</option>
-            <option value="30000">$30.000</option>
-            <option value="40000">$40.000</option>
+            <option value="60000">$60.000</option>
+            <option value="70000">$70.000</option>
+            <option value="80000">$80.000</option>
+            <option value="90000">$90.000</option>
+            <option value="100000">$100.000</option>
+            <option value="110000">$110.000</option>
+            <option value="120000">$120.000</option>
+            <option value="130000">$130.000</option>
+            <option value="140000">$140.000</option>
+            <option value="150000">$150.000</option>
+            <option value="160000">$160.000</option>
+            <option value="170000">$170.000</option>
+            <option value="180000">$180.000</option>
+            <option value="190000">$190.000</option>
+            <option value="200000">$200.000</option>
+            <option value="manual">Ingresar otro valor...</option>
           </select>
+          <input type="number" id="mo-precio-frenos-manual" placeholder="Ingresá el monto" style="display:none;margin-top:6px" oninput="actualizarBotonGenerarFrenos()">
         </div>
       </div>
       <p style="font-size:12px;color:#888;margin-top:14px">Elegí la versión/motor y años que coincidan con el vehículo. Puede haber una pastilla delantera y otra trasera — seleccioná las que correspondan.</p>
@@ -212,8 +224,17 @@
       return '$' + Math.round(n).toLocaleString('es-AR');
     }
 
+    function toggleMoManualFrenos() {
+      const sel = document.getElementById('mo-precio-frenos');
+      const inp = document.getElementById('mo-precio-frenos-manual');
+      inp.style.display = sel.value === 'manual' ? 'block' : 'none';
+      if (sel.value !== 'manual') inp.value = '';
+    }
+
     function getMoPrecioFrenos() {
-      return parseInt(document.getElementById('mo-precio-frenos')?.value || 0) || 0;
+      const sel = document.getElementById('mo-precio-frenos');
+      if (sel?.value === 'manual') return parseInt(document.getElementById('mo-precio-frenos-manual')?.value || 0) || 0;
+      return parseInt(sel?.value || 0) || 0;
     }
 
     let frenosSeleccionados = {};

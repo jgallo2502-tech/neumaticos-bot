@@ -2666,9 +2666,10 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
     for (let i = 1; i < sheetRows.length; i++) {
       const row = sheetRows[i];
       const codArt = (row[0] || '').trim();
-      if (!codArt) continue;
+      const codAlt = (row[1] || '').trim();
+      if (!codArt && !codAlt) continue;  // productos Celsur tienen codArt vacío, solo CAI
       const entry = {
-        codAlt:    (row[1] || '').trim(),
+        codAlt,
         desc:      (row[2] || '').trim(),
         marca:     (row[3] || '').trim(),
         medida:    (row[5] || '').trim(),
@@ -2677,8 +2678,8 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
         stockExpr: parseInt(row[8]) || 0,
         precio:    parseInt(row[9]) || 0,
       };
-      sheetMap[codArt] = entry;
-      if (entry.codAlt) sheetMapByCAI[entry.codAlt] = entry;
+      if (codArt) sheetMap[codArt] = entry;
+      if (codAlt) sheetMapByCAI[codAlt] = entry;
     }
 
     const content = req.file.buffer.toString('latin1');
@@ -2720,14 +2721,8 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
       if (!desc) sinDesc.push({ codArt, nombre });
 
       // Buscar primero por codArt, luego por CAI (para productos Express Michelin/BFG)
-      const prod = sheetMap[codArt] || sheetMapByCAI[codArt];
+      const prod = sheetMap[codArt] || sheetMapByCAI[codArt] || sheetMapByCAI[String(parseInt(codArt))];
       if (!prod || prod.precio <= 0) {
-        // Si es Pedido Especial y no está en el sheet, dejarlo sin tocar
-        const catVal = COL_CAT >= 0 ? (parts[COL_CAT] || '').replace(/"/g, '').trim() : '';
-        if (/pedido especial/i.test(catVal)) {
-          updatedLines.push(parts.join(';'));
-          continue;
-        }
         // Discontinuado: poner stock 0 e inactivo
         sinDatos++;
         const nombreDisc = COL_NOMBRE >= 0 ? (parts[COL_NOMBRE]||'').replace(/"/g,'').trim() : codArt;

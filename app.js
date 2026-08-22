@@ -2616,11 +2616,13 @@ const ABREV_NEUMA = new Set([
   'XL','TL','SL','RWL','RBL','RFT','RF','AO','MO','VOL','SSR','GRNX','ST','CAI',
   'HP','AT','SUV','CV','SP','XT','ES','AT70','HP010','HP300','SU4','SH9I',
   'F22','F50','VP1','ES32','G015','G058','AE61','LX2','R1','FM800','EC300+',
-  'N0','N1','N2','MO1','RO1','RO2','4X4','LTX','PMG',
+  'N0','N1','N2','MO1','RO1','RO2','4X4','LTX','PMG','ZP','RFT','HL',
 ]);
 
 function toTitleCaseNeuma(str) {
   if (!str) return str;
+  // Limpiar prefijo "N. " que agrega TN y código interno entre paréntesis al final
+  str = str.replace(/^N\.\s+/i, '').replace(/\s*\(\d{5,}\)\s*$/, '').trim();
   return str.split(' ').map(word => {
     if (!word) return word;
     if (/^\d+\/\d+[A-Z]\d+/i.test(word)) return word;          // medida 205/55R16
@@ -2698,6 +2700,12 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
       const codAltTN = (parts[16] || '').replace(/^"|"$/g, '').trim();
       if (codAltTN) tnCodArts.add(codAltTN);
 
+      // Limpiar y unificar nombre en Title Case para TODOS los productos
+      if (COL_NOMBRE >= 0) {
+        const nombreLimpio = toTitleCaseNeuma((parts[COL_NOMBRE] || '').replace(/"/g, '').trim());
+        parts[COL_NOMBRE] = `"${nombreLimpio}"`;
+      }
+
       // Auditoría: detectar productos sin foto ni descripción
       const nombre = COL_NOMBRE >= 0 ? (parts[COL_NOMBRE] || '').replace(/"/g,'').trim() : '';
       const desc   = COL_DESC  >= 0 ? (parts[COL_DESC]   || '').replace(/"/g,'').trim() : '';
@@ -2719,7 +2727,6 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
       const precioCambio = precioAnt !== precio;
       const stockCambio  = stockAnt  !== stockVic;
 
-      if (COL_NOMBRE >= 0) parts[COL_NOMBRE] = `"${toTitleCaseNeuma((parts[COL_NOMBRE] || '').replace(/"/g,'').trim())}"`;
       parts[9]  = formatTNNum(precio);
       parts[10] = formatTNNum(precioPromo);
       parts[15] = String(stockVic);

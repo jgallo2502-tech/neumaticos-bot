@@ -205,10 +205,13 @@ function normalizarMedida(texto) {
 }
 
 // --- Extraer marca del texto ---
-const MARCAS_PREMIUM = ['michelin', 'continental', 'dunlop', 'yokohama', 'bfgoodrich'];
-const MARCAS_PRECIO_CALIDAD = ['gtradial', 'giti', 'nexen', 'falken', 'hankook'];
-const MARCAS_ECONOMICAS = ['westlake', 'tracmax', 'linglong'];
+const MARCAS_PREMIUM       = ['michelin', 'yokohama', 'falken', 'continental', 'dunlop', 'bfgoodrich', 'goodyear', 'pirelli', 'bridgestone'];
+const MARCAS_PRECIO_CALIDAD = ['giti', 'gtradial', 'hankook', 'nexen'];
+const MARCAS_ECONOMICAS     = ['tracmax', 'linglong', 'laufenn', 'westlake', 'windforce', 'lavigator', 'wanli', 'sunny'];
 const TODAS_MARCAS = [...MARCAS_PREMIUM, ...MARCAS_PRECIO_CALIDAD, ...MARCAS_ECONOMICAS];
+
+// Marcas que NO se ofrecen a revendedores
+const MARCAS_EXCLUIDAS_REVENTA = ['pirelli', 'bridgestone'];
 
 
 function extraerMarca(texto) {
@@ -363,11 +366,14 @@ async function obtenerPrecios(medida, marca, incluirRunFlat = false, minStock = 
     }
   }
 
-  // Orden: categoría → marca preferida primero → stock total desc
+  // Orden dentro de cada categoría: marcas prioritarias primero, luego stock
   const ORDEN_MARCA = {
-    'michelin': 1, 'yokohama': 2, 'continental': 3, 'dunlop': 4, 'bfgoodrich': 5,
-    'gtradial': 1, 'giti': 2, 'nexen': 3, 'falken': 4, 'hankook': 5,
-    'tracmax': 1, 'linglong': 2, 'westlake': 3,
+    // Premium: Michelin y Yokohama primero
+    'michelin': 1, 'yokohama': 2, 'falken': 3, 'continental': 4, 'dunlop': 5, 'bfgoodrich': 6, 'goodyear': 7, 'pirelli': 8, 'bridgestone': 9,
+    // Precio-Calidad: Giti y GTRadial primero
+    'giti': 1, 'gtradial': 2, 'hankook': 3, 'nexen': 4,
+    // Económicas: Tracmax y Linglong primero
+    'tracmax': 1, 'linglong': 2, 'laufenn': 3, 'westlake': 4, 'windforce': 5, 'lavigator': 6, 'wanli': 7, 'sunny': 8,
   };
 
   return resultados.sort((a, b) => {
@@ -421,13 +427,21 @@ function armarMensajes(productos, medidaOriginal, esRev = false, sinLimite = fal
 
   // Encabezado
   const headerExtra = esRev ? ' _(precios de revendedor)_' : '';
-  mensajes.push(`🔍 *${medidaOriginal}* — ${total} opción${total > 1 ? 'es' : ''} con stock disponible${headerExtra}:`);
+  const totalVisibles = productosVisibles.length;
+  mensajes.push(`🔍 *${medidaOriginal}* — ${totalVisibles} opción${totalVisibles > 1 ? 'es' : ''} con stock disponible${headerExtra}:`);
 
-  // Agrupar por categoría — máx 3 por categoría para no saturar
+  // Filtrar marcas excluidas para revendedores
+  const productosVisibles = esRev
+    ? productos.filter(p => !MARCAS_EXCLUIDAS_REVENTA.includes(p.marca.toLowerCase()))
+    : productos;
+
+  // Límites por categoría: particulares 3/3/2, revendedores sin límite especial (solo stock)
+  const LIMITES = esRev ? { 1: 99, 2: 99, 3: 99, 4: 99 } : { 1: 3, 2: 3, 3: 2, 4: 2 };
+
   const grupos = { 1: [], 2: [], 3: [], 4: [] };
-  for (const p of productos) {
+  for (const p of productosVisibles) {
     const { orden } = categoriaYEmoji(p.marca);
-    if (grupos[orden].length < 5) grupos[orden].push(p);
+    if (grupos[orden].length < LIMITES[orden]) grupos[orden].push(p);
   }
 
   const nombresGrupo = {
@@ -467,8 +481,8 @@ function armarMensajes(productos, medidaOriginal, esRev = false, sinLimite = fal
     mensajes.push(msg.trim());
   }
 
-  if (total > 8 && !sinLimite) {
-    mensajes.push(`_...y ${total - 8} opciones más. Filtrá por marca, ej: "${medidaOriginal} Michelin"_`);
+  if (totalVisibles > 8 && !sinLimite) {
+    mensajes.push(`_...y más opciones disponibles. Filtrá por marca, ej: "${medidaOriginal} Michelin"_`);
   }
 
   if (!esRev) mensajes.push(PIE);

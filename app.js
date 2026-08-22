@@ -2734,7 +2734,7 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
         continue;
       }
 
-      const isExpress = (parts[2] || '').replace(/"/g, '').includes('Pedido Express');
+      const isExpress = /pedido (express|especial)/i.test((parts[2] || '').replace(/"/g, ''));
       const precioPromo = prod.precio;
       const precio = Math.round(precioPromo / 0.8);
       const stockVic = isExpress ? 0 : (prod.stockVic + prod.stockNor);

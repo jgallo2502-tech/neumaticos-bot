@@ -206,7 +206,7 @@
             <input type="checkbox" id="dep-nordelta" checked> Nordelta
           </label>
           <label style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:400;text-transform:none;letter-spacing:0">
-            <input type="checkbox" id="dep-express" checked> ⚡ Express 48hs
+            <input type="checkbox" id="dep-express" checked> ⚡ Express 48/72 hs hábiles
           </label>
           <label style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:400;text-transform:none;letter-spacing:0">
             <input type="checkbox" id="poco-stock"> 📦 Incluir stock &lt; 4 unidades
@@ -217,6 +217,15 @@
         </div>
       </div>
       <button class="btn-buscar" onclick="buscar()">🔍 Buscar precios</button>
+    </div>
+
+    <!-- Filtro Express -->
+    <div id="btn-express-wrap" style="display:none;margin-bottom:12px">
+      <button id="btn-toggle-express" onclick="toggleExpress()"
+        style="background:#f59e0b;color:#fff;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">
+        ⚡ Ocultar Express
+      </button>
+      <span style="font-size:12px;color:#888;margin-left:10px">Los ítems en amarillo son solo Express (48/72 hs hábiles). Los verdes están en stock propio.</span>
     </div>
 
     <!-- Resultados -->
@@ -536,10 +545,27 @@
 
     window.productosIdx = {};
 
+    const MARCAS_PREMIUM        = ['michelin','yokohama','falken','continental','dunlop','bfgoodrich','goodyear','pirelli','bridgestone'];
+    const MARCAS_PRECIO_CALIDAD = ['giti','gtradial','hankook','nexen'];
+    const MARCAS_ECONOMICAS     = ['tracmax','linglong','laufenn','westlake','windforce','lavigator','wanli','sunny'];
+
+    let mostrarExpress = true;
+
+    function toggleExpress() {
+      mostrarExpress = !mostrarExpress;
+      const btn = document.getElementById('btn-toggle-express');
+      btn.textContent = mostrarExpress ? '⚡ Ocultar Express' : '⚡ Mostrar Express';
+      btn.style.background = mostrarExpress ? '#f59e0b' : '#9ca3af';
+      document.querySelectorAll('.card-express').forEach(el => {
+        el.style.display = mostrarExpress ? '' : 'none';
+      });
+    }
+
     function mostrarResultados(data) {
       window.productosIdx = {};
       let html = '';
       let idx = 0;
+      let hayExpress = false;
       for (const medida of Object.keys(data)) {
         const productos = data[medida];
         html += '<div class="card"><h2>Medida: ' + medida + '</h2>';
@@ -549,9 +575,9 @@
           const grupos = { Premium: [], PrecioCalidad: [], Economicas: [], Otras: [] };
           for (const p of productos) {
             const m = p.marca.toLowerCase();
-            if (['michelin','continental','dunlop','yokohama','bfgoodrich'].includes(m)) grupos.Premium.push(p);
-            else if (['gtradial','giti','nexen','falken','hankook'].includes(m)) grupos.PrecioCalidad.push(p);
-            else if (['westlake','tracmax','linglong'].includes(m)) grupos.Economicas.push(p);
+            if (MARCAS_PREMIUM.includes(m)) grupos.Premium.push(p);
+            else if (MARCAS_PRECIO_CALIDAD.includes(m)) grupos.PrecioCalidad.push(p);
+            else if (MARCAS_ECONOMICAS.includes(m)) grupos.Economicas.push(p);
             else grupos.Otras.push(p);
           }
           const catInfo = {
@@ -569,19 +595,23 @@
               const contado = Math.round(p.precio * 0.80);
               const c6 = Math.round(p.precio * 0.90);
               const c3 = Math.round(p.precio * 0.85);
+              const soloExpr = (p.stockVic === 0 && p.stockNor === 0 && p.stockExpr > 0);
+              if (soloExpr) hayExpress = true;
               const stockParts = [];
               if (p.stockVic > 0) stockParts.push('Victoria: ' + p.stockVic);
               if (p.stockNor > 0) stockParts.push('Nordelta: ' + p.stockNor);
-              if (p.stockExpr > 0) stockParts.push('Express 48hs: ' + (p.stockExpr >= 99 ? 'disponible' : p.stockExpr));
+              if (p.stockExpr > 0) stockParts.push('Express 48/72 hs hábiles: ' + (p.stockExpr >= 99 ? 'disponible' : p.stockExpr));
               const stockStr = stockParts.length > 0 ? stockParts.join(' | ') : 'Sin stock en depósito';
               const imgUrl = buscarImagen(p.marca, p.descripcion);
-              html += '<div class="producto-card" id="card-' + idx + '" onclick="toggleSeleccion(' + idx + ')">';
+              const bgColor = soloExpr ? 'background:#fffbeb;border-left:4px solid #f59e0b;' : 'background:#f0fdf4;border-left:4px solid #22c55e;';
+              const expressClass = soloExpr ? ' card-express' : '';
+              html += '<div class="producto-card' + expressClass + '" id="card-' + idx + '" onclick="toggleSeleccion(' + idx + ')" style="' + bgColor + '">';
               html += '<div style="display:flex;align-items:center;gap:12px">';
               if (imgUrl) html += '<img src="' + imgUrl + '" class="no-print" style="width:72px;height:72px;object-fit:contain;border-radius:6px;flex-shrink:0" onerror="this.style.display=\'none\'">';
               html += '<div>';
               html += '<div class="producto-nombre">' + p.descripcion + (p.codAlt ? ' <span style="font-size:10px;font-weight:400;color:#999;margin-left:6px">[' + p.codAlt + ']</span>' : '') + '</div>';
               html += '<div class="producto-precios">12 pagos: ' + fmt(p.precio) + ' &nbsp;|&nbsp; 6 cuotas (-10%): ' + fmt(c6) + ' &nbsp;|&nbsp; 3 cuotas (-15%): ' + fmt(c3) + '</div>';
-              html += '<div class="stock-info no-print">📦 ' + stockStr + '</div>';
+              html += '<div class="stock-info no-print">📦 ' + stockStr + (soloExpr ? ' &nbsp;<span style="color:#b45309;font-weight:700">⚡ Solo Express</span>' : '') + '</div>';
               html += '</div></div>';
               html += '<div style="text-align:right">';
               html += '<div class="producto-precio-main">' + fmt(contado) + '</div>';
@@ -596,6 +626,15 @@
         html += '</div>';
       }
       document.getElementById('resultados').innerHTML = html;
+
+      // Mostrar botón toggle express si hay items express
+      const btnWrap = document.getElementById('btn-express-wrap');
+      if (btnWrap) {
+        btnWrap.style.display = hayExpress ? 'block' : 'none';
+        mostrarExpress = true;
+        const btn = document.getElementById('btn-toggle-express');
+        if (btn) { btn.textContent = '⚡ Ocultar Express'; btn.style.background = '#f59e0b'; }
+      }
     }
 
     function toggleSeleccion(idx) {
@@ -814,7 +853,7 @@
         if (fp6)  msg += `   💳 6 cuotas (-10%): ${fmt(c6t)} (${fmt(c6c)}/cuota)\n`;
         if (fp3)  msg += `   💳 3 cuotas (-15%): ${fmt(c3t)} (${fmt(c3c)}/cuota)\n`;
         if (fp1)  msg += `   💵 Contado (-20%): ${fmt(c1)}\n`;
-        if (soloExpress) msg += `   ⚡ Solo disponible vía Pedido Express — entrega 48 hs hábiles\n`;
+        if (soloExpress) msg += `   ⚡ Solo disponible vía Pedido Express — entrega 48/72 hs hábiles\n`;
         msg += '\n';
       }
 

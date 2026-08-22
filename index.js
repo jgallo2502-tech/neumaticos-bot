@@ -407,7 +407,7 @@ function preciosProducto(precio, esRev = false, marca = '') {
 
 const PIE = `📌 *Precio unitario. Promociones por compra de 2 o más neumáticos.*
 🔧 Colocación sin cargo en nuestros locales. Válvulas, balanceo y alineación se cobran aparte.
-⚡ Stock Express disponible en 48 hs hábiles.
+⚡ Stock Express disponible en 48/72 hs hábiles.
 🌐 Compra online: tienda.neumaticosgallo.com.ar (6 pagos o contado -20%, envíos a todo el país sin cargo superando mínimo de compra)
 
 📍 *Suc. Victoria:* Pres. Perón 3479 — ☎️ 11-3773-5246
@@ -458,7 +458,7 @@ function armarMensajes(productos, medidaOriginal, esRev = false, sinLimite = fal
     for (const p of grupos[orden]) {
       const tienePropio = (p.stockVic + p.stockNor) > 0;
       const express = (!tienePropio && p.stockExpr > 0)
-        ? '\n⚡ _Solo disponible vía Pedido Express — entrega en 48 hs hábiles (no en stock en local)_'
+        ? '\n⚡ _Solo disponible vía Pedido Express — entrega en 48/72 hs hábiles (no en stock en local)_'
         : '';
       msg += `\n🔹 *${p.descripcion}*\n`;
       msg += preciosProducto(p.precio, esRev, p.marca);
@@ -472,7 +472,7 @@ function armarMensajes(productos, medidaOriginal, esRev = false, sinLimite = fal
         const parts = [];
         if (sv) parts.push(`Victoria: ${sv}`);
         if (sn) parts.push(`Nordelta: ${sn}`);
-        if (se) parts.push(`Express: ${se} (48-72 hs hábiles)`);
+        if (se) parts.push(`Express: ${se} (48/72 hs hábiles)`);
         if (parts.length) msg += `\n📦 _Stock: ${parts.join(' | ')}_`;
       }
       msg += express;
@@ -487,6 +487,14 @@ function armarMensajes(productos, medidaOriginal, esRev = false, sinLimite = fal
 
   if (!esRev) mensajes.push(PIE);
   return mensajes;
+}
+
+// --- Enviar mensajes en orden con delay ---
+async function enviarSecuencial(numero, mensajes, delayMs = 700) {
+  for (let i = 0; i < mensajes.length; i++) {
+    await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${numero}`, body: mensajes[i] });
+    if (i < mensajes.length - 1) await new Promise(r => setTimeout(r, delayMs));
+  }
 }
 
 // --- Sistema de prompt para Claude ---
@@ -685,10 +693,11 @@ app.post('/webhook', async (req, res) => {
       const todosBot = [...mensajes];
       if (!esRev && productos.length > 0)
         todosBot.push('¿Te puedo ayudar con algo más? 😊\n\n¿Cuál sucursal te queda más cómoda?\n• *Victoria* — wa.me/541137735246\n• *Nordelta* — wa.me/541157347692\n\nColocación *sin cargo* en ambas sucursales. 🔧');
-      todosBot.forEach(m => twiml.message(m));
+      res.sendStatus(200);
       guardarMensajes(todosBot.map(m => [fromNumber, 'bot', m])).catch(() => {});
       todosBot.forEach(m => sesionActual.mensajes?.push({ rol: 'bot', texto: m }));
-      return res.type('text/xml').send(twiml.toString());
+      enviarSecuencial(fromNumber, todosBot).catch(e => console.error('Error envío secuencial:', e.message));
+      return;
     }
 
     if (!matchMedida) {
@@ -710,9 +719,11 @@ app.post('/webhook', async (req, res) => {
         const todosBot = [...mensajes];
         if (!esRev && productos.length > 0)
           todosBot.push('¿Te puedo ayudar con algo más? 😊\n\n¿Cuál sucursal te queda más cómoda?\n• *Victoria* — wa.me/541137735246\n• *Nordelta* — wa.me/541157347692\n\nColocación *sin cargo* en ambas sucursales. 🔧');
-        todosBot.forEach(m => twiml.message(m));
+        res.sendStatus(200);
         guardarMensajes(todosBot.map(m => [fromNumber, 'bot', m])).catch(() => {});
         todosBot.forEach(m => sesionActual.mensajes?.push({ rol: 'bot', texto: m }));
+        enviarSecuencial(fromNumber, todosBot).catch(e => console.error('Error envío secuencial:', e.message));
+        return;
       } else {
         twiml.message(respuesta);
         registrarMensajeSesion(fromNumber, 'bot', respuesta);
@@ -734,9 +745,11 @@ app.post('/webhook', async (req, res) => {
       const todosBot = [...mensajes];
       if (!esRev && productos.length > 0)
         todosBot.push('¿Te puedo ayudar con algo más? 😊\n\n¿Cuál sucursal te queda más cómoda?\n• *Victoria* — wa.me/541137735246\n• *Nordelta* — wa.me/541157347692\n\nColocación *sin cargo* en ambas sucursales. 🔧');
-      todosBot.forEach(m => twiml.message(m));
+      res.sendStatus(200);
       guardarMensajes(todosBot.map(m => [fromNumber, 'bot', m])).catch(() => {});
       todosBot.forEach(m => sesionActual.mensajes?.push({ rol: 'bot', texto: m }));
+      enviarSecuencial(fromNumber, todosBot).catch(e => console.error('Error envío secuencial:', e.message));
+      return;
     } else {
       twiml.message(respuesta);
       registrarMensajeSesion(fromNumber, 'bot', respuesta);

@@ -2657,10 +2657,17 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
     const content = req.file.buffer.toString('latin1');
     const lines = content.split(/\r?\n/).filter(Boolean);
     const header = lines[0];
+    const headerParts = splitCSVLine(header);
+    // Detectar columnas de descripción e imagen dinámicamente
+    const COL_NOMBRE = headerParts.findIndex(h => /nombre/i.test(h.replace(/"/g,'')));
+    const COL_DESC   = headerParts.findIndex(h => /descripci/i.test(h.replace(/"/g,'')));
+    const COL_IMG    = headerParts.findIndex(h => /imagen/i.test(h.replace(/"/g,'')));
+
     const tnCodArts = new Set();   // códigos que ya existen en TN (col 0)
     const updatedLines = [header];
     let actualizados = 0, sinDatos = 0;
     const cambios = [];
+    const sinFoto = [], sinDesc = [];
 
     for (let i = 1; i < lines.length; i++) {
       const parts = splitCSVLine(lines[i]);
@@ -2669,6 +2676,13 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
       // También registrar el codAlt (col 16) para no duplicar por CAI
       const codAltTN = (parts[16] || '').replace(/^"|"$/g, '').trim();
       if (codAltTN) tnCodArts.add(codAltTN);
+
+      // Auditoría: detectar productos sin foto ni descripción
+      const nombre = COL_NOMBRE >= 0 ? (parts[COL_NOMBRE] || '').replace(/"/g,'').trim() : '';
+      const desc   = COL_DESC  >= 0 ? (parts[COL_DESC]   || '').replace(/"/g,'').trim() : '';
+      const img    = COL_IMG   >= 0 ? (parts[COL_IMG]    || '').replace(/"/g,'').trim() : '';
+      if (!img)  sinFoto.push({ codArt, nombre });
+      if (!desc) sinDesc.push({ codArt, nombre });
 
       const prod = sheetMap[codArt];
       if (!prod || prod.precio <= 0) { sinDatos++; updatedLines.push(lines[i]); continue; }
@@ -2718,7 +2732,7 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
       const marca = prod.marca.toUpperCase();
       return [
         codArt,
-        `"${prod.desc} (${codArt})"`,
+        `"${prod.desc}"`,
         `"${categoria}"`,
         'Ancho', dim ? dim.ancho : '',
         'Perfil', dim ? dim.perfil : '',
@@ -2748,7 +2762,7 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
       if (/^Z\./i.test(prod.desc)) continue;
       if (MARCAS_EXCLUIR_TN.includes(prod.marca.toUpperCase())) continue;
       nuevos.push({ codArt, ...prod, totalStock });
-      updatedLines.push(buildTNRow(codArt, prod, `[NUEVO] > ${prod.marca.toUpperCase()}`, totalStock, null));
+      updatedLines.push(buildTNRow(codArt, prod, prod.marca.toUpperCase(), totalStock, null));
     }
 
     // Pedidos especiales: Celsur (Michelin/BFGoodrich) con stock Express > 0 y no en TN
@@ -2764,7 +2778,7 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
       const codigoTN = prod.codAlt || codArt;
       if (tnCodArts.has(codigoTN) || tnCodArts.has(codArt)) continue;
       nuevosEspeciales.push({ codArt: codigoTN, ...prod });
-      updatedLines.push(buildTNRow(codigoTN, prod, `Pedido Especial > ${marca}`, 0, prod.stockExpr));
+      updatedLines.push(buildTNRow(codigoTN, prod, 'Pedido Especial', 0, prod.stockExpr));
     }
 
     const csvOutput = updatedLines.join('\n');
@@ -2817,9 +2831,11 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
 
     res.json({
       ok: true,
-      stats: { actualizados, sinDatos, nuevos: nuevos.length, especiales: nuevosEspeciales.length, total: lines.length - 1, cambios: cambios.length },
+      stats: { actualizados, sinDatos, nuevos: nuevos.length, especiales: nuevosEspeciales.length, total: lines.length - 1, cambios: cambios.length, sinFoto: sinFoto.length, sinDesc: sinDesc.length },
       nuevos: nuevos.map(p => ({ codArt: p.codArt, desc: p.desc, medida: p.medida, marca: p.marca, stock: p.totalStock, precio: p.precio })),
       especiales: nuevosEspeciales.map(p => ({ codArt: p.codArt, desc: p.desc, medida: p.medida, marca: p.marca, stockExpr: p.stockExpr, precio: p.precio })),
+      sinFoto,
+      sinDesc,
       csv: Buffer.from(csvOutput, 'latin1').toString('base64'),
       txt: Buffer.from(txtOutput, 'utf8').toString('base64'),
     });

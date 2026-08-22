@@ -159,8 +159,12 @@
       </div>
       <div id="tn-resultado" style="margin-top:16px;display:none">
         <div id="tn-stats" style="font-size:13px;color:#555;margin-bottom:12px"></div>
-        <button class="btn" style="background:#16a34a;color:white;margin-bottom:14px" id="btn-tn-download" onclick="descargarCSV()">⬇️ Descargar CSV actualizado</button>
-        <button class="btn" style="background:#2563eb;color:white;margin-bottom:14px;margin-left:8px;display:none" id="btn-tn-txt" onclick="descargarTxt()">📄 Ver resumen de cambios</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+          <button class="btn" style="background:#16a34a;color:white" id="btn-tn-download" onclick="descargarCSV()">⬇️ Descargar CSV actualizado</button>
+          <button class="btn" style="background:#2563eb;color:white;display:none" id="btn-tn-txt" onclick="descargarTxt()">📄 Ver resumen de cambios</button>
+          <button class="btn" id="btn-auditoria" onclick="toggleAuditoria()" style="background:#7c3aed;color:white;display:none">📷 Sin foto / descripción</button>
+          <button class="btn" onclick="toggleSugerencias()" style="background:#0891b2;color:white">💡 Sugerencias SEO</button>
+        </div>
         <div id="tn-nuevos" style="display:none">
           <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:#1a1a2e">🆕 Productos nuevos para crear en Tienda Nube:</div>
           <div style="overflow-x:auto">
@@ -189,6 +193,50 @@
               </tr></thead>
               <tbody id="tn-especiales-body"></tbody>
             </table>
+          </div>
+        </div>
+
+        <!-- Auditoría: sin foto / sin descripción -->
+        <div id="panel-auditoria" style="display:none;margin-top:16px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div>
+              <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:#7c3aed">📷 Sin foto (<span id="cnt-sin-foto">0</span>)</div>
+              <div style="overflow-x:auto;max-height:300px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:6px">
+                <table style="width:100%;border-collapse:collapse;font-size:11px">
+                  <thead><tr style="background:#f3e8ff;position:sticky;top:0">
+                    <th style="padding:5px 8px;text-align:left">CodArt</th>
+                    <th style="padding:5px 8px;text-align:left">Nombre</th>
+                  </tr></thead>
+                  <tbody id="body-sin-foto"></tbody>
+                </table>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:#7c3aed">📝 Sin descripción (<span id="cnt-sin-desc">0</span>)</div>
+              <div style="overflow-x:auto;max-height:300px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:6px">
+                <table style="width:100%;border-collapse:collapse;font-size:11px">
+                  <thead><tr style="background:#f3e8ff;position:sticky;top:0">
+                    <th style="padding:5px 8px;text-align:left">CodArt</th>
+                    <th style="padding:5px 8px;text-align:left">Nombre</th>
+                  </tr></thead>
+                  <tbody id="body-sin-desc"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sugerencias SEO -->
+        <div id="panel-sugerencias" style="display:none;margin-top:16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:14px">
+          <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:#0c4a6e">💡 Sugerencias para mejorar posicionamiento en Google Shopping</div>
+          <div style="font-size:12px;line-height:1.7;color:#1e3a5f">
+            <div style="margin-bottom:8px">✅ <b>Agregar fotos a todos los productos nuevos</b> — Google Shopping rechaza productos sin imagen. Mínimo una foto por producto, ideal fondo blanco.</div>
+            <div style="margin-bottom:8px">✅ <b>Agregar descripción a todos los productos</b> — Mejora el posicionamiento orgánico y califica mejor en Google Shopping. Las descripciones actuales que tiene Dunlop/Yokohama son un buen modelo.</div>
+            <div style="margin-bottom:8px">⚠️ <b>GTIN/EAN ausente</b> — Google Shopping prioriza productos con código EAN. Si los proveedores te dan el EAN, cargarlo en la columna "código de barras" del CSV sube la visibilidad significativamente.</div>
+            <div style="margin-bottom:8px">⚠️ <b>WhatsApp del botón flotante</b> — El número configurado parece ser de prueba. Verificá en Tienda Nube → Configuración → WhatsApp que sea +5491137735246.</div>
+            <div style="margin-bottom:8px">⚠️ <b>Categoría "Pedido Especial"</b> — Estos productos tienen stock 0. Google Shopping puede ocultarlos. Considerá marcarlos como "Disponible bajo pedido" si Tienda Nube lo permite.</div>
+            <div style="margin-bottom:8px">💡 <b>Título de la tienda en Google</b> — "Neumáticos Gallo SRL" es correcto pero podrías agregar la ciudad en el SEO title: "Neumáticos Gallo | Victoria y Nordelta" para búsquedas locales.</div>
+            <div>💡 <b>Blog activo</b> — Tenés la sección blog. Artículos como "Qué neumático elegir para Volkswagen Suran" o "Diferencia entre rodado 14 y 15" posicionan bien en búsquedas informativas y traen tráfico.</div>
           </div>
         </div>
       </div>
@@ -370,6 +418,20 @@
           document.getElementById('tn-nuevos').style.display = 'none';
         }
 
+        // Auditoría sin foto / sin descripción
+        if (d.sinFoto || d.sinDesc) {
+          const renderTabla = (tbody, items) => {
+            tbody.innerHTML = items.length === 0
+              ? '<tr><td colspan="2" style="padding:8px;color:#16a34a;font-size:12px">✅ Todos tienen</td></tr>'
+              : items.map(p => `<tr style="border-bottom:1px solid #f0e6ff"><td style="padding:4px 8px;font-family:monospace;font-size:11px">${p.codArt}</td><td style="padding:4px 8px;font-size:11px">${p.nombre || ''}</td></tr>`).join('');
+          };
+          document.getElementById('cnt-sin-foto').textContent = (d.sinFoto||[]).length;
+          document.getElementById('cnt-sin-desc').textContent = (d.sinDesc||[]).length;
+          renderTabla(document.getElementById('body-sin-foto'), d.sinFoto||[]);
+          renderTabla(document.getElementById('body-sin-desc'), d.sinDesc||[]);
+          document.getElementById('btn-auditoria').style.display = 'inline-block';
+        }
+
         if (d.especiales && d.especiales.length > 0) {
           document.getElementById('tn-especiales-body').innerHTML = d.especiales.map(p =>
             `<tr style="border-bottom:1px solid #fde68a;background:#fffbeb">
@@ -414,6 +476,19 @@
       const fecha = new Date().toISOString().slice(0,10);
       a.href = url; a.download = `cambios-tn-${fecha}.txt`;
       a.click(); URL.revokeObjectURL(url);
+    }
+
+    function toggleAuditoria() {
+      const p = document.getElementById('panel-auditoria');
+      const btn = document.getElementById('btn-auditoria');
+      const visible = p.style.display !== 'none';
+      p.style.display = visible ? 'none' : 'block';
+      btn.textContent = visible ? '📷 Sin foto / descripción' : '📷 Ocultar auditoría';
+    }
+
+    function toggleSugerencias() {
+      const p = document.getElementById('panel-sugerencias');
+      p.style.display = p.style.display !== 'none' ? 'none' : 'block';
     }
 
     async function subirAccesorios() {

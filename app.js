@@ -2722,7 +2722,9 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
       const stockVic = isExpress ? 0 : (prod.stockVic + prod.stockNor);
       const stockCD  = isExpress ? String(prod.stockExpr > 0 ? prod.stockExpr : 0) : 'ND';
 
-      const precioAnt = parseInt((parts[9] || '').replace(/[^0-9]/g, '')) || 0;
+      // TN guarda precios con decimales "445.054,00" → quitar puntos de miles, coma a punto, redondear
+      const parseTNPrecio = s => Math.round(parseFloat((s||'').replace(/"/g,'').trim().replace(/\./g,'').replace(',','.')) || 0);
+      const precioAnt = parseTNPrecio(parts[9]);
       const stockAnt  = parseInt(parts[15]) || 0;
       const precioCambio = precioAnt !== precio;
       const stockCambio  = stockAnt  !== stockVic;

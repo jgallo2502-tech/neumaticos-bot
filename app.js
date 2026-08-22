@@ -2704,6 +2704,37 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
 
     // Marcas que no se suben a Tienda Nube
     const MARCAS_EXCLUIR_TN = ['FATE', 'PIRELLI', 'BRIDGESTONE', 'GOODYEAR'];
+    // Marcas que se suben como Pedido Especial (solo Express/Celsur)
+    const MARCAS_PEDIDO_ESPECIAL = ['MICHELIN', 'BFGOODRICH'];
+
+    // Helper para construir fila CSV de producto nuevo
+    function buildTNRow(codArt, prod, categoria, stockPropio, stockExpr) {
+      const dim = parsearMedidaTN(prod.medida);
+      const precioPromo = prod.precio;
+      const precio = Math.round(precioPromo / 0.8);
+      const marca = prod.marca.toUpperCase();
+      return [
+        codArt,
+        `"${prod.desc} (${codArt})"`,
+        `"${categoria}"`,
+        'Ancho', dim ? dim.ancho : '',
+        'Perfil', dim ? dim.perfil : '',
+        'Rodado', dim ? dim.rodado : '',
+        formatTNNum(precio),
+        formatTNNum(precioPromo),
+        '', '', '', '',
+        String(stockPropio),
+        stockExpr !== null ? String(stockExpr) : 'ND',
+        prod.codAlt,
+        '',
+        'SI', 'NO',
+        '', '', '', '',
+        marca,
+        'SI',
+        '', '', '', '',
+        'Visible',
+      ].join(';');
+    }
 
     // Productos nuevos: en sheet con stock propio >= 4 y no en TN
     const nuevos = [];
@@ -2711,39 +2742,22 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
       if (tnCodArts.has(codArt) || prod.precio <= 0) continue;
       const totalStock = prod.stockVic + prod.stockNor;
       if (totalStock < 4) continue;
-      // Excluir Z. USADO, Z. OFERTA y marcas que no se suben
       if (/^Z\./i.test(prod.desc)) continue;
       if (MARCAS_EXCLUIR_TN.includes(prod.marca.toUpperCase())) continue;
       nuevos.push({ codArt, ...prod, totalStock });
+      updatedLines.push(buildTNRow(codArt, prod, `[NUEVO] > ${prod.marca.toUpperCase()}`, totalStock, null));
+    }
 
-      // Construir fila CSV para el nuevo producto
-      const dim = parsearMedidaTN(prod.medida);
-      const precioPromo = prod.precio;
-      const precio = Math.round(precioPromo / 0.8);
+    // Pedidos especiales: Celsur (Michelin/BFGoodrich) con stock Express > 0 y no en TN
+    const nuevosEspeciales = [];
+    for (const [codArt, prod] of Object.entries(sheetMap)) {
+      if (tnCodArts.has(codArt) || prod.precio <= 0) continue;
       const marca = prod.marca.toUpperCase();
-      const cat = `"[NUEVO] > ${marca}"`;
-      const row = [
-        codArt,
-        `"${prod.desc} (${codArt})"`,
-        cat,
-        'Ancho', dim ? dim.ancho : '',
-        'Perfil', dim ? dim.perfil : '',
-        'Rodado', dim ? dim.rodado : '',
-        formatTNNum(precio),
-        formatTNNum(precioPromo),
-        '', '', '', '',   // peso, alto, ancho, prof — vacíos
-        String(prod.stockVic + prod.stockNor),
-        'ND',
-        prod.codAlt,
-        '',               // código barras
-        'SI', 'NO',
-        '', '', '', '',   // desc, tags, seo title, seo desc
-        marca,
-        'SI',
-        '', '', '', '',   // mpn, sexo, edad, costo
-        'Visible',
-      ];
-      updatedLines.push(row.join(';'));
+      if (!MARCAS_PEDIDO_ESPECIAL.includes(marca)) continue;
+      if (prod.stockExpr <= 0) continue;
+      if (/^Z\./i.test(prod.desc)) continue;
+      nuevosEspeciales.push({ codArt, ...prod });
+      updatedLines.push(buildTNRow(codArt, prod, `Pedido Especial > ${marca}`, 0, prod.stockExpr));
     }
 
     const csvOutput = updatedLines.join('\n');
@@ -2753,7 +2767,7 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
     const lineasTxt = [
       `CAMBIOS TIENDA NUBE — ${fecha}`,
       `${'='.repeat(60)}`,
-      `Total productos: ${lines.length - 1} | Actualizados: ${actualizados} | Sin datos: ${sinDatos} | Nuevos: ${nuevos.length}`,
+      `Total productos: ${lines.length - 1} | Actualizados: ${actualizados} | Sin datos: ${sinDatos} | Nuevos: ${nuevos.length} | Pedidos especiales: ${nuevosEspeciales.length}`,
       '',
     ];
     const soloPrecio   = cambios.filter(c => c.precioCambio && !c.stockCambio);
@@ -2796,8 +2810,9 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
 
     res.json({
       ok: true,
-      stats: { actualizados, sinDatos, nuevos: nuevos.length, total: lines.length - 1, cambios: cambios.length },
+      stats: { actualizados, sinDatos, nuevos: nuevos.length, especiales: nuevosEspeciales.length, total: lines.length - 1, cambios: cambios.length },
       nuevos: nuevos.map(p => ({ codArt: p.codArt, desc: p.desc, medida: p.medida, marca: p.marca, stock: p.totalStock, precio: p.precio })),
+      especiales: nuevosEspeciales.map(p => ({ codArt: p.codArt, desc: p.desc, medida: p.medida, marca: p.marca, stockExpr: p.stockExpr, precio: p.precio })),
       csv: Buffer.from(csvOutput, 'latin1').toString('base64'),
       txt: Buffer.from(txtOutput, 'utf8').toString('base64'),
     });

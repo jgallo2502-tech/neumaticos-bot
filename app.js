@@ -2740,8 +2740,12 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
       const stockVic = isExpress ? 0 : (prod.stockVic + prod.stockNor);
       const stockCD  = isExpress ? String(prod.stockExpr > 0 ? prod.stockExpr : 0) : 'ND';
 
-      // TN guarda precios con decimales "445.054,00" → quitar puntos de miles, coma a punto, redondear
-      const parseTNPrecio = s => Math.round(parseFloat((s||'').replace(/"/g,'').trim().replace(/\./g,'').replace(',','.')) || 0);
+      // Parser robusto: funciona con "445.054,00" (TN), "445,054.00" (en-US), "445054,00"
+      // Saca todos los separadores y descarta los 2 dígitos de centavos
+      const parseTNPrecio = s => {
+        const digits = (s||'').replace(/"/g,'').trim().replace(/[.,]/g,'');
+        return digits.length > 2 ? parseInt(digits.slice(0, -2)) || 0 : 0;
+      };
       const precioAnt = parseTNPrecio(parts[9]);
       const stockAnt  = parseInt(parts[15]) || 0;
       const precioCambio = precioAnt !== precio;

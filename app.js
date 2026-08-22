@@ -2657,7 +2657,7 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
     const content = req.file.buffer.toString('latin1');
     const lines = content.split(/\r?\n/).filter(Boolean);
     const header = lines[0];
-    const tnCodArts = new Set();
+    const tnCodArts = new Set();   // códigos que ya existen en TN (col 0)
     const updatedLines = [header];
     let actualizados = 0, sinDatos = 0;
     const cambios = [];
@@ -2666,6 +2666,9 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
       const parts = splitCSVLine(lines[i]);
       const codArt = parts[0].replace(/^"|"$/g, '').trim();
       tnCodArts.add(codArt);
+      // También registrar el codAlt (col 16) para no duplicar por CAI
+      const codAltTN = (parts[16] || '').replace(/^"|"$/g, '').trim();
+      if (codAltTN) tnCodArts.add(codAltTN);
 
       const prod = sheetMap[codArt];
       if (!prod || prod.precio <= 0) { sinDatos++; updatedLines.push(lines[i]); continue; }
@@ -2749,15 +2752,19 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
     }
 
     // Pedidos especiales: Celsur (Michelin/BFGoodrich) con stock Express > 0 y no en TN
+    // Usa codAlt (CAI de Celsur) como código de producto, igual que los productos Express existentes
     const nuevosEspeciales = [];
     for (const [codArt, prod] of Object.entries(sheetMap)) {
-      if (tnCodArts.has(codArt) || prod.precio <= 0) continue;
+      if (prod.precio <= 0) continue;
       const marca = prod.marca.toUpperCase();
       if (!MARCAS_PEDIDO_ESPECIAL.includes(marca)) continue;
       if (prod.stockExpr <= 0) continue;
       if (/^Z\./i.test(prod.desc)) continue;
-      nuevosEspeciales.push({ codArt, ...prod });
-      updatedLines.push(buildTNRow(codArt, prod, `Pedido Especial > ${marca}`, 0, prod.stockExpr));
+      // El código en TN para Michelin/BFG es el CAI (codAlt), no el codArt interno
+      const codigoTN = prod.codAlt || codArt;
+      if (tnCodArts.has(codigoTN) || tnCodArts.has(codArt)) continue;
+      nuevosEspeciales.push({ codArt: codigoTN, ...prod });
+      updatedLines.push(buildTNRow(codigoTN, prod, `Pedido Especial > ${marca}`, 0, prod.stockExpr));
     }
 
     const csvOutput = updatedLines.join('\n');

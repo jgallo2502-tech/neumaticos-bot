@@ -2690,6 +2690,7 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
     const COL_DESC    = headerParts.findIndex(h => /descripci/i.test(h.replace(/"/g,'')));
     const COL_IMG     = headerParts.findIndex(h => /imagen/i.test(h.replace(/"/g,'')));
     const COL_VISIBLE = headerParts.findIndex(h => /^"?visible"?$/i.test(h.trim()));
+    const COL_CAT     = headerParts.findIndex(h => /categor/i.test(h.replace(/"/g,'')));
 
     const tnCodArts = new Set();   // códigos que ya existen en TN (col 0)
     const updatedLines = [header];
@@ -2721,6 +2722,12 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
       // Buscar primero por codArt, luego por CAI (para productos Express Michelin/BFG)
       const prod = sheetMap[codArt] || sheetMapByCAI[codArt];
       if (!prod || prod.precio <= 0) {
+        // Si es Pedido Especial y no está en el sheet, dejarlo sin tocar
+        const catVal = COL_CAT >= 0 ? (parts[COL_CAT] || '').replace(/"/g, '').trim() : '';
+        if (/pedido especial/i.test(catVal)) {
+          updatedLines.push(parts.join(';'));
+          continue;
+        }
         // Discontinuado: poner stock 0 e inactivo
         sinDatos++;
         const nombreDisc = COL_NOMBRE >= 0 ? (parts[COL_NOMBRE]||'').replace(/"/g,'').trim() : codArt;

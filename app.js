@@ -2607,8 +2607,10 @@ function parsearMedidaTN(medida) {
 }
 
 function formatTNNum(n) {
-  // 129000 → "129,000.00"
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // TN usa formato argentino: 445054 → "445.054,00" (punto=miles, coma=decimal)
+  const rounded = Math.round(n);
+  const str = rounded.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return str + ',00';
 }
 
 // Abreviaciones técnicas de neumáticos que siempre van en mayúsculas

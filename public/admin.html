@@ -187,6 +187,27 @@
       <div class="log-box" id="log-box" style="margin-top:14px;display:none"></div>
     </div>
 
+    <!-- Accesorios -->
+    <div class="card">
+      <div class="card-title">🔋 Accesorios — Baterías, Filtros, Pastillas</div>
+      <p style="font-size:13px;color:#555;margin-bottom:14px">Subí los archivos del inventario Gallo para actualizar las hojas "Baterias", "Filtros" y "Frasle". Si no subís alguno, se descarga desde Drive automáticamente.</p>
+      <div class="fuentes">
+        <div class="fuente-row">
+          <div>
+            <div class="fuente-label">Inventario Gallo (accesorios) <span class="badge badge-opt">Opcional</span></div>
+            <div class="fuente-desc">El mismo archivo de inventario Gallo — separa automáticamente filtros (05), pastillas (06) y baterías (21)</div>
+          </div>
+          <input type="file" id="file-acc" accept=".xlsx,.xls">
+          <div class="fuente-status" id="st-acc"></div>
+        </div>
+      </div>
+      <div class="upload-actions">
+        <button class="btn btn-primary" id="btn-upload-acc" onclick="subirAccesorios()">⬆️ Subir inventario</button>
+      </div>
+      <button class="btn btn-sync" id="btn-sync-acc" onclick="correrSyncAccesorios()" style="margin-top:8px">🔄 Sincronizar accesorios</button>
+      <div class="log-box" id="log-box-acc" style="margin-top:14px;display:none"></div>
+    </div>
+
   </div>
 
   <script>
@@ -359,6 +380,70 @@
       const fecha = new Date().toISOString().slice(0,10);
       a.href = url; a.download = `cambios-tn-${fecha}.txt`;
       a.click(); URL.revokeObjectURL(url);
+    }
+
+    async function subirAccesorios() {
+      const file = document.getElementById('file-acc').files[0];
+      if (!file) { alert('Seleccioná el archivo de inventario Gallo'); return; }
+      const btn = document.getElementById('btn-upload-acc');
+      const stEl = document.getElementById('st-acc');
+      btn.disabled = true;
+      btn.textContent = '⏳ Subiendo...';
+      stEl.textContent = '⏳';
+      try {
+        const fd = new FormData();
+        fd.append('archivo', file);
+        // Sube como tipo 'gallo' — mismo archivo que el inventario de neumáticos
+        const r = await fetch('/app/admin/upload', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token },
+          body: fd
+        });
+        const d = await r.json();
+        if (r.ok) { stEl.textContent = '✅'; stEl.style.color = '#16a34a'; }
+        else { stEl.textContent = '❌ ' + (d.error || 'Error'); stEl.style.color = '#dc2626'; }
+      } catch(e) {
+        stEl.textContent = '❌ ' + e.message;
+        stEl.style.color = '#dc2626';
+      }
+      btn.disabled = false;
+      btn.textContent = '⬆️ Subir inventario';
+    }
+
+    function correrSyncAccesorios() {
+      const btn = document.getElementById('btn-sync-acc');
+      const box = document.getElementById('log-box-acc');
+      btn.disabled = true;
+      btn.textContent = '⏳ Sincronizando...';
+      box.style.display = 'block';
+      box.innerHTML = '';
+
+      const es = new EventSource('/app/admin/sync-accesorios?token=' + encodeURIComponent(token));
+
+      es.onmessage = (e) => {
+        const d = JSON.parse(e.data);
+        const line = document.createElement('div');
+        if (d.tipo === 'err') line.className = 'err';
+        if (d.tipo === 'fin') line.className = d.ok ? 'fin-ok' : 'fin-err';
+        line.textContent = d.texto;
+        box.appendChild(line);
+        box.scrollTop = box.scrollHeight;
+        if (d.tipo === 'fin') {
+          es.close();
+          btn.disabled = false;
+          btn.textContent = '🔄 Sincronizar accesorios';
+        }
+      };
+
+      es.onerror = () => {
+        const line = document.createElement('div');
+        line.className = 'err';
+        line.textContent = '❌ Error de conexión con el servidor';
+        box.appendChild(line);
+        es.close();
+        btn.disabled = false;
+        btn.textContent = '🔄 Sincronizar accesorios';
+      };
     }
 
     function correrSync() {

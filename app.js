@@ -2368,7 +2368,7 @@ const DRIVE_FOLDER_ID = '11Ham__W-bVOJtaMsZQHRap-orDV6cpek';
 
 // Keywords para encontrar cada tipo de fuente en Drive (mismo criterio que sincronizar-fuentes.js)
 const DRIVE_KEYWORDS = {
-  gallo:    { include: [['inv', 'gallo'], ['inventario'], ['gallo']], exclude: [['michelin'], ['lista'], ['precio']] },
+  gallo:    { include: [['inv', 'gallo'], ['inventario'], ['gallo']], exclude: [['michelin'], ['lista'], ['precio'], ['baterias'], ['filtros'], ['frasle'], ['pastillas']] },
   celsur:   { include: [['celsur'], ['stock_disponible'], ['stock disponible']], exclude: [] },
   hankook:  { include: [['hankook']], exclude: [] },
   yokohama: { include: [['yokohama']], exclude: [] },
@@ -2376,11 +2376,16 @@ const DRIVE_KEYWORDS = {
   michelin:    { include: [['michelin', 'con descripcion'], ['michelin', 'bfgoodrich']], exclude: [] },
   sjysprecios: { include: [['sjys', 'precio'], ['sjys', 'lista'], ['giti', 'pmg'], ['gtradial', 'pmg'], ['lista', 'giti'], ['lista', 'gtradial']], exclude: [] },
   sjysstock:   { include: [['sjys', 'stock'], ['giti', 'stock'], ['gtradial', 'stock'], ['stock_cotiz'], ['cotiz_arg']], exclude: [['precio'], ['lista'], ['pmg']] },
+  baterias:    { include: [['baterias'], ['bateria']], exclude: [] },
+  filtros:     { include: [['filtros'], ['filtro']], exclude: [] },
+  frasle:      { include: [['frasle'], ['pastillas'], ['freno']], exclude: [] },
 };
 
 function detectarTipoFuente(nombre) {
   const n = nombre.toLowerCase();
-  if (n.includes('gallo') || n.includes('inv ') || n.startsWith('inv')) return 'gallo';
+  if (n.includes('baterias') || n.includes('bateria')) return 'baterias';
+  if (n.includes('filtros') || n.includes('filtro')) return 'filtros';
+  if (n.includes('frasle') || n.includes('pastillas') || n.includes('freno')) return 'frasle';
   if (n.includes('celsur') || n.includes('stock_disponible') || n.includes('stock disponible')) return 'celsur';
   if (n.includes('hankook')) return 'hankook';
   if (n.includes('yokohama')) return 'yokohama';
@@ -2388,6 +2393,7 @@ function detectarTipoFuente(nombre) {
   if (n.includes('michelin') || n.includes('bfgoodrich')) return 'michelin';
   if ((n.includes('giti') || n.includes('gtradial')) && (n.includes('pmg') || n.includes('precio') || n.includes('lista'))) return 'sjysprecios';
   if (n.includes('stock_cotiz') || n.includes('cotiz_arg') || ((n.includes('giti') || n.includes('gtradial')) && n.includes('stock'))) return 'sjysstock';
+  if (n.includes('gallo') || n.includes('inv ') || n.startsWith('inv')) return 'gallo';
   return null;
 }
 
@@ -2503,6 +2509,91 @@ router.get('/admin/sync', (req, res, next) => {
     send({ tipo: 'fin', texto: code === 0 ? '✅ Sincronización completa' : `❌ Terminó con código ${code}`, ok: code === 0 });
     res.end();
   });
+});
+
+// ─── Upload accesorios con tipo explícito ────────────────────────────────────
+router.post('/admin/upload-accesorio', adminMiddleware, upload.single('archivo'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ ok: false, error: 'Sin archivo' });
+  const tipo = req.body.tipo;
+  if (!['baterias', 'filtros', 'frasle'].includes(tipo))
+    return res.status(400).json({ ok: false, error: 'Tipo inválido: ' + tipo });
+  try {
+    const { Readable } = require('stream');
+    const { drive, archivos } = await listarDrive();
+    const archivo = encontrarEnDrive(archivos, DRIVE_KEYWORDS[tipo]);
+    const mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    if (archivo) {
+      await drive.files.update({ fileId: archivo.id, media: { mimeType, body: Readable.from(req.file.buffer) } });
+      res.json({ ok: true, accion: 'actualizado en Drive', nombre: archivo.name, tipo });
+    } else {
+      const created = await drive.files.create({
+        requestBody: { name: req.file.originalname, parents: [DRIVE_FOLDER_ID] },
+        media: { mimeType, body: Readable.from(req.file.buffer) },
+        fields: 'id, name',
+      });
+      res.json({ ok: true, accion: 'creado en Drive', nombre: created.data.name, tipo });
+    }
+  } catch(e) {
+    console.error('Upload accesorio Drive error:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ─── Sync accesorios: baterías, filtros, pastillas ───────────────────────────
+router.get('/admin/sync-accesorios', (req, res, next) => {
+  const token = req.query.token || (req.headers.authorization || '').replace('Bearer ', '');
+  try {
+    const user = jwt.verify(token, JWT_SECRET);
+    if (user.rol !== 'admin') return res.status(403).end();
+    req.user = user; next();
+  } catch { res.status(401).end(); }
+}, async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const send = (msg) => res.write(`data: ${JSON.stringify(msg)}\n\n`);
+  const os = require('os');
+  const fs = require('fs');
+
+  try {
+    const { drive, archivos } = await listarDrive();
+    // El inventario de accesorios es el mismo archivo Gallo general
+    const f = encontrarEnDrive(archivos, DRIVE_KEYWORDS['gallo']);
+    if (!f) {
+      send({ tipo: 'fin', texto: '⚠️  No se encontró el inventario Gallo en Drive', ok: false });
+      return res.end();
+    }
+
+    send({ tipo: 'log', texto: `📥 Descargando inventario Gallo (${f.name})...` });
+    const ext = f.name.endsWith('.xls') ? '.xls' : '.xlsx';
+    const tmpPath = path.join(os.tmpdir(), `sync_accesorios${ext}`);
+
+    const dest = fs.createWriteStream(tmpPath);
+    const dlRes = await drive.files.get({ fileId: f.id, alt: 'media' }, { responseType: 'stream' });
+    await new Promise((resolve, reject) => {
+      dlRes.data.pipe(dest);
+      dlRes.data.on('end', resolve);
+      dlRes.data.on('error', reject);
+    });
+
+    send({ tipo: 'log', texto: '⚙️  Sincronizando Filtros, Pastillas y Baterías...' });
+
+    await new Promise(resolve => {
+      const scriptPath = path.join(__dirname, 'scripts', 'sincronizar-accesorios.js');
+      const proc = spawn(process.execPath, [scriptPath, tmpPath], { env: process.env });
+      proc.stdout.on('data', d => d.toString().split('\n').filter(Boolean).forEach(l => send({ tipo: 'log', texto: l })));
+      proc.stderr.on('data', d => d.toString().split('\n').filter(Boolean).forEach(l => send({ tipo: 'err', texto: l })));
+      proc.on('close', code => { try { fs.unlinkSync(tmpPath); } catch {} resolve(code); });
+    });
+
+    send({ tipo: 'fin', texto: '✅ Accesorios sincronizados (Filtros, Pastillas, Baterías)', ok: true });
+  } catch(e) {
+    send({ tipo: 'err', texto: '❌ Error: ' + e.message });
+    send({ tipo: 'fin', texto: '❌ Falló la sincronización', ok: false });
+  }
+  res.end();
 });
 
 // ─── Tienda Nube: actualizar precios y stock desde CSV ───────────────────────

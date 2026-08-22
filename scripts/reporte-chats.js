@@ -167,18 +167,23 @@ async function leerDesdeTwilio(fechaDD_MM_YYYY) {
 async function leerRevendedores() {
   try {
     const sheets = getSheetsClient();
-    const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'Revendedores!A:A' });
+    const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'Revendedores!A:C' });
     const rows = res.data.values || [];
-    return new Set(rows.slice(1).flat().map(n => n.toString().replace(/\D/g, '')).filter(n => n.length > 5));
+    const mapa = new Map();
+    for (const r of rows.slice(1)) {
+      const num = (r[0] || '').toString().replace(/\D/g, '');
+      if (num.length > 5) mapa.set(num, (r[2] || '').trim());
+    }
+    return mapa;
   } catch (e) {
     console.warn('⚠️  No se pudo leer hoja Revendedores:', e.message);
-    return new Set();
+    return new Map();
   }
 }
 
 // ── Generar HTML del reporte ──────────────────────────────────────────────────
 function generarHTML(mensajes, targetFecha, revendedores) {
-  const rev = revendedores || new Set();
+  const rev = revendedores || new Map();
   const del_dia = targetFecha ? mensajes.filter(m => m.fecha === targetFecha) : mensajes;
 
   const grupos = {};
@@ -198,8 +203,9 @@ function generarHTML(mensajes, targetFecha, revendedores) {
   function bloqueConversacion(num) {
     const msgs = grupos[num];
     const esRev = rev.has(num);
+    const nombre = esRev ? rev.get(num) : '';
     const headerColor = esRev ? '#e37400' : '#1a73e8';
-    const tag = esRev ? ' 🏪 Revendedor' : '';
+    const label = esRev ? `${nombre ? nombre + ' — ' : ''}📱 +${num} 🏪 Revendedor` : `📱 +${num}`;
     const filas = msgs.map(({ hora, rol, texto }) => `
       <tr>
         <td style="width:55px;color:#888;font-size:11px;vertical-align:top;padding:4px 8px 4px 0;white-space:nowrap">${hora}</td>
@@ -209,7 +215,7 @@ function generarHTML(mensajes, targetFecha, revendedores) {
     return `
     <div style="margin-bottom:20px;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.12);overflow:hidden">
       <div style="background:${headerColor};color:#fff;padding:9px 16px;font-size:13px;font-weight:600">
-        📱 +${num}${tag} &nbsp;·&nbsp; ${msgs.length} mensajes
+        ${label} &nbsp;·&nbsp; ${msgs.length} mensajes
       </div>
       <div style="padding:10px 16px">
         <table style="border-collapse:collapse;width:100%">${filas}</table>
@@ -255,8 +261,84 @@ function generarHTML(mensajes, targetFecha, revendedores) {
   };
 }
 
+// ── Generar HTML de recuperación de ventas (solo particulares) ───────────────
+const MSG_RECUPERACION = encodeURIComponent('Hola, soy Juan de Neumáticos Gallo, vi que estuviste consultando y te atendió el bot, queria saber si tenias alguna duda, que quizas el bot no te asesoro, y de paso que te parecio la atención del bot? Muchas Graciasss');
+
+function generarHTMLRecuperacion(mensajes, targetFecha, revendedores) {
+  const rev = revendedores || new Map();
+  const del_dia = targetFecha ? mensajes.filter(m => m.fecha === targetFecha) : mensajes;
+
+  const grupos = {};
+  for (const m of del_dia) {
+    if (!m.numero || rev.has(m.numero)) continue;
+    if (!grupos[m.numero]) grupos[m.numero] = [];
+    grupos[m.numero].push(m);
+  }
+
+  const numeros = Object.keys(grupos).sort();
+  if (numeros.length === 0) return null;
+
+  let fechaLabel = targetFecha || 'Todos los mensajes';
+  let fechaDisplay = fechaLabel;
+  if (targetFecha) {
+    const [d, mo, a] = targetFecha.split('/');
+    try { fechaDisplay = formatFecha(new Date(Number(a), Number(mo)-1, Number(d))); } catch(e) {}
+  }
+
+  function bloqueParticular(num) {
+    const msgs = grupos[num];
+    const waNum = num.startsWith('549') ? num : `549${num.replace(/^54/, '')}`;
+    const waLink = `https://wa.me/${waNum}?text=${MSG_RECUPERACION}`;
+    const filas = msgs.map(({ hora, rol, texto }) => {
+      const bg = rol === 'bot' ? '#f8f9fa' : '#fff';
+      const color = rol === 'bot' ? '#34a853' : '#1a73e8';
+      const label = rol === 'bot' ? '🤖 Bot' : '👤 Cliente';
+      return `
+      <tr style="background:${bg}">
+        <td style="width:50px;color:#888;font-size:11px;vertical-align:top;padding:5px 8px;white-space:nowrap">${hora}</td>
+        <td style="width:70px;color:${color};font-size:11px;font-weight:700;vertical-align:top;padding:5px 8px;white-space:nowrap">${label}</td>
+        <td style="font-size:13px;padding:5px 8px;color:#202124;white-space:pre-wrap;word-break:break-word">${(texto || '').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</td>
+      </tr>`;
+    }).join('');
+    return `
+    <div style="margin-bottom:24px;background:#fff;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.14);overflow:hidden">
+      <div style="background:#1a73e8;color:#fff;padding:10px 16px;font-size:13px;font-weight:600;display:flex;justify-content:space-between;align-items:center">
+        <span>📱 +${num} &nbsp;·&nbsp; ${msgs.length} mensajes</span>
+      </div>
+      <div style="padding:0 0 12px">
+        <table style="border-collapse:collapse;width:100%">${filas}</table>
+      </div>
+      <div style="padding:0 16px 14px">
+        <a href="${waLink}" target="_blank"
+           style="display:inline-block;background:#25d366;color:#fff;text-decoration:none;padding:9px 20px;border-radius:6px;font-size:13px;font-weight:700">
+          💬 Enviar WhatsApp
+        </a>
+      </div>
+    </div>`;
+  }
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f1f3f4;font-family:Arial,sans-serif">
+<div style="max-width:720px;margin:24px auto;padding:0 16px">
+  <div style="background:#34a853;color:#fff;border-radius:8px 8px 0 0;padding:20px 24px">
+    <div style="font-size:20px;font-weight:700">🔁 Recuperación de Ventas — Neumáticos Gallo</div>
+    <div style="font-size:14px;opacity:.85;margin-top:4px">${fechaDisplay} &nbsp;·&nbsp; ${numeros.length} clientes particulares</div>
+  </div>
+  <div style="background:#fff;padding:14px 24px 10px;margin-bottom:8px;font-size:13px;color:#444">
+    Estos clientes consultaron ayer. Hacé click en <strong>Enviar WhatsApp</strong> para hacer el seguimiento.
+  </div>
+  <div style="padding-top:8px">
+    ${numeros.map(bloqueParticular).join('')}
+  </div>
+  <div style="text-align:center;padding:16px;font-size:11px;color:#999">Generado automáticamente por el bot de Neumáticos Gallo</div>
+</div></body></html>`;
+
+  return { html, numeros: numeros.length, fechaLabel };
+}
+
 // ── Enviar email via Gmail API OAuth2 (evita bloqueo SMTP de Railway) ────────
-async function enviarEmail(html, { numeros, numerosRev, numerosParticular, totalMensajes, fechaLabel }) {
+async function enviarEmail(html, { numeros, numerosRev, numerosParticular, totalMensajes, fechaLabel }, asunto = null) {
   const oauth2Client = new google.auth.OAuth2(
     process.env.GMAIL_CLIENT_ID,
     process.env.GMAIL_CLIENT_SECRET,
@@ -266,7 +348,7 @@ async function enviarEmail(html, { numeros, numerosRev, numerosParticular, total
 
   const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
   const from = EMAIL_FROM || 'j.gallo2502@gmail.com';
-  const subject = `📊 Chats ${fechaLabel} — ${numeros} convs (🏪${numerosRev} rev · 👤${numerosParticular} part)`;
+  const subject = asunto || `📊 Chats ${fechaLabel} — ${numeros} convs (🏪${numerosRev} rev · 👤${numerosParticular} part)`;
 
   const boundary = 'boundary_gallo_' + Date.now();
   const raw = [
@@ -286,7 +368,7 @@ async function enviarEmail(html, { numeros, numerosRev, numerosParticular, total
 
   const encoded = Buffer.from(raw).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   await gmail.users.messages.send({ userId: 'me', requestBody: { raw: encoded } });
-  console.log(`✅ Reporte enviado a ${EMAIL_TO} (${numeros} conversaciones: ${numerosRev} revendedores, ${numerosParticular} particulares)`);
+  console.log(`✅ Email enviado a ${EMAIL_TO}: ${subject.slice(0, 60)}`);
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -331,6 +413,15 @@ async function main() {
 
   const { html, ...stats } = generarHTML(mensajes, targetFecha, revendedores);
   await enviarEmail(html, stats);
+
+  const recuperacion = generarHTMLRecuperacion(mensajes, targetFecha, revendedores);
+  if (recuperacion) {
+    const { html: htmlRec, numeros: nRec, fechaLabel: fl } = recuperacion;
+    await enviarEmail(htmlRec,
+      { numeros: nRec, numerosRev: 0, numerosParticular: nRec, totalMensajes: 0, fechaLabel: fl },
+      `🔁 Recuperación de ventas ${fl} — ${nRec} clientes`
+    );
+  }
 }
 
 main().catch(e => { console.error(e); process.exit(1); });

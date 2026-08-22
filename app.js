@@ -2611,6 +2611,27 @@ function formatTNNum(n) {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// Abreviaciones técnicas de neumáticos que siempre van en mayúsculas
+const ABREV_NEUMA = new Set([
+  'XL','TL','SL','RWL','RBL','RFT','RF','AO','MO','VOL','SSR','GRNX','ST','CAI',
+  'HP','AT','SUV','CV','SP','XT','ES','AT70','HP010','HP300','SU4','SH9I',
+  'F22','F50','VP1','ES32','G015','G058','AE61','LX2','R1','FM800','EC300+',
+  'N0','N1','N2','MO1','RO1','RO2','4X4','LTX','PMG',
+]);
+
+function toTitleCaseNeuma(str) {
+  if (!str) return str;
+  return str.split(' ').map(word => {
+    if (!word) return word;
+    if (/^\d+\/\d+[A-Z]\d+/i.test(word)) return word;          // medida 205/55R16
+    if (/^\d+[A-Z]{1,2}$/i.test(word)) return word.toUpperCase(); // índice 91V, 112H
+    if (/^\([A-Z0-9]+\)$/i.test(word)) return word.toUpperCase(); // (J), (N0)
+    if (word.toUpperCase() === 'BFGOODRICH') return 'BFGoodrich';
+    if (ABREV_NEUMA.has(word.toUpperCase())) return word.toUpperCase();
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  }).join(' ');
+}
+
 function splitCSVLine(line) {
   // Split by ; respetando campos entre comillas
   const parts = [];
@@ -2698,6 +2719,7 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
       const precioCambio = precioAnt !== precio;
       const stockCambio  = stockAnt  !== stockVic;
 
+      if (COL_NOMBRE >= 0) parts[COL_NOMBRE] = `"${toTitleCaseNeuma((parts[COL_NOMBRE] || '').replace(/"/g,'').trim())}"`;
       parts[9]  = formatTNNum(precio);
       parts[10] = formatTNNum(precioPromo);
       parts[15] = String(stockVic);
@@ -2732,7 +2754,7 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
       const marca = prod.marca.toUpperCase();
       return [
         codArt,
-        `"${prod.desc}"`,
+        `"${toTitleCaseNeuma(prod.desc)}"`,
         `"${categoria}"`,
         'Ancho', dim ? dim.ancho : '',
         'Perfil', dim ? dim.perfil : '',

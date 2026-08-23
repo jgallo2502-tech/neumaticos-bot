@@ -380,6 +380,10 @@ async function obtenerPrecios(medida, marca, incluirRunFlat = false, minStock = 
     const { orden: oA } = categoriaYEmoji(a.marca);
     const { orden: oB } = categoriaYEmoji(b.marca);
     if (oA !== oB) return oA - oB;
+    // Dentro de cada categoría: stock propio primero, luego Express
+    const aPropio = (a.stockVic + a.stockNor) > 0 ? 0 : 1;
+    const bPropio = (b.stockVic + b.stockNor) > 0 ? 0 : 1;
+    if (aPropio !== bPropio) return aPropio - bPropio;
     const mA = ORDEN_MARCA[a.marca.toLowerCase()] || 99;
     const mB = ORDEN_MARCA[b.marca.toLowerCase()] || 99;
     if (mA !== mB) return mA - mB;

@@ -711,9 +711,17 @@
           else if (MARCAS_ECO_IA.includes(m)) grupos.Economicas.push(p);
           else grupos.Otras.push(p);
         }
-        // Ordenar y limitar como el bot
+        // Ordenar: primero stock propio, luego Express; dentro de cada grupo por marca y stock
         for (const key of Object.keys(grupos)) {
-          grupos[key].sort((a,b) => (ORDEN_MARCA_IA[a.marca.toLowerCase()]||99) - (ORDEN_MARCA_IA[b.marca.toLowerCase()]||99) || b.stockTotal - a.stockTotal);
+          grupos[key].sort((a,b) => {
+            const aPropio = (a.stockVic + a.stockNor) > 0 ? 0 : 1;
+            const bPropio = (b.stockVic + b.stockNor) > 0 ? 0 : 1;
+            if (aPropio !== bPropio) return aPropio - bPropio;
+            const mA = ORDEN_MARCA_IA[a.marca.toLowerCase()] || 99;
+            const mB = ORDEN_MARCA_IA[b.marca.toLowerCase()] || 99;
+            if (mA !== mB) return mA - mB;
+            return b.stockTotal - a.stockTotal;
+          });
           grupos[key] = grupos[key].slice(0, LIMITES_IA[key]);
         }
 

@@ -216,7 +216,10 @@
           </label>
         </div>
       </div>
-      <button class="btn-buscar" onclick="buscar()">🔍 Buscar precios</button>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn-buscar" style="flex:1" onclick="buscar()">🔍 Buscar precios</button>
+        <button class="btn-buscar" style="flex:1;background:#16a34a" onclick="buscarYResponderIA()">🤖 Respuesta IA</button>
+      </div>
     </div>
 
     <!-- Filtro Express -->
@@ -525,6 +528,11 @@
     function logout() {
       localStorage.clear();
       window.location.href = '/app/login.html';
+    }
+
+    async function buscarYResponderIA() {
+      await buscar();
+      generarRespuestaIA();
     }
 
     async function buscar() {

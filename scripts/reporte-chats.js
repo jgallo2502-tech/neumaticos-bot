@@ -388,10 +388,11 @@ async function main() {
     else if (arg.endsWith('.csv')) csvPath = arg;
   }
 
-  // Si no hay fecha, usar ayer
+  // Si no hay fecha: recupero usa hoy, reporte diario usa ayer
   if (!targetFecha) {
-    const ayer = new Date(Date.now() - 3*60*60*1000 - 24*60*60*1000); // ayer en ART
-    targetFecha = `${String(ayer.getUTCDate()).padStart(2,'0')}/${String(ayer.getUTCMonth()+1).padStart(2,'0')}/${ayer.getUTCFullYear()}`;
+    const offset = soloRecupero ? 0 : 24*60*60*1000;
+    const d = new Date(Date.now() - 3*60*60*1000 - offset); // ART
+    targetFecha = `${String(d.getUTCDate()).padStart(2,'0')}/${String(d.getUTCMonth()+1).padStart(2,'0')}/${d.getUTCFullYear()}`;
   }
 
   console.log(`📊 Generando reporte${soloRecupero ? ' de recupero' : ''} para ${targetFecha}...`);

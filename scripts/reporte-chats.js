@@ -380,8 +380,10 @@ async function main() {
   //   node reporte-chats.js 19/08/2026 archivo.csv   ← fecha específica del CSV
   const args = process.argv.slice(2);
   let csvPath = null, targetFecha = null;
+  const soloRecupero = args.includes('--recupero-only');
 
   for (const arg of args) {
+    if (arg === '--recupero-only') continue;
     if (/^\d{2}\/\d{2}\/\d{4}$/.test(arg)) targetFecha = arg;
     else if (arg.endsWith('.csv')) csvPath = arg;
   }
@@ -392,7 +394,7 @@ async function main() {
     targetFecha = `${String(ayer.getUTCDate()).padStart(2,'0')}/${String(ayer.getUTCMonth()+1).padStart(2,'0')}/${ayer.getUTCFullYear()}`;
   }
 
-  console.log(`📊 Generando reporte de chats para ${targetFecha}...`);
+  console.log(`📊 Generando reporte${soloRecupero ? ' de recupero' : ''} para ${targetFecha}...`);
 
   let mensajes;
   if (csvPath) {
@@ -411,8 +413,10 @@ async function main() {
   const revendedores = await leerRevendedores();
   console.log(`   ${revendedores.size} revendedores en la lista`);
 
-  const { html, ...stats } = generarHTML(mensajes, targetFecha, revendedores);
-  await enviarEmail(html, stats);
+  if (!soloRecupero) {
+    const { html, ...stats } = generarHTML(mensajes, targetFecha, revendedores);
+    await enviarEmail(html, stats);
+  }
 
   const recuperacion = generarHTMLRecuperacion(mensajes, targetFecha, revendedores);
   if (recuperacion) {
@@ -421,6 +425,8 @@ async function main() {
       { numeros: nRec, numerosRev: 0, numerosParticular: nRec, totalMensajes: 0, fechaLabel: fl },
       `🔁 Recuperación de ventas ${fl} — ${nRec} clientes`
     );
+  } else if (soloRecupero) {
+    console.log('ℹ️ No hay clientes para recuperar en este momento');
   }
 }
 

@@ -231,10 +231,14 @@
     <!-- Resultados -->
     <div id="resultados"></div>
 
+    <!-- Botón Respuesta IA (aparece al buscar, no requiere selección) -->
+    <div id="btn-ia-wrap" style="display:none;margin-bottom:12px">
+      <button class="btn-buscar" style="background:#16a34a" onclick="generarRespuestaIA()">🤖 Respuesta IA</button>
+    </div>
+
     <!-- Botones de acción -->
     <div id="btn-generar-wrap" style="display:none;gap:12px;flex-wrap:wrap">
       <button class="btn-buscar" style="flex:1;min-width:200px" onclick="generarPresupuesto()">📄 Generar Presupuesto</button>
-      <button class="btn-buscar" style="flex:1;min-width:200px;background:#16a34a" onclick="generarRespuestaIA()">🤖 Respuesta IA</button>
     </div>
 
     <!-- Panel Respuesta IA -->
@@ -530,6 +534,8 @@
 
       document.getElementById('resultados').innerHTML = '<div class="loading">🔍 Buscando...</div>';
       document.getElementById('presupuesto-generado').style.display = 'none';
+      document.getElementById('btn-ia-wrap').style.display = 'none';
+      document.getElementById('respuesta-ia-panel').style.display = 'none';
       seleccionados = {};
       actualizarBotonGenerar();
       await cargarImagenes();
@@ -638,6 +644,10 @@
         html += '</div>';
       }
       document.getElementById('resultados').innerHTML = html;
+
+      // Mostrar botón Respuesta IA
+      const btnIA = document.getElementById('btn-ia-wrap');
+      if (btnIA) btnIA.style.display = 'block';
 
       // Mostrar botón toggle express si hay items express
       const btnWrap = document.getElementById('btn-express-wrap');
@@ -1074,6 +1084,7 @@
       document.getElementById('medida1').value = '';
       document.getElementById('medida2').value = '';
       document.getElementById('resultados').innerHTML = '';
+      document.getElementById('btn-ia-wrap').style.display = 'none';
       document.getElementById('btn-generar-wrap').style.display = 'none';
       document.getElementById('presupuesto-generado').style.display = 'none';
       window.scrollTo({ top: 0, behavior: 'smooth' });

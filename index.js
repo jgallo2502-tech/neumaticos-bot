@@ -471,7 +471,7 @@ function armarMensajes(productos, medidaOriginal, esRev = false, sinLimite = fal
       if (esRev) {
         const sv = p.stockVic > 0 ? (p.stockVic <= 7 ? p.stockVic : 'OK') : null;
         const sn = p.stockNor > 0 ? (p.stockNor <= 7 ? p.stockNor : 'OK') : null;
-        const se = p.stockExpr > 0 ? p.stockExpr : null;
+        const se = p.stockExpr > 0 ? (p.stockExpr <= 7 ? p.stockExpr : 'OK') : null;
         const parts = [];
         if (sv) parts.push(`Victoria: ${sv}`);
         if (sn) parts.push(`Nordelta: ${sn}`);

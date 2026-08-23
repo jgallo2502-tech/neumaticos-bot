@@ -1247,6 +1247,28 @@ router.post('/reporte-diario/enviar', async (req, res) => {
   }
 });
 
+// Endpoint para email de recupero de ventas (llamar 3 veces por día: 8am, 1pm, 6pm)
+router.post('/reporte-chats/recupero', async (req, res) => {
+  const key = req.headers['x-cron-key'];
+  if (key !== (process.env.CRON_KEY || 'neumaticos-cron-2026')) return res.status(401).end();
+  try {
+    const { spawn } = require('child_process');
+    const scriptPath = path.join(__dirname, 'scripts', 'reporte-chats.js');
+    const proc = spawn(process.execPath, [scriptPath, '--recupero-only'], {
+      env: process.env,
+      cwd: __dirname,
+    });
+    let out = '';
+    proc.stdout.on('data', d => { out += d; console.log('[recupero]', d.toString().trim()); });
+    proc.stderr.on('data', d => console.error('[recupero]', d.toString().trim()));
+    proc.on('close', code => {
+      res.json({ ok: code === 0, log: out.slice(-500) });
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- Broadcast: listar plantillas aprobadas ---
 router.get('/broadcast/plantillas', authMiddleware, async (req, res) => {
   try {

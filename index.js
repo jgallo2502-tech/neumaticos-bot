@@ -662,7 +662,9 @@ app.post('/webhook', async (req, res) => {
   }
 
   try {
-    const esRev = await esRevendedor(fromNumber);
+    const bodyLower = body.toLowerCase();
+    const pideMostrador = /\bmostrador\b/i.test(bodyLower);
+    const esRev = pideMostrador ? false : await esRevendedor(fromNumber);
 
     // Detección directa de medida ANTES de llamar a Claude
     const medidaDirecta = normalizarMedida(body);

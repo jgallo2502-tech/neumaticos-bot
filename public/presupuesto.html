@@ -231,9 +231,21 @@
     <!-- Resultados -->
     <div id="resultados"></div>
 
-    <!-- Botón generar -->
-    <div id="btn-generar-wrap" style="display:none">
-      <button class="btn-buscar" onclick="generarPresupuesto()">📄 Generar Presupuesto</button>
+    <!-- Botones de acción -->
+    <div id="btn-generar-wrap" style="display:none;gap:12px;flex-wrap:wrap">
+      <button class="btn-buscar" style="flex:1;min-width:200px" onclick="generarPresupuesto()">📄 Generar Presupuesto</button>
+      <button class="btn-buscar" style="flex:1;min-width:200px;background:#16a34a" onclick="generarRespuestaIA()">🤖 Respuesta IA</button>
+    </div>
+
+    <!-- Panel Respuesta IA -->
+    <div id="respuesta-ia-panel" style="display:none;margin-top:16px">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <h2 style="margin:0">🤖 Respuesta para WhatsApp</h2>
+          <button onclick="copiarRespuestaIA()" style="background:#16a34a;color:white;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600">📋 Copiar</button>
+        </div>
+        <textarea id="respuesta-ia-texto" rows="14" style="width:100%;font-family:monospace;font-size:13px;border:1px solid #e8e8e8;border-radius:8px;padding:12px;resize:vertical;white-space:pre-wrap"></textarea>
+      </div>
     </div>
 
     <!-- Presupuesto generado -->
@@ -475,7 +487,7 @@
     }
 
     function actualizarBotonGenerar() {
-      document.getElementById('btn-generar-wrap').style.display = Object.keys(seleccionados).length > 0 ? 'block' : 'none';
+      document.getElementById('btn-generar-wrap').style.display = Object.keys(seleccionados).length > 0 ? 'flex' : 'none';
     }
 
     function fmt(n) {
@@ -662,6 +674,82 @@
       if (saTipo) partes.push(saTipo);
       if (partes.length === 0 || ssPrecio === 0) return '';
       return partes.join(', ') + ' — ' + fmt(ssPrecio) + ' aprox. (' + ssPago + ')';
+    }
+
+    const ORDEN_MARCA_IA = {
+      michelin:1, yokohama:2, falken:3, continental:4, dunlop:5, bfgoodrich:6, goodyear:7, pirelli:8, bridgestone:9,
+      giti:1, gtradial:2, hankook:3, nexen:4,
+      tracmax:1, linglong:2, laufenn:3, westlake:4, windforce:5, lavigator:6, wanli:7, sunny:8,
+    };
+    const LIMITES_IA = { Premium:3, PrecioCalidad:3, Economicas:2, Otras:2 };
+    const MARCAS_PREMIUM_IA = ['michelin','yokohama','falken','continental','dunlop','bfgoodrich','goodyear','pirelli','bridgestone'];
+    const MARCAS_PQ_IA      = ['giti','gtradial','hankook','nexen'];
+    const MARCAS_ECO_IA     = ['tracmax','linglong','laufenn','westlake','windforce','lavigator','wanli','sunny'];
+
+    function fmtNum(n) { return Math.round(n).toLocaleString('es-AR'); }
+
+    function generarRespuestaIA() {
+      // Recolectar todos los productos de todas las medidas buscadas
+      const todosProd = Object.values(window.productosIdx);
+      if (!todosProd.length) { alert('Primero buscá una medida'); return; }
+
+      // Agrupar por medida
+      const porMedida = {};
+      for (const p of todosProd) {
+        if (!porMedida[p.medida]) porMedida[p.medida] = [];
+        porMedida[p.medida].push(p);
+      }
+
+      let texto = '';
+      for (const [medida, prods] of Object.entries(porMedida)) {
+        // Clasificar
+        const grupos = { Premium:[], PrecioCalidad:[], Economicas:[], Otras:[] };
+        for (const p of prods) {
+          const m = p.marca.toLowerCase();
+          if (MARCAS_PREMIUM_IA.includes(m)) grupos.Premium.push(p);
+          else if (MARCAS_PQ_IA.includes(m)) grupos.PrecioCalidad.push(p);
+          else if (MARCAS_ECO_IA.includes(m)) grupos.Economicas.push(p);
+          else grupos.Otras.push(p);
+        }
+        // Ordenar y limitar como el bot
+        for (const key of Object.keys(grupos)) {
+          grupos[key].sort((a,b) => (ORDEN_MARCA_IA[a.marca.toLowerCase()]||99) - (ORDEN_MARCA_IA[b.marca.toLowerCase()]||99) || b.stockTotal - a.stockTotal);
+          grupos[key] = grupos[key].slice(0, LIMITES_IA[key]);
+        }
+
+        const totalVis = Object.values(grupos).reduce((s,g)=>s+g.length,0);
+        texto += `🔍 *${medida}* — ${totalVis} opción${totalVis>1?'es':''} con stock disponible:\n`;
+
+        const nombresGrupo = { Premium:'⭐ *PREMIUM*', PrecioCalidad:'✅ *PRECIO-CALIDAD*', Economicas:'💰 *ECONÓMICAS*', Otras:'📦 *OTRAS*' };
+        for (const [cat, cat_prods] of Object.entries(grupos)) {
+          if (!cat_prods.length) continue;
+          texto += `\n${nombresGrupo[cat]}\n`;
+          for (const p of cat_prods) {
+            const p6  = Math.round(p.precio * 0.90);
+            const p3  = Math.round(p.precio * 0.85);
+            const p1  = Math.round(p.precio * 0.80);
+            const soloExpr = (p.stockVic===0 && p.stockNor===0 && p.stockExpr>0);
+            texto += `\n🔹 *${p.descripcion}*\n`;
+            texto += `💲 12 pagos: $${fmtNum(p.precio)}/u | 6 cuotas (-10%): $${fmtNum(p6)}/u | 3 cuotas (-15%): $${fmtNum(p3)}/u | Contado (-20%): $${fmtNum(p1)}/u\n`;
+            if (soloExpr) texto += `⚡ _Solo disponible vía Pedido Express — entrega en 48/72 hs hábiles_\n`;
+          }
+        }
+        texto += `\n*Colocación sin cargo* en ambas sucursales 🔧\n📍 Victoria | Nordelta\n`;
+        if (Object.keys(porMedida).length > 1) texto += '\n---\n\n';
+      }
+
+      document.getElementById('respuesta-ia-texto').value = texto.trim();
+      document.getElementById('respuesta-ia-panel').style.display = 'block';
+      document.getElementById('respuesta-ia-panel').scrollIntoView({ behavior:'smooth' });
+    }
+
+    function copiarRespuestaIA() {
+      const ta = document.getElementById('respuesta-ia-texto');
+      ta.select();
+      document.execCommand('copy');
+      const btn = event.target;
+      btn.textContent = '✅ Copiado';
+      setTimeout(() => btn.textContent = '📋 Copiar', 2000);
     }
 
     function generarPresupuesto() {

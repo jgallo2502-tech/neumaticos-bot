@@ -423,17 +423,16 @@ function armarMensajes(productos, medidaOriginal, esRev = false, sinLimite = fal
   }
 
   const mensajes = [];
-  const total = productos.length;
-
-  // Encabezado
-  const headerExtra = esRev ? ' _(precios de revendedor)_' : '';
-  const totalVisibles = productosVisibles.length;
-  mensajes.push(`🔍 *${medidaOriginal}* — ${totalVisibles} opción${totalVisibles > 1 ? 'es' : ''} con stock disponible${headerExtra}:`);
 
   // Filtrar marcas excluidas para revendedores
   const productosVisibles = esRev
     ? productos.filter(p => !MARCAS_EXCLUIDAS_REVENTA.includes(p.marca.toLowerCase()))
     : productos;
+
+  // Encabezado
+  const headerExtra = esRev ? ' _(precios de revendedor)_' : '';
+  const totalVisibles = productosVisibles.length;
+  mensajes.push(`🔍 *${medidaOriginal}* — ${totalVisibles} opción${totalVisibles > 1 ? 'es' : ''} con stock disponible${headerExtra}:`);
 
   // Límites por categoría: particulares 3/3/2, revendedores sin límite especial (solo stock)
   const LIMITES = esRev ? { 1: 99, 2: 99, 3: 99, 4: 99 } : { 1: 3, 2: 3, 3: 2, 4: 2 };

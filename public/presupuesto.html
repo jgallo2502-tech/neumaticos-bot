@@ -742,11 +742,19 @@
             if (soloExpr) texto += `⚡ _Solo disponible vía Pedido Express — entrega en 48/72 hs hábiles_\n`;
           }
         }
-        texto += `\n*Colocación sin cargo* en ambas sucursales 🔧\n📍 Victoria | Nordelta\n`;
         if (Object.keys(porMedida).length > 1) texto += '\n---\n\n';
       }
 
-      document.getElementById('respuesta-ia-texto').value = texto.trim();
+      const pie = `📌 *Precio unitario. Promociones por compra de 2 o más neumáticos.*
+🔧 Colocación sin cargo en nuestros locales. Válvulas, balanceo y alineación se cobran aparte.
+⚡ Stock Express disponible en 48/72 hs hábiles.
+🌐 Compra online: tienda.neumaticosgallo.com.ar (6 pagos o contado -20%, envíos a todo el país sin cargo superando mínimo de compra)
+
+📍 *Suc. Victoria:* Pres. Perón 3479 — ☎️ 11-3773-5246
+📍 *Suc. Nordelta:* Agustín García 6318, Tigre — ☎️ 11-5734-7692
+🕐 Lun-Vie 8 a 19 hs | Sáb 8 a 16 hs`;
+
+      document.getElementById('respuesta-ia-texto').value = texto.trim() + '\n\n' + pie;
       document.getElementById('respuesta-ia-panel').style.display = 'block';
       document.getElementById('respuesta-ia-panel').scrollIntoView({ behavior:'smooth' });
     }

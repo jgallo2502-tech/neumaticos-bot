@@ -264,7 +264,7 @@ function generarHTML(mensajes, targetFecha, revendedores) {
 // ── Generar HTML de recuperación de ventas (solo particulares) ───────────────
 const MSG_RECUPERACION = encodeURIComponent('Hola, soy Juan de Neumáticos Gallo, vi que estuviste consultando y te atendió el bot, queria saber si tenias alguna duda, que quizas el bot no te asesoro, y de paso que te parecio la atención del bot? Muchas Graciasss');
 
-function generarHTMLRecuperacion(mensajes, targetFecha, revendedores) {
+function generarHTMLRecuperacion(mensajes, targetFecha, revendedores, labelVentana) {
   const rev = revendedores || new Map();
   const del_dia = targetFecha ? mensajes.filter(m => m.fecha === targetFecha) : mensajes;
 
@@ -381,12 +381,20 @@ async function main() {
   const args = process.argv.slice(2);
   let csvPath = null, targetFecha = null;
   const soloRecupero = args.includes('--recupero-only');
+  const ventanaArg = args.find(a => a.startsWith('--ventana='))?.split('=')[1]; // '8am'|'1pm'|'6pm'
 
   for (const arg of args) {
-    if (arg === '--recupero-only') continue;
+    if (arg === '--recupero-only' || arg.startsWith('--ventana=')) continue;
     if (/^\d{2}\/\d{2}\/\d{4}$/.test(arg)) targetFecha = arg;
     else if (arg.endsWith('.csv')) csvPath = arg;
   }
+
+  // Ventana horaria para recupero (ART)
+  // 8am  → ayer 18:00 – hoy 08:00
+  // 1pm  → hoy  08:00 – hoy 13:00
+  // 6pm  → hoy  13:00 – hoy 18:00
+  const VENTANAS = { '8am': [18, 8], '1pm': [8, 13], '6pm': [13, 18] };
+  const ventana = ventanaArg ? VENTANAS[ventanaArg] : null;
 
   // Si no hay fecha: recupero usa hoy, reporte diario usa ayer
   if (!targetFecha) {
@@ -395,7 +403,13 @@ async function main() {
     targetFecha = `${String(d.getUTCDate()).padStart(2,'0')}/${String(d.getUTCMonth()+1).padStart(2,'0')}/${d.getUTCFullYear()}`;
   }
 
-  console.log(`📊 Generando reporte${soloRecupero ? ' de recupero' : ''} para ${targetFecha}...`);
+  // Calcular fecha de ayer (para ventana 8am que incluye desde ayer 18hs)
+  const [dd, mm, aaaa] = targetFecha.split('/').map(Number);
+  const hoyDate = new Date(aaaa, mm-1, dd);
+  const ayerDate = new Date(hoyDate.getTime() - 24*60*60*1000);
+  const targetFechaAyer = `${String(ayerDate.getDate()).padStart(2,'0')}/${String(ayerDate.getMonth()+1).padStart(2,'0')}/${ayerDate.getFullYear()}`;
+
+  console.log(`📊 Generando reporte${soloRecupero ? ' de recupero' : ''}${ventana ? ` (ventana ${ventanaArg})` : ''} para ${targetFecha}...`);
 
   let mensajes;
   if (csvPath) {
@@ -406,7 +420,16 @@ async function main() {
     console.log(`📄 CSV: ${mensajes.length} mensajes cargados`);
   } else {
     console.log('📡 Consultando API de Twilio...');
-    mensajes = await leerDesdeTwilio(targetFecha);
+    // Para ventana 8am necesitamos también los mensajes de ayer desde las 18hs
+    if (ventana && ventanaArg === '8am') {
+      const [msgsAyer, msgsHoy] = await Promise.all([
+        leerDesdeTwilio(targetFechaAyer),
+        leerDesdeTwilio(targetFecha),
+      ]);
+      mensajes = [...msgsAyer, ...msgsHoy];
+    } else {
+      mensajes = await leerDesdeTwilio(targetFecha);
+    }
     console.log(`📄 Twilio: ${mensajes.length} mensajes cargados`);
   }
 
@@ -419,12 +442,37 @@ async function main() {
     await enviarEmail(html, stats);
   }
 
-  const recuperacion = generarHTMLRecuperacion(mensajes, targetFecha, revendedores);
+  // Aplicar filtro de ventana horaria si corresponde
+  let mensajesFiltrados = mensajes;
+  let labelVentana = '';
+  if (ventana) {
+    const [desdeH, hastaH] = ventana;
+    if (ventanaArg === '8am') {
+      // ayer >= 18:00 OR hoy < 08:00
+      mensajesFiltrados = mensajes.filter(m => {
+        const h = parseInt((m.hora || '00:00').split(':')[0]);
+        if (m.fecha === targetFechaAyer) return h >= desdeH;
+        if (m.fecha === targetFecha) return h < hastaH;
+        return false;
+      });
+      labelVentana = ` (ayer 18hs – hoy 8hs)`;
+    } else {
+      mensajesFiltrados = mensajes.filter(m => {
+        if (m.fecha !== targetFecha) return false;
+        const h = parseInt((m.hora || '00:00').split(':')[0]);
+        return h >= desdeH && h < hastaH;
+      });
+      labelVentana = ` (${desdeH}hs – ${hastaH}hs)`;
+    }
+    console.log(`⏱ Ventana ${ventanaArg}${labelVentana}: ${mensajesFiltrados.length} mensajes`);
+  }
+
+  const recuperacion = generarHTMLRecuperacion(mensajesFiltrados, ventanaArg === '8am' ? null : targetFecha, revendedores, labelVentana);
   if (recuperacion) {
     const { html: htmlRec, numeros: nRec, fechaLabel: fl } = recuperacion;
     await enviarEmail(htmlRec,
       { numeros: nRec, numerosRev: 0, numerosParticular: nRec, totalMensajes: 0, fechaLabel: fl },
-      `🔁 Recuperación de ventas ${fl} — ${nRec} clientes`
+      `🔁 Recuperación de ventas ${fl}${labelVentana} — ${nRec} clientes`
     );
   } else if (soloRecupero) {
     console.log('ℹ️ No hay clientes para recuperar en este momento');

@@ -1254,7 +1254,10 @@ router.post('/reporte-chats/recupero', async (req, res) => {
   try {
     const { spawn } = require('child_process');
     const scriptPath = path.join(__dirname, 'scripts', 'reporte-chats.js');
-    const proc = spawn(process.execPath, [scriptPath, '--recupero-only'], {
+    // Detectar ventana horaria según hora ART actual
+    const horaART = new Date(Date.now() - 3*60*60*1000).getUTCHours();
+    const ventana = horaART < 10 ? '8am' : horaART < 15 ? '1pm' : '6pm';
+    const proc = spawn(process.execPath, [scriptPath, '--recupero-only', `--ventana=${ventana}`], {
       env: process.env,
       cwd: __dirname,
     });

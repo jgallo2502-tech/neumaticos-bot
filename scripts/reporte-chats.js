@@ -30,25 +30,38 @@ function guardarRecuperoLog(log) {
   } catch(e) { console.error('Error guardando recupero log:', e.message); }
 }
 
-// Devuelve Set de números a los que ya se mandó recupero en las últimas 24hs
+// Devuelve Set de números a los que ya se mandó recupero en las últimas 70hs
 function numerosYaEnviados() {
   const log = leerRecuperoLog();
-  const hace24h = Date.now() - 24*60*60*1000;
+  const hace70h = Date.now() - 70*60*60*1000;
   const activos = new Set();
-  for (const [num, ts] of Object.entries(log)) {
-    if (ts > hace24h) activos.add(num);
+  for (const [num, entry] of Object.entries(log)) {
+    if (entry.ts > hace70h) activos.add(num);
   }
   return activos;
 }
 
-function registrarEnvios(numeros) {
+// Devuelve Set de números que recibieron el primer recupero hace entre 68 y 76hs (listos para segundo)
+function numerosParaSegundoRecupero() {
   const log = leerRecuperoLog();
   const ahora = Date.now();
-  for (const num of numeros) log[num] = ahora;
-  // Limpiar entradas viejas (> 48hs)
-  const limite = ahora - 48*60*60*1000;
-  for (const [num, ts] of Object.entries(log)) {
-    if (ts < limite) delete log[num];
+  const listos = new Set();
+  for (const [num, entry] of Object.entries(log)) {
+    if (entry.tipo !== 1) continue;
+    const hs = (ahora - entry.ts) / (60*60*1000);
+    if (hs >= 68 && hs <= 76) listos.add(num);
+  }
+  return listos;
+}
+
+function registrarEnvios(numeros, tipo = 1) {
+  const log = leerRecuperoLog();
+  const ahora = Date.now();
+  for (const num of numeros) log[num] = { ts: ahora, tipo };
+  // Limpiar entradas viejas (> 96hs)
+  const limite = ahora - 96*60*60*1000;
+  for (const [num, entry] of Object.entries(log)) {
+    if (entry.ts < limite) delete log[num];
   }
   guardarRecuperoLog(log);
 }
@@ -304,10 +317,22 @@ function generarHTML(mensajes, targetFecha, revendedores) {
 
 // ── Generar HTML de recuperación de ventas (solo particulares) ───────────────
 const MSG_RECUPERACION = encodeURIComponent('Hola, soy Juan de Neumáticos Gallo, vi que estuviste consultando y te atendió el bot, queria saber si tenias alguna duda, que quizas el bot no te asesoro, y de paso que te parecio la atención del bot? Muchas Graciasss');
+const MSG_RECUPERACION_2 = encodeURIComponent('Hola! Soy Juan de Neumáticos Gallo 👋 Quería saber si pudiste conseguir lo que necesitabas, y cómo fue tu experiencia con nosotros. ¿Hay algo que creas que podemos mejorar? Tu opinión nos ayuda un montón. ¡Gracias!');
 
-function generarHTMLRecuperacion(mensajes, targetFecha, revendedores, labelVentana) {
+function generarHTMLRecuperacion(mensajes, targetFecha, revendedores, labelVentana, mensajes2) {
   const rev = revendedores || new Map();
   const del_dia = targetFecha ? mensajes.filter(m => m.fecha === targetFecha) : mensajes;
+
+  // Grupos segundo recupero
+  const grupos2 = {};
+  if (mensajes2 && mensajes2.length > 0) {
+    const del_dia2 = mensajes2; // ya vienen filtrados
+    for (const m of del_dia2) {
+      if (!m.numero || rev.has(m.numero)) continue;
+      if (!grupos2[m.numero]) grupos2[m.numero] = [];
+      grupos2[m.numero].push(m);
+    }
+  }
 
   const grupos = {};
   for (const m of del_dia) {
@@ -326,11 +351,10 @@ function generarHTMLRecuperacion(mensajes, targetFecha, revendedores, labelVenta
     try { fechaDisplay = formatFecha(new Date(Number(a), Number(mo)-1, Number(d))); } catch(e) {}
   }
 
-  function bloqueParticular(num) {
-    const msgs = grupos[num];
+  function bloqueCliente(num, msgsCliente, waMsg) {
     const waNum = num.startsWith('549') ? num : `549${num.replace(/^54/, '')}`;
-    const waLink = `https://wa.me/${waNum}?text=${MSG_RECUPERACION}`;
-    const filas = msgs.map(({ hora, rol, texto }) => {
+    const waLink = `https://wa.me/${waNum}?text=${waMsg}`;
+    const filas = msgsCliente.map(({ hora, rol, texto }) => {
       const bg = rol === 'bot' ? '#f8f9fa' : '#fff';
       const color = rol === 'bot' ? '#34a853' : '#1a73e8';
       const label = rol === 'bot' ? '🤖 Bot' : '👤 Cliente';
@@ -343,8 +367,8 @@ function generarHTMLRecuperacion(mensajes, targetFecha, revendedores, labelVenta
     }).join('');
     return `
     <div style="margin-bottom:24px;background:#fff;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.14);overflow:hidden">
-      <div style="background:#1a73e8;color:#fff;padding:10px 16px;font-size:13px;font-weight:600;display:flex;justify-content:space-between;align-items:center">
-        <span>📱 +${num} &nbsp;·&nbsp; ${msgs.length} mensajes</span>
+      <div style="background:#1a73e8;color:#fff;padding:10px 16px;font-size:13px;font-weight:600">
+        <span>📱 +${num} &nbsp;·&nbsp; ${msgsCliente.length} mensajes</span>
       </div>
       <div style="padding:0 0 12px">
         <table style="border-collapse:collapse;width:100%">${filas}</table>
@@ -358,24 +382,40 @@ function generarHTMLRecuperacion(mensajes, targetFecha, revendedores, labelVenta
     </div>`;
   }
 
+  const seccionHeader = (titulo, subtitulo, color) => `
+  <div style="background:${color};color:#fff;border-radius:8px 8px 0 0;padding:16px 24px;margin-top:24px">
+    <div style="font-size:17px;font-weight:700">${titulo}</div>
+    <div style="font-size:13px;opacity:.85;margin-top:3px">${subtitulo}</div>
+  </div>`;
+
   const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f1f3f4;font-family:Arial,sans-serif">
 <div style="max-width:720px;margin:24px auto;padding:0 16px">
   <div style="background:#34a853;color:#fff;border-radius:8px 8px 0 0;padding:20px 24px">
     <div style="font-size:20px;font-weight:700">🔁 Recuperación de Ventas — Neumáticos Gallo</div>
-    <div style="font-size:14px;opacity:.85;margin-top:4px">${fechaDisplay} &nbsp;·&nbsp; ${numeros.length} clientes particulares</div>
+    <div style="font-size:14px;opacity:.85;margin-top:4px">${fechaDisplay}${labelVentana || ''} &nbsp;·&nbsp; ${numeros.length} clientes</div>
   </div>
-  <div style="background:#fff;padding:14px 24px 10px;margin-bottom:8px;font-size:13px;color:#444">
-    Estos clientes consultaron ayer. Hacé click en <strong>Enviar WhatsApp</strong> para hacer el seguimiento.
+  ${numeros.length > 0 ? `
+  ${seccionHeader('📲 Primer contacto', 'Clientes que consultaron en esta ventana — primer seguimiento', '#1a73e8')}
+  <div style="background:#fff;padding:10px 24px 6px;font-size:13px;color:#444;margin-bottom:8px">
+    Hacé click en <strong>Enviar WhatsApp</strong> para contactarlos.
   </div>
-  <div style="padding-top:8px">
-    ${numeros.map(bloqueParticular).join('')}
+  <div style="padding-top:4px">
+    ${numeros.map(n => bloqueCliente(n, grupos[n], MSG_RECUPERACION)).join('')}
+  </div>` : ''}
+  ${grupos2 && Object.keys(grupos2).length > 0 ? `
+  ${seccionHeader('🔄 Segundo contacto (72hs)', 'Clientes que ya fueron contactados hace 3 días — seguimiento de cierre', '#7c3aed')}
+  <div style="background:#fff;padding:10px 24px 6px;font-size:13px;color:#444;margin-bottom:8px">
+    Preguntales si pudieron comprar y cómo fue su experiencia.
   </div>
+  <div style="padding-top:4px">
+    ${Object.keys(grupos2).sort().map(n => bloqueCliente(n, grupos2[n], MSG_RECUPERACION_2)).join('')}
+  </div>` : ''}
   <div style="text-align:center;padding:16px;font-size:11px;color:#999">Generado automáticamente por el bot de Neumáticos Gallo</div>
 </div></body></html>`;
 
-  return { html, numeros: numeros.length, fechaLabel, grupos };
+  return { html, numeros: numeros.length, numeros2: grupos2 ? Object.keys(grupos2).length : 0, fechaLabel, grupos };
 }
 
 // ── Enviar email via Gmail API OAuth2 (evita bloqueo SMTP de Railway) ────────
@@ -508,7 +548,7 @@ async function main() {
     console.log(`⏱ Ventana ${ventanaArg}${labelVentana}: ${mensajesFiltrados.length} mensajes`);
   }
 
-  // Excluir clientes que ya recibieron recupero en las últimas 24hs
+  // Excluir clientes que ya recibieron recupero en las últimas 70hs (evita repetir primer contacto)
   const yaEnviados = numerosYaEnviados();
   if (yaEnviados.size > 0) {
     const antes = mensajesFiltrados.length;
@@ -516,14 +556,57 @@ async function main() {
     console.log(`🔁 Excluidos ${yaEnviados.size} clientes ya contactados (quedan ${mensajesFiltrados.length} de ${antes} msgs)`);
   }
 
-  const recuperacion = generarHTMLRecuperacion(mensajesFiltrados, ventanaArg === '8am' ? null : targetFecha, revendedores, labelVentana);
-  if (recuperacion) {
-    const { html: htmlRec, numeros: nRec, fechaLabel: fl } = recuperacion;
+  // Cargar mensajes de hace 72hs para segundo recupero
+  let mensajes2Filtrados = [];
+  if (soloRecupero && ventana) {
+    const listos = numerosParaSegundoRecupero();
+    if (listos.size > 0) {
+      console.log(`🔄 Buscando segundo recupero para ${listos.size} clientes (72hs)...`);
+      // Fecha de hace 3 días
+      const fecha72h = new Date(hoyDate.getTime() - 3*24*60*60*1000);
+      const tf72 = `${String(fecha72h.getDate()).padStart(2,'0')}/${String(fecha72h.getMonth()+1).padStart(2,'0')}/${fecha72h.getFullYear()}`;
+      let msgs72;
+      if (ventanaArg === '8am') {
+        const fecha72hAyer = new Date(fecha72h.getTime() - 24*60*60*1000);
+        const tf72Ayer = `${String(fecha72hAyer.getDate()).padStart(2,'0')}/${String(fecha72hAyer.getMonth()+1).padStart(2,'0')}/${fecha72hAyer.getFullYear()}`;
+        const [a, b] = await Promise.all([leerDesdeTwilio(tf72Ayer), leerDesdeTwilio(tf72)]);
+        msgs72 = [...a, ...b];
+      } else {
+        msgs72 = await leerDesdeTwilio(tf72);
+      }
+      // Aplicar misma ventana horaria
+      const [desdeH, hastaH] = ventana;
+      if (ventanaArg === '8am') {
+        const tf72Ayer = new Date(fecha72h.getTime() - 24*60*60*1000);
+        const tf72AyerStr = `${String(tf72Ayer.getDate()).padStart(2,'0')}/${String(tf72Ayer.getMonth()+1).padStart(2,'0')}/${tf72Ayer.getFullYear()}`;
+        mensajes2Filtrados = msgs72.filter(m => {
+          const h = parseInt((m.hora || '00:00').split(':')[0]);
+          if (m.fecha === tf72AyerStr) return h >= desdeH;
+          if (m.fecha === tf72) return h < hastaH;
+          return false;
+        });
+      } else {
+        mensajes2Filtrados = msgs72.filter(m => {
+          if (m.fecha !== tf72) return false;
+          const h = parseInt((m.hora || '00:00').split(':')[0]);
+          return h >= desdeH && h < hastaH;
+        });
+      }
+      // Solo los clientes que están listos para segundo recupero
+      mensajes2Filtrados = mensajes2Filtrados.filter(m => listos.has(m.numero));
+      console.log(`🔄 Segundo recupero: ${new Set(mensajes2Filtrados.map(m=>m.numero)).size} clientes`);
+    }
+  }
+
+  const recuperacion = generarHTMLRecuperacion(mensajesFiltrados, ventanaArg === '8am' ? null : targetFecha, revendedores, labelVentana, mensajes2Filtrados);
+  if (recuperacion && (recuperacion.numeros > 0 || recuperacion.numeros2 > 0)) {
+    const { html: htmlRec, numeros: nRec, numeros2: nRec2, fechaLabel: fl, grupos } = recuperacion;
     await enviarEmail(htmlRec,
-      { numeros: nRec, numerosRev: 0, numerosParticular: nRec, totalMensajes: 0, fechaLabel: fl },
-      `🔁 Recuperación de ventas ${fl}${labelVentana} — ${nRec} clientes`
+      { numeros: nRec + nRec2, numerosRev: 0, numerosParticular: nRec + nRec2, totalMensajes: 0, fechaLabel: fl },
+      `🔁 Recuperación${labelVentana} — ${nRec} nuevos${nRec2 > 0 ? ` + ${nRec2} seguimiento` : ''}`
     );
-    registrarEnvios(Object.keys(recuperacion.grupos || {}));
+    if (nRec > 0) registrarEnvios(Object.keys(grupos || {}), 1);
+    if (nRec2 > 0) registrarEnvios([...new Set(mensajes2Filtrados.map(m=>m.numero))], 2);
   } else if (soloRecupero) {
     console.log('ℹ️ No hay clientes para recuperar en este momento');
   }

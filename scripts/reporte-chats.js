@@ -12,6 +12,47 @@ const BOT_NUMBER  = (process.env.TWILIO_WHATSAPP_NUMBER || process.env.TWILIO_PH
 const TWILIO_SID  = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_TOK  = process.env.TWILIO_AUTH_TOKEN;
 
+// ── Registro de recuperos enviados ────────────────────────────────────────────
+const RECUPERO_LOG = path.join(__dirname, '../data/recupero-enviados.json');
+
+function leerRecuperoLog() {
+  try {
+    if (!fs.existsSync(RECUPERO_LOG)) return {};
+    return JSON.parse(fs.readFileSync(RECUPERO_LOG, 'utf8'));
+  } catch { return {}; }
+}
+
+function guardarRecuperoLog(log) {
+  try {
+    const dir = path.dirname(RECUPERO_LOG);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(RECUPERO_LOG, JSON.stringify(log, null, 2));
+  } catch(e) { console.error('Error guardando recupero log:', e.message); }
+}
+
+// Devuelve Set de números a los que ya se mandó recupero en las últimas 24hs
+function numerosYaEnviados() {
+  const log = leerRecuperoLog();
+  const hace24h = Date.now() - 24*60*60*1000;
+  const activos = new Set();
+  for (const [num, ts] of Object.entries(log)) {
+    if (ts > hace24h) activos.add(num);
+  }
+  return activos;
+}
+
+function registrarEnvios(numeros) {
+  const log = leerRecuperoLog();
+  const ahora = Date.now();
+  for (const num of numeros) log[num] = ahora;
+  // Limpiar entradas viejas (> 48hs)
+  const limite = ahora - 48*60*60*1000;
+  for (const [num, ts] of Object.entries(log)) {
+    if (ts < limite) delete log[num];
+  }
+  guardarRecuperoLog(log);
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function limpiarNumero(n) {
@@ -334,7 +375,7 @@ function generarHTMLRecuperacion(mensajes, targetFecha, revendedores, labelVenta
   <div style="text-align:center;padding:16px;font-size:11px;color:#999">Generado automáticamente por el bot de Neumáticos Gallo</div>
 </div></body></html>`;
 
-  return { html, numeros: numeros.length, fechaLabel };
+  return { html, numeros: numeros.length, fechaLabel, grupos };
 }
 
 // ── Enviar email via Gmail API OAuth2 (evita bloqueo SMTP de Railway) ────────
@@ -467,6 +508,14 @@ async function main() {
     console.log(`⏱ Ventana ${ventanaArg}${labelVentana}: ${mensajesFiltrados.length} mensajes`);
   }
 
+  // Excluir clientes que ya recibieron recupero en las últimas 24hs
+  const yaEnviados = numerosYaEnviados();
+  if (yaEnviados.size > 0) {
+    const antes = mensajesFiltrados.length;
+    mensajesFiltrados = mensajesFiltrados.filter(m => !yaEnviados.has(m.numero));
+    console.log(`🔁 Excluidos ${yaEnviados.size} clientes ya contactados (quedan ${mensajesFiltrados.length} de ${antes} msgs)`);
+  }
+
   const recuperacion = generarHTMLRecuperacion(mensajesFiltrados, ventanaArg === '8am' ? null : targetFecha, revendedores, labelVentana);
   if (recuperacion) {
     const { html: htmlRec, numeros: nRec, fechaLabel: fl } = recuperacion;
@@ -474,6 +523,7 @@ async function main() {
       { numeros: nRec, numerosRev: 0, numerosParticular: nRec, totalMensajes: 0, fechaLabel: fl },
       `🔁 Recuperación de ventas ${fl}${labelVentana} — ${nRec} clientes`
     );
+    registrarEnvios(Object.keys(recuperacion.grupos || {}));
   } else if (soloRecupero) {
     console.log('ℹ️ No hay clientes para recuperar en este momento');
   }

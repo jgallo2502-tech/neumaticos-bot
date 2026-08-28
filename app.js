@@ -54,6 +54,49 @@ router.use(express.static(path.join(__dirname, 'public'), {
   }
 }));
 
+// --- Enviar presupuesto via Respond.io ---
+router.post('/enviar-whatsapp-respond', express.json(), authMiddleware, async (req, res) => {
+  const { tel, mensaje } = req.body;
+  if (!tel || !mensaje) return res.status(400).json({ error: 'Faltan datos' });
+
+  const apiKey = process.env.RESPOND_IO_API_KEY;
+  const channelId = process.env.RESPOND_IO_CHANNEL_ID || '547132';
+  if (!apiKey) return res.status(500).json({ error: 'API key de Respond.io no configurada' });
+
+  // Formatear número argentino
+  let phone = tel.replace(/\D/g, '');
+  if (!phone.startsWith('549')) {
+    phone = phone.startsWith('54') ? '549' + phone.slice(2) : '549' + phone;
+  }
+
+  try {
+    const fetch = (await import('node-fetch')).default;
+
+    // 1. Crear o encontrar contacto
+    const contactRes = await fetch('https://api.respond.io/v2/contact', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: '+' + phone })
+    });
+    const contactData = await contactRes.json();
+    const contactId = contactData.data?.id || contactData.id;
+    if (!contactId) return res.status(500).json({ error: 'No se pudo crear contacto', detalle: contactData });
+
+    // 2. Enviar mensaje
+    const msgRes = await fetch(`https://api.respond.io/v2/contact/${contactId}/message`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channelId: parseInt(channelId), message: { type: 'text', text: mensaje } })
+    });
+    const msgData = await msgRes.json();
+    if (!msgRes.ok) return res.status(500).json({ error: 'Error al enviar mensaje', detalle: msgData });
+
+    res.json({ ok: true, contactId });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- Login ---
 router.post('/login', express.json(), (req, res) => {
   const { usuario, password } = req.body;

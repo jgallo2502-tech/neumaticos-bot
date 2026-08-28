@@ -405,7 +405,7 @@
 
       <div class="acciones no-print">
         <button class="btn-accion btn-imprimir" onclick="imprimir()">🖨️ Imprimir / PDF</button>
-        <button class="btn-accion btn-whatsapp" onclick="abrirWhatsApp()">💬 Abrir WhatsApp</button>
+        <button class="btn-accion btn-whatsapp" onclick="enviarPorRespond()">💬 Enviar por WhatsApp</button>
         <button class="btn-accion" style="background:#128c7e;color:white" onclick="copiarWhatsApp()">📋 Copiar mensaje</button>
         <button class="btn-accion btn-nuevo" onclick="nuevoPresupuesto()">+ Nuevo</button>
       </div>
@@ -1079,8 +1079,41 @@
       }
     }
 
+    async function enviarPorRespond() {
+      if (!presupuestoActual) return;
+      const tel = (presupuestoActual.tel || '').replace(/\D/g, '');
+      if (!tel) {
+        alert('El cliente no tiene número de WhatsApp cargado.');
+        return;
+      }
+      const msg = armarMensajeWA();
+      const btn = document.querySelector('.btn-whatsapp');
+      btn.disabled = true;
+      btn.textContent = 'Enviando...';
+      try {
+        const token = localStorage.getItem('token');
+        const r = await fetch('/enviar-whatsapp-respond', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          body: JSON.stringify({ tel, mensaje: msg })
+        });
+        const data = await r.json();
+        if (data.ok) {
+          btn.textContent = '✅ Enviado';
+          btn.style.background = '#16a34a';
+        } else {
+          alert('Error al enviar: ' + (data.error || 'desconocido'));
+          btn.disabled = false;
+          btn.textContent = '💬 Enviar por WhatsApp';
+        }
+      } catch(e) {
+        alert('Error de conexión: ' + e.message);
+        btn.disabled = false;
+        btn.textContent = '💬 Enviar por WhatsApp';
+      }
+    }
+
     async function enviarWhatsApp() {
-      // Mantener por compatibilidad, redirige a abrirWhatsApp
       abrirWhatsApp();
     }
 

@@ -2693,6 +2693,7 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
       const codArt = (row[0] || '').trim();
       const codAlt = (row[1] || '').trim();
       if (!codArt && !codAlt) continue;  // productos Celsur tienen codArt vacío, solo CAI
+      if (codArt.startsWith('09')) continue; // neumaticos usados, excluir
       const entry = {
         codAlt,
         desc:      (row[2] || '').trim(),
@@ -2727,6 +2728,7 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
     for (let i = 1; i < lines.length; i++) {
       const parts = splitCSVLine(lines[i]);
       const codArt = parts[0].replace(/^"|"$/g, '').trim();
+      if (codArt.startsWith('09')) continue; // neumaticos usados, excluir
       tnCodArts.add(codArt);
       // También registrar el codAlt (col 16) para no duplicar por CAI
       const codAltTN = (parts[16] || '').replace(/^"|"$/g, '').trim();

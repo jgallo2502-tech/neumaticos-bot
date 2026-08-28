@@ -1092,7 +1092,7 @@
       btn.textContent = 'Enviando...';
       try {
         const token = localStorage.getItem('token');
-        const r = await fetch('/enviar-whatsapp-respond', {
+        const r = await fetch('/app/enviar-whatsapp-respond', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
           body: JSON.stringify({ tel, mensaje: msg })

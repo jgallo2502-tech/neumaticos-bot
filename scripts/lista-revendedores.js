@@ -5,7 +5,7 @@ const path = require('path');
 
 const SHEET_ID = '160e1dKlTch9gzOOxjhz7hKJKfbrMifAyTXE10aZRbgw';
 
-const DESCUENTOS = { giti: 0.33, gtradial: 0.33, yokohama: 0.32, michelin: 0.35, bfgoodrich: 0.35, nankang: 0.32, hankook: 0.28, linglong: 0.28 };
+const DESCUENTOS = { giti: 0.33, gtradial: 0.33, yokohama: 0.32, michelin: 0.35, bfgoodrich: 0.35, nankang: 0.28, hankook: 0.28, linglong: 0.28 };
 const MARCAS = ['giti', 'gtradial', 'yokohama', 'michelin', 'bfgoodrich', 'nankang', 'hankook', 'linglong'];
 
 let promoInvierno = [];

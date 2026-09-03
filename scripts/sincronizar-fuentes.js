@@ -6,7 +6,7 @@
  *   - Celsur                 → StockExpr para Michelin / BFGoodrich
  *   - Lista Michelin/BFG     → Precio Mostrador Gallo para Michelin / BFGoodrich (match por CAI)
  *   - Hankook / Yokohama / Linglong → StockExpr + Precio (columna "Precio Mostrador Gallo")
- *   - Neumasur Nexen         → StockExpr + Precio (columna "Precio Mostrador Gallo")
+ *   - Fortalein Nankang       → StockExpr + Precio (columna PMG)
  */
 
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
@@ -469,39 +469,41 @@ function leerSJYSStock(wb) {
   return stockMap;
 }
 
-// ─── Leer Neumasur (Nexen) — match por SKU (CodAlt = "NE" + codigo) ──────────
-function leerNeumasur(wb) {
-  const sheetName = wb.SheetNames.find(s => /nexen/i.test(s)) || wb.SheetNames[0];
+// ─── Leer Fortalein (Nankang) — match por SKU (CodAlt = "NK" + codigo) ──────────
+function leerFortalein(wb) {
+  const sheetName = wb.SheetNames[0];
   const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1 });
 
-  // Buscar header por columna PMG
+  // Header fijo en fila 2 (índice 2): ["orden","Diseño","pisada","Talon","Rodado","Descripcion Larga","Producto","LISTA",...,"Stock","PMG"]
   const pmgInfo = encontrarColumna(rows, [/^pmg$/i, /precio mostrador gallo/i]);
-  if (!pmgInfo) { console.error('❌ Neumasur: no se encontró columna PMG'); return { skuMap: {}, medidaMap: {} }; }
+  if (!pmgInfo) { console.error('❌ Fortalein: no se encontró columna PMG'); return { skuMap: {}, medidaMap: {} }; }
 
   const header = rows[pmgInfo.headerIdx];
   const col = patron => header.findIndex(h => patron.test((h || '').toString()));
 
   const colPMG   = pmgInfo.colIdx;
   const colStock = col(/^stock$/i);
-  const colCod   = col(/^c[oó]d|^material/i);
-  const colDesc  = col(/^descripci[oó]n|^desc/i);
+  const colCod   = col(/^producto$/i);
+  const colDesc  = col(/^descripcion larga$/i);
 
-  const colCodFinal  = colCod  !== -1 ? colCod  : 0;
-  const colDescFinal = colDesc !== -1 ? colDesc : 1;
+  const colCodFinal  = colCod  !== -1 ? colCod  : 6;
+  const colDescFinal = colDesc !== -1 ? colDesc : 5;
 
-  if (colStock === -1) console.warn('⚠️  Neumasur: columna Stock no encontrada, usando 0');
-  console.log(`  Neumasur cols — PMG:${colPMG} Stock:${colStock} Cod:${colCodFinal} Desc:${colDescFinal}`);
+  if (colStock === -1) console.warn('⚠️  Fortalein: columna Stock no encontrada, usando 0');
+  console.log(`  Fortalein cols — PMG:${colPMG} Stock:${colStock} Cod:${colCodFinal} Desc:${colDescFinal}`);
 
   const skuMap = {}, medidaMap = {};
   for (let i = pmgInfo.headerIdx + 1; i < rows.length; i++) {
     const r = rows[i];
     const cod   = r[colCodFinal] ? r[colCodFinal].toString().trim() : null;
     const desc  = (r[colDescFinal] || '').toString();
-    const stock = colStock !== -1 ? r[colStock] : undefined;
+    const stockRaw = colStock !== -1 ? r[colStock] : undefined;
     const precio = r[colPMG];
     if (typeof precio !== 'number' || precio <= 0) continue;
+    // Stock: puede ser número, "OK", "ULTIMAS", "STOCK NUEVO", etc.
+    const stockNum = typeof stockRaw === 'number' ? stockRaw : (stockRaw && stockRaw !== '0' ? 4 : 0);
     const medida = normalizarMedida(desc) || '';
-    const entry = { stock: stockExterno(stock), precio, desc, medida };
+    const entry = { stock: stockExterno(stockNum), precio, desc, medida };
     if (cod) skuMap[cod] = entry;
     if (medida) medidaMap[medida] = entry;
   }
@@ -523,13 +525,14 @@ async function main() {
     || encontrarArchivo(archivos, ['gallo'], ['michelin', 'lista', 'precio']);
   const archivoCelsur     = encontrarArchivo(archivos, ['celsur'])
     || encontrarArchivo(archivos, ['stock_disponible'])
-    || encontrarArchivo(archivos, ['stock'], ['inv', 'gallo', 'hankook', 'yokohama', 'ling', 'nexen', 'neumasur', 'michelin']);
+    || encontrarArchivo(archivos, ['stock'], ['inv', 'gallo', 'hankook', 'yokohama', 'ling', 'nankang', 'fortalein', 'michelin']);
   const archivoMichelin   = encontrarArchivo(archivos, ['michelin', 'con descripcion'])
     || encontrarArchivo(archivos, ['michelin', 'bfgoodrich']);
   const archivoHankook    = encontrarArchivo(archivos, ['hankook']);
   const archivoYokohama   = encontrarArchivo(archivos, ['yokohama']);
   const archivoLinglong   = encontrarArchivo(archivos, ['ling']);
-  const archivoNeumasur   = encontrarArchivo(archivos, ['neumasur']);
+  const archivoFortalein   = encontrarArchivo(archivos, ['nankang'])
+    || encontrarArchivo(archivos, ['fortalein']);
   const archivoSJYSPrecios = encontrarArchivo(archivos, ['sjys', 'precio'])
     || encontrarArchivo(archivos, ['sjys', 'lista'])
     || encontrarArchivo(archivos, ['giti', 'pmg'])
@@ -552,7 +555,7 @@ async function main() {
   ]) {
     if (!archivo) console.warn(`⚠️  No se encontró archivo en Drive: ${nombre} — se omitirá`);
   }
-  if (!archivoNeumasur)    console.log('⚠️  Neumasur no encontrado — Nexen sin actualizar');
+  if (!archivoFortalein)   console.log('⚠️  Fortalein no encontrado — Nankang sin actualizar');
   if (!archivoSJYSPrecios) console.log('⚠️  SJYS precios no encontrado — Giti/GTRadial sin precio externo');
   if (!archivoSJYSStock)   console.log('⚠️  SJYS stock no encontrado — Giti/GTRadial sin stock express');
 
@@ -566,7 +569,7 @@ async function main() {
     cargar(archivoYokohama),
     cargar(archivoLinglong),
   ]);
-  const wbNex      = archivoNeumasur    ? await descargarXlsx(drive, archivoNeumasur.id)    : null;
+  const wbNex      = archivoFortalein   ? await descargarXlsx(drive, archivoFortalein.id)   : null;
   const wbSJYSPre  = archivoSJYSPrecios ? await descargarXlsx(drive, archivoSJYSPrecios.id) : null;
   const wbSJYSSto  = archivoSJYSStock   ? await descargarXlsx(drive, archivoSJYSStock.id)   : null;
 
@@ -577,7 +580,7 @@ async function main() {
   const hankookData     = wbHank ? leerHankook(wbHank)         : { skuMap: {}, medidaMap: {} };
   const yokoData        = wbYoko ? leerYokohama(wbYoko)        : { skuMap: {}, medidaMap: {} };
   const llData          = wbLL   ? leerLinglong(wbLL)          : { skuMap: {}, medidaMap: {} };
-  const nexenData       = wbNex     ? leerNeumasur(wbNex)       : { skuMap: {}, medidaMap: {} };
+  const nankangData     = wbNex     ? leerFortalein(wbNex)      : { skuMap: {}, medidaMap: {} };
   const sjysPrecios     = wbSJYSPre ? leerSJYSPrecios(wbSJYSPre) : {};
   const sjysStock       = wbSJYSSto ? leerSJYSStock(wbSJYSSto)   : {};
 
@@ -588,7 +591,7 @@ async function main() {
   console.log(`  Hankook: ${Object.keys(hankookData.skuMap).length} SKUs`);
   console.log(`  Yokohama: ${Object.keys(yokoData.skuMap).length} SKUs`);
   console.log(`  Linglong: ${Object.keys(llData.skuMap).length} SKUs`);
-  console.log(`  Nexen: ${Object.keys(nexenData.skuMap).length} SKUs (${wbNex ? 'actualizado' : 'sin archivo'})`);
+  console.log(`  Nankang: ${Object.keys(nankangData.skuMap).length} SKUs (${wbNex ? 'actualizado' : 'sin archivo'})`);
   console.log(`  SJYS (Giti/GTRadial): ${Object.keys(sjysPrecios).length} precios, ${Object.keys(sjysStock).length} stocks`);
 
   // Índice secundario de SJYS por (marca + medida) para fallback cuando CodAlt no matchea
@@ -712,10 +715,10 @@ async function main() {
         sinStock++;
       }
 
-    } else if (marca === 'NEXEN') {
-      const skuKey = codAlt.replace(/^NE/i, '');
-      const dSku = nexenData.skuMap[skuKey];
-      const d = dSku || (!codArt ? nexenData.medidaMap[medida] : null);
+    } else if (marca === 'NANKANG') {
+      const skuKey = codAlt.replace(/^NK/i, '');
+      const dSku = nankangData.skuMap[skuKey];
+      const d = dSku || (!codArt ? nankangData.medidaMap[medida] : null);
       if (d) {
         stockExpr = d.stock;
         if (precio === null) precio = d.precio || 0;
@@ -823,11 +826,11 @@ async function main() {
     agregarNuevo('', sku, entry.desc || '', 0, 0, entry.stock, entry.precio);
   }
 
-  // 6. Neumasur (Nexen): SKUs con stock no están en la hoja
-  for (const [sku, entry] of Object.entries(nexenData.skuMap)) {
-    const codAlt = 'NE' + sku;
+  // 6. Fortalein (Nankang): SKUs con stock no están en la hoja
+  for (const [sku, entry] of Object.entries(nankangData.skuMap)) {
+    const codAlt = 'NK' + sku;
     if (codAltsEnHoja.has(codAlt) || entry.stock <= 0) continue;
-    agregarNuevo('', codAlt, entry.desc || '', 0, 0, entry.stock, entry.precio);
+    agregarNuevo('', codAlt, entry.desc || '', 0, 0, entry.stock, entry.precio, 'NANKANG');
   }
 
   // 7. SJYS (Giti / GTRadial): códigos con stock no están en la hoja

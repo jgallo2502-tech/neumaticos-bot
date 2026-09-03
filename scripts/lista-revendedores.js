@@ -5,8 +5,8 @@ const path = require('path');
 
 const SHEET_ID = '160e1dKlTch9gzOOxjhz7hKJKfbrMifAyTXE10aZRbgw';
 
-const DESCUENTOS = { giti: 0.33, gtradial: 0.33, yokohama: 0.32, michelin: 0.35, bfgoodrich: 0.35, nexen: 0.32, hankook: 0.28, linglong: 0.28 };
-const MARCAS = ['giti', 'gtradial', 'yokohama', 'michelin', 'bfgoodrich', 'nexen', 'hankook', 'linglong'];
+const DESCUENTOS = { giti: 0.33, gtradial: 0.33, yokohama: 0.32, michelin: 0.35, bfgoodrich: 0.35, nankang: 0.32, hankook: 0.28, linglong: 0.28 };
+const MARCAS = ['giti', 'gtradial', 'yokohama', 'michelin', 'bfgoodrich', 'nankang', 'hankook', 'linglong'];
 
 let promoInvierno = [];
 try {
@@ -60,7 +60,7 @@ async function main() {
   const rows = (res.data.values || []).slice(1);
 
   // Agrupar por marca
-  const porMarca = { giti: [], gtradial: [], yokohama: [], michelin: [], bfgoodrich: [], nexen: [], hankook: [], linglong: [] };
+  const porMarca = { giti: [], gtradial: [], yokohama: [], michelin: [], bfgoodrich: [], nankang: [], hankook: [], linglong: [] };
 
   for (const row of rows) {
     const marca = (row[3] || '').toLowerCase().trim();
@@ -96,7 +96,7 @@ async function main() {
 
   const wb = XLSX.utils.book_new();
 
-  const NOMBRES = { giti: 'Giti', gtradial: 'GTRadial', yokohama: 'Yokohama', michelin: 'Michelin', bfgoodrich: 'BFGoodrich', nexen: 'Nexen', hankook: 'Hankook', linglong: 'Linglong' };
+  const NOMBRES = { giti: 'Giti', gtradial: 'GTRadial', yokohama: 'Yokohama', michelin: 'Michelin', bfgoodrich: 'BFGoodrich', nankang: 'Nankang', hankook: 'Hankook', linglong: 'Linglong' };
 
   for (const marca of MARCAS) {
     const datos = porMarca[marca];

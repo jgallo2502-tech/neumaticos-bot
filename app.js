@@ -2459,6 +2459,7 @@ function detectarTipoFuente(nombre) {
   if (n.includes('hankook')) return 'hankook';
   if (n.includes('yokohama')) return 'yokohama';
   if (n.includes('ling')) return 'linglong';
+  if (n.includes('nankang') || n.includes('fortalein')) return 'nankang';
   if (n.includes('michelin') || n.includes('bfgoodrich')) return 'michelin';
   if ((n.includes('giti') || n.includes('gtradial')) && (n.includes('pmg') || n.includes('precio') || n.includes('lista'))) return 'sjysprecios';
   if (n.includes('stock_cotiz') || n.includes('cotiz_arg') || ((n.includes('giti') || n.includes('gtradial')) && n.includes('stock'))) return 'sjysstock';

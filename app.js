@@ -2447,6 +2447,7 @@ const DRIVE_KEYWORDS = {
   baterias:    { include: [['baterias'], ['bateria']], exclude: [] },
   filtros:     { include: [['filtros'], ['filtro']], exclude: [] },
   frasle:      { include: [['frasle'], ['pastillas'], ['freno']], exclude: [] },
+  nankang:     { include: [['nankang'], ['fortalein']], exclude: [] },
 };
 
 function detectarTipoFuente(nombre) {

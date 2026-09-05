@@ -78,7 +78,10 @@ router.post('/enviar-whatsapp-respond', express.json(), authMiddleware, async (r
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone: '+' + phone })
     });
-    const contactData = await contactRes.json();
+    const contactRaw = await contactRes.text();
+    let contactData;
+    try { contactData = JSON.parse(contactRaw); } catch(e) { return res.status(500).json({ error: 'Respond.io contacto: ' + contactRaw }); }
+    if (!contactRes.ok) return res.status(500).json({ error: 'Respond.io contacto error', detalle: contactData });
     const contactId = contactData.data?.id || contactData.id;
     if (!contactId) return res.status(500).json({ error: 'No se pudo crear contacto', detalle: contactData });
 
@@ -88,7 +91,9 @@ router.post('/enviar-whatsapp-respond', express.json(), authMiddleware, async (r
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ channelId: parseInt(channelId), message: { type: 'text', text: mensaje } })
     });
-    const msgData = await msgRes.json();
+    const msgRaw = await msgRes.text();
+    let msgData;
+    try { msgData = JSON.parse(msgRaw); } catch(e) { return res.status(500).json({ error: 'Respond.io mensaje: ' + msgRaw }); }
     if (!msgRes.ok) return res.status(500).json({ error: 'Error al enviar mensaje', detalle: msgData });
 
     res.json({ ok: true, contactId });

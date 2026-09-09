@@ -201,6 +201,10 @@ function normalizarMedida(texto) {
   const m2 = t.match(/(\d{3})(\d{2})[rR][fF]?(\d{2})(C)?\b/i);
   if (m2) return `${m2[1]}/${m2[2]}R${m2[3]}${m2[4] ? 'C' : ''}`;
 
+  // Formato sin perfil: 195 R14 o 195 R14C (furgonetas/camionetas)
+  const m3 = t.match(/(\d{3})\s*[rR]\s*(\d{2})(C)?\b/i);
+  if (m3) return `${m3[1]}R${m3[2]}${m3[3] ? 'C' : ''}`;
+
   return null;
 }
 

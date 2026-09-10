@@ -687,10 +687,14 @@ router.get('/frasle/buscar', authMiddleware, async (req, res) => {
       if (aibox) {
         const codNorm = normCod(v.partNumber);
         // Buscar el código Fras-le en ARTPROV de Aibox para obtener el EST real
+        // ARTPROV en Aibox tiene prefijo de marca: "FRPD/1521" = prefijo "FR" + código "PD/1521"
         const frasleEntry = aibox.pastillas.find(r => {
           const marcaUp = (r.MARCA || '').toString().toUpperCase().trim();
           if (!marcaUp.includes('FRASLE')) return false;
-          const art = normCod(r.ARTPROV || '');
+          const artRaw = normCod(r.ARTPROV || '');
+          if (!artRaw) return false;
+          const rubrodto = (r.RUBRODTO || '').toString().toUpperCase().trim();
+          const art = rubrodto && artRaw.startsWith(rubrodto) ? artRaw.slice(rubrodto.length) : artRaw;
           return art === codNorm || art.startsWith(codNorm) || codNorm.startsWith(art);
         });
         console.log('[Aibox] partNumber:', v.partNumber, '→ codNorm:', codNorm, '→ frasleEntry EST:', frasleEntry ? frasleEntry.EST : 'NO ENCONTRADO');

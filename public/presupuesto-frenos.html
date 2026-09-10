@@ -170,6 +170,12 @@
           </select>
         </div>
       </div>
+      <div id="version-row" style="margin-top:12px;display:none">
+        <label>Filtrar por versión / motor</label>
+        <select id="frenos-version" onchange="filtrarPorVersion()">
+          <option value="">Todas las versiones</option>
+        </select>
+      </div>
       <div class="row" style="margin-top:16px">
         <div>
           <label>Mano de obra</label>
@@ -366,17 +372,16 @@
       return list;
     }
 
-    function mostrarResultadosFrenos(data) {
-      const div = document.getElementById('frenos-resultados');
-      if (data.length === 0) {
-        div.innerHTML = '<div class="sin-stock">Fras-le no tiene pastillas catalogadas para ese modelo. Probá con otra forma de escribirlo (ej. sin acentos, o el nombre corto).</div>';
-        document.getElementById('discos-section').style.display = 'none';
-        return;
-      }
+    function renderPastillaGroups(data, versionFiltro) {
       let html = '';
       data.forEach((it, idx) => {
-        window.frenosIdx[idx] = it;
         const versiones = it.versiones || [];
+        const versionModels = versiones.map(v => (v.model || '').toLowerCase());
+        if (versionFiltro) {
+          const fLow = versionFiltro.toLowerCase();
+          const match = versionModels.some(m => m.includes(fLow));
+          if (!match) return;
+        }
         const versionesTexto = versiones.map(v => (v.model || 'Versión') + ' (' + (v.desde || '?') + ' a ' + (v.hasta || '?') + ')').join(', ');
         const posicion = (it.partNumber.match(/(\d{4,})/) || [])[1] || it.partNumber;
         const opciones = buildOpciones(it);
@@ -403,9 +408,45 @@
         }
         html += '</div>';
       });
-      div.innerHTML = html;
+      return html || '<div class="sin-stock">Sin resultados para la versión seleccionada.</div>';
+    }
+
+    function mostrarResultadosFrenos(data) {
+      const div = document.getElementById('frenos-resultados');
+      if (data.length === 0) {
+        div.innerHTML = '<div class="sin-stock">Fras-le no tiene pastillas catalogadas para ese modelo. Probá con otra forma de escribirlo (ej. sin acentos, o el nombre corto).</div>';
+        document.getElementById('discos-section').style.display = 'none';
+        document.getElementById('version-row').style.display = 'none';
+        return;
+      }
+
+      // Collect unique versions
+      const versionSet = new Set();
+      data.forEach(it => {
+        (it.versiones || []).forEach(v => { if (v.model) versionSet.add(v.model); });
+      });
+      const versionSel = document.getElementById('frenos-version');
+      versionSel.innerHTML = '<option value="">Todas las versiones</option>';
+      Array.from(versionSet).sort().forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v; opt.textContent = v;
+        versionSel.appendChild(opt);
+      });
+      document.getElementById('version-row').style.display = versionSet.size > 1 ? 'block' : 'none';
+
+      data.forEach((it, idx) => { window.frenosIdx[idx] = it; });
+      window.frenosData = data;
+
+      div.innerHTML = renderPastillaGroups(data, '');
       document.getElementById('discos-section').style.display = 'block';
       buscarDiscosAuto();
+    }
+
+    function filtrarPorVersion() {
+      const v = document.getElementById('frenos-version').value;
+      const div = document.getElementById('frenos-resultados');
+      if (!window.frenosData) return;
+      div.innerHTML = renderPastillaGroups(window.frenosData, v);
     }
 
     function seleccionarOpcion(posIdx, optIdx) {
@@ -429,20 +470,39 @@
     }
 
     function renderDiscosHtml(data) {
-      if (!data.length) return '<div class="sin-stock" style="padding:12px">Sin discos disponibles en Aibox para este auto.</div>';
+      // data puede ser array plano (búsqueda manual) o { galloStock, aiboxOpciones } (auto)
+      let items = [];
+      if (Array.isArray(data)) {
+        items = data.map(d => ({ ...d, fuente: 'aibox' }));
+      } else {
+        (data.galloStock || []).forEach(d => items.push({ ...d, fuente: 'gallo' }));
+        (data.aiboxOpciones || []).forEach(d => items.push({ ...d, fuente: 'aibox' }));
+      }
+      if (!items.length) return '<div class="sin-stock" style="padding:12px">Sin discos disponibles para este auto.</div>';
+
+      window.discosIdx = items;
       let html = '';
-      data.forEach((d, i) => {
+      items.forEach((d, i) => {
         const sel = discosSeleccionados[d.codigo];
         html += '<div class="opcion-card' + (sel ? ' seleccionado' : '') + '" id="disco-card-' + i + '" onclick="toggleDisco(' + i + ')">';
         html += '<div>';
         html += '<div class="opcion-marca">' + d.marca + ' <span style="font-size:11px;font-weight:400;color:#888">' + d.codigo + '</span></div>';
-        html += '<div class="opcion-desc">' + d.descripcion + '</div>';
-        const stockLabel = d.stock === 'S' ? '🏪 Aibox: disponible' : '🏪 Aibox: consultar';
-        html += '<div class="stock-info badge-aibox">' + stockLabel + '</div>';
+        html += '<div class="opcion-desc">' + (d.descripcion || '') + '</div>';
+        if (d.fuente === 'gallo') {
+          const stParts = [];
+          if (d.stockVictoria > 0) stParts.push('Victoria: ' + d.stockVictoria);
+          if (d.stockNordelta > 0) stParts.push('Nordelta: ' + d.stockNordelta);
+          const stTxt = stParts.length ? stParts.join(' | ') : 'Consultar stock';
+          html += '<div class="stock-info badge-gallo">🏪 Gallo: ' + stTxt + '</div>';
+        } else {
+          const stockLabel = d.stock === 'S' ? '🏪 Aibox: disponible' : '🏪 Aibox: consultar';
+          html += '<div class="stock-info badge-aibox">' + stockLabel + '</div>';
+        }
         html += '</div>';
         html += '<div style="text-align:right">';
-        html += '<div class="producto-precio-main">' + fmt(d.precioPar) + '</div>';
-        html += '<div style="font-size:10px;color:#888;margin-top:2px">el par</div>';
+        const precio = d.precioPar || d.precio || 0;
+        html += '<div class="producto-precio-main">' + fmt(precio) + '</div>';
+        if (d.fuente === 'aibox') html += '<div style="font-size:10px;color:#888;margin-top:2px">el par</div>';
         html += '<div class="check">✓</div>';
         html += '</div></div>';
       });
@@ -459,7 +519,6 @@
         const params = new URLSearchParams({ marca, modelo });
         const res = await fetch('/app/frasle/discos-auto?' + params.toString(), { headers: { 'Authorization': 'Bearer ' + token } });
         const data = await res.json();
-        window.discosIdx = data;
         div.innerHTML = renderDiscosHtml(data);
       } catch(e) {
         div.innerHTML = '<div style="color:#888;font-size:13px;padding:10px">No se pudieron cargar discos automáticamente. Buscá por código abajo.</div>';
@@ -474,7 +533,6 @@
       try {
         const res = await fetch('/app/frasle/discos?q=' + encodeURIComponent(q), { headers: { 'Authorization': 'Bearer ' + token } });
         const data = await res.json();
-        window.discosIdx = data;
         div.innerHTML = renderDiscosHtml(data);
       } catch(e) {
         div.innerHTML = '<div style="color:#e63946;font-size:13px;padding:10px">Error: ' + e.message + '</div>';
@@ -629,6 +687,9 @@
       document.getElementById('frenos-resultados').innerHTML = '';
       document.getElementById('discos-section').style.display = 'none';
       document.getElementById('discos-resultados').innerHTML = '';
+      document.getElementById('version-row').style.display = 'none';
+      document.getElementById('frenos-version').innerHTML = '<option value="">Todas las versiones</option>';
+      window.frenosData = null;
       if(document.getElementById('disco-buscar-input')) document.getElementById('disco-buscar-input').value = '';
       document.getElementById('mo-precio-frenos').value = '0';
       document.getElementById('btn-generar-frenos-wrap').style.display = 'none';

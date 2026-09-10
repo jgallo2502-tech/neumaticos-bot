@@ -532,6 +532,7 @@ router.get('/moura/buscar', authMiddleware, async (req, res) => {
 const AUTOEXPERTS_API = 'https://api.autoexperts.parts/autexp/bff/v1/catalog/products';
 const AUTOEXPERTS_PASTILLA_FRENO_ID = 'c33fa8a0-ea3d-489e-9657-b1271e67d6c9';
 const AUTOEXPERTS_FRASLE_BRAND_ID = '817d687b-ff60-4266-bf84-8045a33ae67f';
+const AUTOEXPERTS_FREMAX_BRAND_ID  = '73f4b001-a475-4229-9d4e-52c1f191f114';
 
 router.get('/frasle/marcas', authMiddleware, (req, res) => {
   res.json(FRAM_MARCAS);
@@ -697,11 +698,34 @@ router.get('/frasle/buscar', authMiddleware, async (req, res) => {
             NISSAN: ['NISSAN'],
             MITSUBISHI: ['MITSUBISHI', 'MITS'],
           };
-          // La posición EST es el vínculo técnico correcto entre Fras-le y equivalentes Aibox
-          const alternas = aibox.pastillas.filter(r => {
-            const est = (r.EST || '').toString().toUpperCase();
-            return est.slice(-posicion.length) === posicion && aiboxTieneStock(r);
+          // Buscar el código Fras-le en ARTPROV de Aibox para obtener el EST real
+          const normCod = (c) => c.toUpperCase().replace(/[\s\/\-\.]/g, '');
+          const codNorm = normCod(v.partNumber);
+          const frasleEntry = aibox.pastillas.find(r => {
+            if ((r.MARCA || '').toString().toUpperCase().trim() !== 'FRASLE A') return false;
+            const art = normCod(r.ARTPROV || '');
+            return art === codNorm || art.startsWith(codNorm) || codNorm.startsWith(art);
           });
+
+          let alternas = [];
+          if (frasleEntry) {
+            const estFrasle = (frasleEntry.EST || '').toString().toUpperCase();
+            // EST formato: 2 letras marca + 4 dígitos posición (ej: FR1456)
+            const posEst = estFrasle.replace(/^[A-Z]{1,3}/, '');
+            if (posEst.length >= 3) {
+              alternas = aibox.pastillas.filter(r => {
+                const rEst = (r.EST || '').toString().toUpperCase().replace(/^[A-Z]{1,3}/, '');
+                return rEst === posEst && aiboxTieneStock(r);
+              });
+            }
+          }
+          // Fallback: si no hay ARTPROV match, intentar por posición numérica del código
+          if (alternas.length === 0 && posm) {
+            alternas = aibox.pastillas.filter(r => {
+              const est = (r.EST || '').toString().toUpperCase();
+              return est.slice(-posicion.length) === posicion && aiboxTieneStock(r);
+            });
+          }
           const porMarca = {};
           for (const r of alternas) {
             const marcaKey = (r.MARCA || '').toString().trim();
@@ -764,57 +788,93 @@ router.get('/frasle/discos', authMiddleware, async (req, res) => {
   }
 });
 
-// Búsqueda automática de discos por marca+modelo de auto (busca en DESCRIP de Aibox)
+// Búsqueda automática de discos: AutoExperts Fremax → códigos BD → Gallo sheet + Aibox por EST
 router.get('/frasle/discos-auto', authMiddleware, async (req, res) => {
   try {
     const marca = (req.query.marca || '').toString().trim().toUpperCase();
     const modelo = (req.query.modelo || '').toString().trim().toUpperCase();
-    if (!modelo || modelo.length < 2) return res.json([]);
-    const aibox = await cargarAibox();
-    if (!aibox) return res.json([]);
+    const version = (req.query.version || '').toString().trim().toUpperCase();
+    if (!marca || !modelo) return res.json({ codigosFremax: [], galloStock: [], aiboxOpciones: [] });
 
-    const MARCA_ALIAS = {
-      VOLKSWAGEN: ['VW', 'VOLKSWAGEN'], FORD: ['FORD'], CHEVROLET: ['CHEVROLET'],
-      PEUGEOT: ['PEUGEOT', 'PEUG'], RENAULT: ['RENAULT'], FIAT: ['FIAT'],
-      TOYOTA: ['TOYOTA'], HONDA: ['HONDA'], HYUNDAI: ['HYUNDAI', 'HYU'],
-      KIA: ['KIA'], CITROEN: ['CITROEN'], BMW: ['BMW'],
-      MERCEDES: ['MERCEDES', 'BENZ'], AUDI: ['AUDI'], NISSAN: ['NISSAN'],
-      MITSUBISHI: ['MITSUBISHI', 'MITS'],
-    };
-    const marcaAliases = MARCA_ALIAS[marca] || [marca.slice(0, 4)];
-    const modeloTokens = modelo.split(/\s+/).filter(t => t.length >= 2);
+    // 1. Obtener códigos Fremax de AutoExperts para este vehículo
+    const vehiclesFiltro = { brands: marca, names: modelo };
+    const fremax = await autoexpertsBuscarTodosLosProductos({ brands: [AUTOEXPERTS_FREMAX_BRAND_ID], vehicles: vehiclesFiltro });
 
-    // Intento 1: modelo + marca en DESCRIP
-    let resultado = aibox.discos.filter(r => {
-      if (!aiboxTieneStock(r)) return false;
-      const descrip = (r.DESCRIP || '').toString().toUpperCase();
-      const tieneModelo = modeloTokens.length > 0 && modeloTokens.every(t => descrip.includes(t));
-      const tieneMarca = marcaAliases.some(a => descrip.includes(a));
-      return tieneModelo && tieneMarca;
-    });
-
-    // Intento 2: solo marca (cuando el modelo es ambiguo o corto — ej CC, A3, 208)
-    if (resultado.length === 0) {
-      resultado = aibox.discos.filter(r => {
-        if (!aiboxTieneStock(r)) return false;
-        const descrip = (r.DESCRIP || '').toString().toUpperCase();
-        return marcaAliases.some(a => descrip.includes(a));
+    const codigosFremax = [];
+    for (const p of fremax) {
+      const aplica = (p.vehicles || []).some(v => {
+        if (v.brand !== marca || v.name !== modelo) return false;
+        if (version && v.model && !v.model.toUpperCase().includes(version.split(/\s+/)[0])) return false;
+        return true;
       });
-    }
-
-    // Intento 3: token más largo del modelo + marca (fallback robusto)
-    if (resultado.length === 0 && modeloTokens.length > 0) {
-      const principal = modeloTokens.reduce((a, b) => a.length >= b.length ? a : b);
-      if (principal.length >= 4) { // evitar tokens cortos ambiguos
-        resultado = aibox.discos.filter(r => {
-          if (!aiboxTieneStock(r)) return false;
-          const descrip = (r.DESCRIP || '').toString().toUpperCase();
-          return descrip.includes(principal) && marcaAliases.some(a => descrip.includes(a));
-        });
+      if (aplica && !codigosFremax.find(x => x.partNumber === p.partNumber)) {
+        codigosFremax.push({ partNumber: p.partNumber, descripcion: p.applicationDescription });
       }
     }
 
-    res.json(mapearDiscosAibox(resultado.slice(0, 80)));
+    if (codigosFremax.length === 0) return res.json({ codigosFremax: [], galloStock: [], aiboxOpciones: [] });
+
+    // 2. Buscar en hoja Frasle (Gallo) los discos con esos códigos BD
+    const auth = new google.auth.GoogleAuth({
+      ...(process.env.GOOGLE_CREDENTIALS ? { credentials: GOOGLE_CREDS } : { keyFile: path.join(__dirname, 'credentials.json') }),
+      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+    });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const sheetRes = await sheets.spreadsheets.values.get({ spreadsheetId: process.env.GOOGLE_SHEET_ID, range: 'Frasle!A:G' });
+    const filas = (sheetRes.data.values || []).slice(1);
+    const normF = (c) => (c || '').toString().toUpperCase().replace(/[\s\-\.]/g, '');
+
+    const galloStock = [];
+    for (const { partNumber } of codigosFremax) {
+      const codN = normF(partNumber);
+      const matches = filas.filter(row => normF(row[1] || '').includes(codN) || normF(row[2] || '') === codN);
+      for (const row of matches) {
+        if (!galloStock.find(x => x.codArt === row[0])) {
+          galloStock.push({
+            codFremax: partNumber, codArt: row[0], descripcion: row[1], codAlternativo: row[2] || '',
+            precio: parseInt(row[6]) || 0,
+            stockVictoria: parseInt(row[3]) || 0, stockNordelta: parseInt(row[4]) || 0,
+            stockPropio: (parseInt(row[3]) || 0) + (parseInt(row[4]) || 0),
+          });
+        }
+      }
+    }
+
+    // 3. Buscar en Aibox por posición EST de cada código Fremax
+    const aiboxOpciones = [];
+    try {
+      const aibox = await cargarAibox();
+      if (aibox) {
+        for (const { partNumber } of codigosFremax) {
+          const codN = normF(partNumber).replace(/PER$|AGL$/,'');
+          // Encontrar el disco Fremax en Aibox para leer su EST de posición
+          const freEntry = aibox.discos.find(r => {
+            const est = normF(r.EST || '').replace(/PER$|AGL$/,'');
+            return est === codN || normF(r.ARTPROV || '') === codN;
+          });
+          const posEst = freEntry ? normF(freEntry.EST || '').replace(/^[A-Z]{2,3}/,'') : null;
+          if (!posEst || posEst.length < 3) continue;
+
+          const alternas = aibox.discos.filter(r => {
+            const rEst = normF(r.EST || '').replace(/^[A-Z]{2,3}/,'');
+            return rEst === posEst && aiboxTieneStock(r);
+          });
+          for (const r of alternas) {
+            if (!aiboxOpciones.find(x => x.codigo === r.CODIGO)) {
+              aiboxOpciones.push({
+                codFremax: partNumber, marca: r.MARCA, codigo: r.CODIGO, artprov: r.ARTPROV,
+                est: r.EST, descripcion: r.DESCRIP,
+                costo: parseFloat(r.COSTO) || 0,
+                precioPar: Math.round((parseFloat(r.COSTO) || 0) * MARKUP_AIBOX * 2),
+                stock: (r.STOCK || '').toString().toUpperCase().trim(),
+              });
+            }
+          }
+        }
+      }
+    } catch(e) { console.error('Aibox discos error:', e.message); }
+
+    res.json({ codigosFremax, galloStock, aiboxOpciones });
   } catch (err) {
     console.error('Error frasle/discos-auto:', err.message);
     res.status(500).json({ error: err.message });

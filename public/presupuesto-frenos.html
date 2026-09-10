@@ -352,11 +352,12 @@
         const stockLabel = o.stock === 'S' ? '🏪 Aibox: disponible' : '🏪 Aibox: consultar';
         const posicion = (it.partNumber.match(/(\d{4,})/) || [])[1] || '';
         const codigoMostrar = o.artprov || o.codigo || '';
+        // No mostramos o.descripcion porque tiene el vehículo de la entrada Aibox (puede diferir)
         list.push({
           tipo: 'aibox',
           marca: o.marca,
-          descripcion: o.descripcion,
-          subtitulo: (codigoMostrar ? 'Cód: ' + codigoMostrar : '') + (posicion ? ' | Pos: ' + posicion : ''),
+          descripcion: 'Alternativa posición ' + posicion + (it.partNumber ? ' (equiv. ' + it.partNumber + ')' : ''),
+          subtitulo: codigoMostrar ? 'Cód: ' + codigoMostrar : '',
           precio: o.precio,
           stockLabel,
           badgeClass: 'badge-aibox',

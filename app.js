@@ -697,29 +697,11 @@ router.get('/frasle/buscar', authMiddleware, async (req, res) => {
             NISSAN: ['NISSAN'],
             MITSUBISHI: ['MITSUBISHI', 'MITS'],
           };
-          const marcaAliases = MARCA_ALIAS[marca] || [marca.slice(0, 4)];
-          const modeloTokens = modelo.split(/\s+/).filter(t => t.length >= 2);
-
-          const coincideVehiculo = (descrip) => {
-            const d = descrip.toUpperCase();
-            const tieneModelo = modeloTokens.length > 0 && modeloTokens.some(t => d.includes(t));
-            const tieneMarca = marcaAliases.some(a => d.includes(a));
-            return tieneModelo || tieneMarca;
-          };
-
-          let alternas = aibox.pastillas.filter(r => {
+          // La posición EST es el vínculo técnico correcto entre Fras-le y equivalentes Aibox
+          const alternas = aibox.pastillas.filter(r => {
             const est = (r.EST || '').toString().toUpperCase();
-            if (est.slice(-posicion.length) !== posicion) return false;
-            if (!aiboxTieneStock(r)) return false;
-            return coincideVehiculo(r.DESCRIP || '');
+            return est.slice(-posicion.length) === posicion && aiboxTieneStock(r);
           });
-          // Fallback: si no hay nada con filtro de vehículo, mostrar todas las de esa posición
-          if (alternas.length === 0) {
-            alternas = aibox.pastillas.filter(r => {
-              const est = (r.EST || '').toString().toUpperCase();
-              return est.slice(-posicion.length) === posicion && aiboxTieneStock(r);
-            });
-          }
           const porMarca = {};
           for (const r of alternas) {
             const marcaKey = (r.MARCA || '').toString().trim();
@@ -803,7 +785,7 @@ router.get('/frasle/discos-auto', authMiddleware, async (req, res) => {
     const modeloTokens = modelo.split(/\s+/).filter(t => t.length >= 2);
 
     // Intento 1: modelo + marca en DESCRIP
-    const matches = aibox.discos.filter(r => {
+    let resultado = aibox.discos.filter(r => {
       if (!aiboxTieneStock(r)) return false;
       const descrip = (r.DESCRIP || '').toString().toUpperCase();
       const tieneModelo = modeloTokens.length > 0 && modeloTokens.every(t => descrip.includes(t));
@@ -811,24 +793,25 @@ router.get('/frasle/discos-auto', authMiddleware, async (req, res) => {
       return tieneModelo && tieneMarca;
     });
 
-    // Intento 2: solo modelo (todos los tokens)
-    let resultado = matches;
+    // Intento 2: solo marca (cuando el modelo es ambiguo o corto — ej CC, A3, 208)
     if (resultado.length === 0) {
       resultado = aibox.discos.filter(r => {
         if (!aiboxTieneStock(r)) return false;
         const descrip = (r.DESCRIP || '').toString().toUpperCase();
-        return modeloTokens.every(t => descrip.includes(t));
+        return marcaAliases.some(a => descrip.includes(a));
       });
     }
 
-    // Intento 3: token más largo del modelo
+    // Intento 3: token más largo del modelo + marca (fallback robusto)
     if (resultado.length === 0 && modeloTokens.length > 0) {
       const principal = modeloTokens.reduce((a, b) => a.length >= b.length ? a : b);
-      resultado = aibox.discos.filter(r => {
-        if (!aiboxTieneStock(r)) return false;
-        const descrip = (r.DESCRIP || '').toString().toUpperCase();
-        return descrip.includes(principal);
-      });
+      if (principal.length >= 4) { // evitar tokens cortos ambiguos
+        resultado = aibox.discos.filter(r => {
+          if (!aiboxTieneStock(r)) return false;
+          const descrip = (r.DESCRIP || '').toString().toUpperCase();
+          return descrip.includes(principal) && marcaAliases.some(a => descrip.includes(a));
+        });
+      }
     }
 
     res.json(mapearDiscosAibox(resultado.slice(0, 80)));

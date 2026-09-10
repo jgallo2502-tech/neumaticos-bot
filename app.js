@@ -661,7 +661,15 @@ router.get('/frasle/buscar', authMiddleware, async (req, res) => {
       }, null);
     };
 
-    const resultado = lista.map(v => ({ ...v, stock: buscarCodigo(v.partNumber) }));
+    const resultadoRaw = lista.map(v => ({ ...v, stock: buscarCodigo(v.partNumber) }));
+    // Deduplicar por version+años+partNumber para evitar repetidos de la API
+    const seen = new Set();
+    const resultado = resultadoRaw.filter(v => {
+      const k = [v.version, v.anioDesde, v.anioHasta, v.partNumber].join('|');
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
     res.json(resultado);
   } catch (err) {
     console.error('Error frasle/buscar:', err.message);

@@ -672,78 +672,60 @@ router.get('/frasle/buscar', authMiddleware, async (req, res) => {
     let aibox = null;
     try { aibox = await cargarAibox(); } catch(e) { console.error('Aibox load error:', e.message); }
 
+    // Debug: mostrar columnas disponibles y primera fila FRASLE A
+    if (aibox && aibox.pastillas.length > 0) {
+      console.log('[Aibox] Columnas pastilla:', Object.keys(aibox.pastillas[0]).join(', '));
+      const primeraFrasle = aibox.pastillas.find(r => (r.MARCA || '').toString().toUpperCase().includes('FRASLE'));
+      if (primeraFrasle) console.log('[Aibox] Primera fila FRASLE:', JSON.stringify(primeraFrasle));
+    }
+
+    const normCod = (c) => c.toUpperCase().replace(/[\s\/\-\.]/g, '');
+
     const resultado = lista.map(v => {
       const stock = buscarCodigo(v.partNumber);
       let aiboxOpciones = [];
       if (aibox) {
-        const posm = v.partNumber.match(/(\d{4,})/);
-        if (posm) {
-          const posicion = posm[1];
-          // Marcas abreviadas para filtrar por descripción en Aibox
-          const MARCA_ALIAS = {
-            VOLKSWAGEN: ['VW', 'VOLKSWAGEN', 'VOLK'],
-            FORD: ['FORD'],
-            CHEVROLET: ['CHEVROLET', 'CHEVY'],
-            PEUGEOT: ['PEUGEOT', 'PEUG'],
-            RENAULT: ['RENAULT', 'RENO'],
-            FIAT: ['FIAT'],
-            TOYOTA: ['TOYOTA', 'TOYO'],
-            HONDA: ['HONDA'],
-            HYUNDAI: ['HYUNDAI', 'HYU'],
-            KIA: ['KIA'],
-            CITROEN: ['CITROEN', 'CITRO'],
-            BMW: ['BMW'],
-            MERCEDES: ['MERCEDES', 'BENZ', 'MB'],
-            AUDI: ['AUDI'],
-            NISSAN: ['NISSAN'],
-            MITSUBISHI: ['MITSUBISHI', 'MITS'],
-          };
-          // Buscar el código Fras-le en ARTPROV de Aibox para obtener el EST real
-          const normCod = (c) => c.toUpperCase().replace(/[\s\/\-\.]/g, '');
-          const codNorm = normCod(v.partNumber);
-          const frasleEntry = aibox.pastillas.find(r => {
-            if ((r.MARCA || '').toString().toUpperCase().trim() !== 'FRASLE A') return false;
-            const art = normCod(r.ARTPROV || '');
-            return art === codNorm || art.startsWith(codNorm) || codNorm.startsWith(art);
-          });
+        const codNorm = normCod(v.partNumber);
+        // Buscar el código Fras-le en ARTPROV de Aibox para obtener el EST real
+        const frasleEntry = aibox.pastillas.find(r => {
+          const marcaUp = (r.MARCA || '').toString().toUpperCase().trim();
+          if (!marcaUp.includes('FRASLE')) return false;
+          const art = normCod(r.ARTPROV || '');
+          return art === codNorm || art.startsWith(codNorm) || codNorm.startsWith(art);
+        });
+        console.log('[Aibox] partNumber:', v.partNumber, '→ codNorm:', codNorm, '→ frasleEntry EST:', frasleEntry ? frasleEntry.EST : 'NO ENCONTRADO');
 
-          let alternas = [];
-          if (frasleEntry) {
-            const estFrasle = (frasleEntry.EST || '').toString().toUpperCase();
-            // EST formato: 2 letras marca + 4 dígitos posición (ej: FR1456)
-            const posEst = estFrasle.replace(/^[A-Z]{1,3}/, '');
-            if (posEst.length >= 3) {
-              alternas = aibox.pastillas.filter(r => {
-                const rEst = (r.EST || '').toString().toUpperCase().replace(/^[A-Z]{1,3}/, '');
-                return rEst === posEst && aiboxTieneStock(r);
-              });
-            }
-          }
-          // Fallback: si no hay ARTPROV match, intentar por posición numérica del código
-          if (alternas.length === 0 && posm) {
+        let alternas = [];
+        if (frasleEntry) {
+          const estFrasle = (frasleEntry.EST || '').toString().toUpperCase().trim();
+          // EST formato: letras marca + 4 dígitos posición (ej: FR1456)
+          const posEst = estFrasle.replace(/^[A-Z]{1,3}/, '');
+          console.log('[Aibox] EST encontrado:', estFrasle, '→ posición:', posEst);
+          if (posEst.length >= 3) {
             alternas = aibox.pastillas.filter(r => {
-              const est = (r.EST || '').toString().toUpperCase();
-              return est.slice(-posicion.length) === posicion && aiboxTieneStock(r);
+              const rEst = (r.EST || '').toString().toUpperCase().trim().replace(/^[A-Z]{1,3}/, '');
+              return rEst === posEst && aiboxTieneStock(r);
             });
           }
-          const porMarca = {};
-          for (const r of alternas) {
-            const marcaKey = (r.MARCA || '').toString().trim();
-            const stockActual = (porMarca[marcaKey]?.STOCK || '').toString().toUpperCase();
-            const stockNuevo = (r.STOCK || '').toString().toUpperCase();
-            if (!porMarca[marcaKey] || (stockNuevo === 'S' && stockActual !== 'S')) porMarca[marcaKey] = r;
-          }
-          aiboxOpciones = Object.values(porMarca).map(r => ({
-            marca: r.MARCA,
-            codigo: r.CODIGO,
-            artprov: r.ARTPROV,
-            est: r.EST,
-            descripcion: r.DESCRIP,
-            costo: parseFloat(r.COSTO) || 0,
-            precio: Math.round((parseFloat(r.COSTO) || 0) * MARKUP_AIBOX),
-            stock: (r.STOCK || '').toString().toUpperCase().trim(),
-          }));
         }
+        console.log('[Aibox] alternas encontradas:', alternas.length);
+        const porMarca = {};
+        for (const r of alternas) {
+          const marcaKey = (r.MARCA || '').toString().trim();
+          const stockActual = (porMarca[marcaKey]?.STOCK || '').toString().toUpperCase();
+          const stockNuevo = (r.STOCK || '').toString().toUpperCase();
+          if (!porMarca[marcaKey] || (stockNuevo === 'S' && stockActual !== 'S')) porMarca[marcaKey] = r;
+        }
+        aiboxOpciones = Object.values(porMarca).map(r => ({
+          marca: r.MARCA,
+          codigo: r.CODIGO,
+          artprov: r.ARTPROV,
+          est: r.EST,
+          descripcion: r.DESCRIP,
+          costo: parseFloat(r.COSTO) || 0,
+          precio: Math.round((parseFloat(r.COSTO) || 0) * MARKUP_AIBOX),
+          stock: (r.STOCK || '').toString().toUpperCase().trim(),
+        }));
       }
       return { ...v, stock, aiboxOpciones };
     });

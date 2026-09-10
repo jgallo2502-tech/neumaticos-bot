@@ -386,7 +386,8 @@
         const opciones = buildOpciones(it);
 
         html += '<div class="position-group">';
-        html += '<div class="position-header">🛑 Posición ' + posicion + ' <span style="font-size:11px;font-weight:400;color:#666;margin-left:8px">' + versionesTexto + '</span></div>';
+        const ejeLabel = it.ejeReal ? ' · ' + it.ejeReal : '';
+        html += '<div class="position-header">🛑 Posición ' + posicion + ejeLabel + ' <span style="font-size:11px;font-weight:400;color:#666;margin-left:8px">' + versionesTexto + '</span></div>';
 
         if (opciones.length === 0) {
           html += '<div style="padding:12px 14px;color:#888;font-size:13px">⚠️ Sin stock disponible en Gallo ni en Aibox</div>';

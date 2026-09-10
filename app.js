@@ -685,6 +685,7 @@ router.get('/frasle/buscar', authMiddleware, async (req, res) => {
       const stock = buscarCodigo(v.partNumber);
       let aiboxOpciones = [];
       let posicionReal = null;
+      let ejeReal = null;
       if (aibox) {
         const codNorm = normCod(v.partNumber);
         // Buscar el código Fras-le en ARTPROV de Aibox para obtener el EST real
@@ -696,8 +697,8 @@ router.get('/frasle/buscar', authMiddleware, async (req, res) => {
           if (!artRaw) return false;
           const rubrodto = (r.RUBRODTO || '').toString().toUpperCase().trim();
           const art = rubrodto && artRaw.startsWith(rubrodto) ? artRaw.slice(rubrodto.length) : artRaw;
-          if (art.length < 4) return false; // ignorar ARTPROV muy cortos
-          return art === codNorm || art.startsWith(codNorm);
+          if (art.length < 4) return false;
+          return art === codNorm;
         });
         console.log('[Aibox] partNumber:', v.partNumber, '→ codNorm:', codNorm, '→ frasleEntry EST:', frasleEntry ? frasleEntry.EST : 'NO ENCONTRADO');
 
@@ -708,10 +709,22 @@ router.get('/frasle/buscar', authMiddleware, async (req, res) => {
           console.log('[Aibox] EST encontrado:', estFrasle, '→ posición:', posEst);
           if (posEst.length >= 3) {
             posicionReal = posEst;
+            // Detectar si la entrada Fras-le es delantera o trasera
+            const descripFrasle = (frasleEntry.DESCRIP || '').toString().toUpperCase();
+            const ejeMatch = descripFrasle.includes('DELANTERA') ? 'DELANTERA'
+                           : descripFrasle.includes('TRASERA') ? 'TRASERA' : null;
+            ejeReal = ejeMatch ? (ejeMatch === 'DELANTERA' ? 'Delantera' : 'Trasera') : null;
             alternas = aibox.pastillas.filter(r => {
               const rEst = (r.EST || '').toString().toUpperCase().trim().replace(/^[A-Z]{1,3}/, '');
-              return rEst === posEst && aiboxTieneStock(r);
+              if (rEst !== posEst || !aiboxTieneStock(r)) return false;
+              // Filtrar por eje si está disponible en la descripción
+              if (ejeMatch) {
+                const rDescrip = (r.DESCRIP || '').toString().toUpperCase();
+                return rDescrip.includes(ejeMatch);
+              }
+              return true;
             });
+            console.log('[Aibox] eje detectado:', ejeMatch, '→ alternas filtradas:', alternas.length);
           }
         }
         console.log('[Aibox] alternas encontradas:', alternas.length);
@@ -733,7 +746,7 @@ router.get('/frasle/buscar', authMiddleware, async (req, res) => {
           stock: (r.STOCK || '').toString().toUpperCase().trim(),
         }));
       }
-      return { ...v, stock, aiboxOpciones, posicionReal };
+      return { ...v, stock, aiboxOpciones, posicionReal, ejeReal };
     });
     res.json(resultado);
   } catch (err) {

@@ -684,6 +684,7 @@ router.get('/frasle/buscar', authMiddleware, async (req, res) => {
     const resultado = lista.map(v => {
       const stock = buscarCodigo(v.partNumber);
       let aiboxOpciones = [];
+      let posicionReal = null;
       if (aibox) {
         const codNorm = normCod(v.partNumber);
         // Buscar el código Fras-le en ARTPROV de Aibox para obtener el EST real
@@ -700,7 +701,6 @@ router.get('/frasle/buscar', authMiddleware, async (req, res) => {
         console.log('[Aibox] partNumber:', v.partNumber, '→ codNorm:', codNorm, '→ frasleEntry EST:', frasleEntry ? frasleEntry.EST : 'NO ENCONTRADO');
 
         let alternas = [];
-        let posicionReal = null;
         if (frasleEntry) {
           const estFrasle = (frasleEntry.EST || '').toString().toUpperCase().trim();
           const posEst = estFrasle.replace(/^[A-Z]{1,3}/, '');

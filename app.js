@@ -700,12 +700,13 @@ router.get('/frasle/buscar', authMiddleware, async (req, res) => {
         console.log('[Aibox] partNumber:', v.partNumber, '→ codNorm:', codNorm, '→ frasleEntry EST:', frasleEntry ? frasleEntry.EST : 'NO ENCONTRADO');
 
         let alternas = [];
+        let posicionReal = null;
         if (frasleEntry) {
           const estFrasle = (frasleEntry.EST || '').toString().toUpperCase().trim();
-          // EST formato: letras marca + 4 dígitos posición (ej: FR1456)
           const posEst = estFrasle.replace(/^[A-Z]{1,3}/, '');
           console.log('[Aibox] EST encontrado:', estFrasle, '→ posición:', posEst);
           if (posEst.length >= 3) {
+            posicionReal = posEst;
             alternas = aibox.pastillas.filter(r => {
               const rEst = (r.EST || '').toString().toUpperCase().trim().replace(/^[A-Z]{1,3}/, '');
               return rEst === posEst && aiboxTieneStock(r);
@@ -731,7 +732,7 @@ router.get('/frasle/buscar', authMiddleware, async (req, res) => {
           stock: (r.STOCK || '').toString().toUpperCase().trim(),
         }));
       }
-      return { ...v, stock, aiboxOpciones };
+      return { ...v, stock, aiboxOpciones, posicionReal };
     });
     res.json(resultado);
   } catch (err) {

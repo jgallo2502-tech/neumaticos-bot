@@ -356,9 +356,8 @@
       }
       for (const o of (it.aiboxOpciones || [])) {
         const stockLabel = o.stock === 'S' ? '🏪 Aibox: disponible' : '🏪 Aibox: consultar';
-        const posicion = (it.partNumber.match(/(\d{4,})/) || [])[1] || '';
+        const posicion = it.posicionReal || (it.partNumber.match(/(\d{4,})/) || [])[1] || '';
         const codigoMostrar = o.artprov || o.codigo || '';
-        // No mostramos o.descripcion porque tiene el vehículo de la entrada Aibox (puede diferir)
         list.push({
           tipo: 'aibox',
           marca: o.marca,
@@ -383,7 +382,7 @@
           if (!match) return;
         }
         const versionesTexto = versiones.map(v => (v.model || 'Versión') + ' (' + (v.desde || '?') + ' a ' + (v.hasta || '?') + ')').join(', ');
-        const posicion = (it.partNumber.match(/(\d{4,})/) || [])[1] || it.partNumber;
+        const posicion = it.posicionReal || (it.partNumber.match(/(\d{4,})/) || [])[1] || it.partNumber;
         const opciones = buildOpciones(it);
 
         html += '<div class="position-group">';

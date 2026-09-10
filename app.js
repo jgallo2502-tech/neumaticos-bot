@@ -710,6 +710,20 @@ router.get('/frasle/buscar', authMiddleware, async (req, res) => {
   }
 });
 
+function mapearDiscosAibox(rows) {
+  return rows.map(r => ({
+    marca: r.MARCA,
+    codigo: r.CODIGO,
+    est: r.EST,
+    descripcion: r.DESCRIP,
+    costo: parseFloat(r.COSTO) || 0,
+    precioUnitario: Math.round((parseFloat(r.COSTO) || 0) * MARKUP_AIBOX),
+    precioPar: Math.round((parseFloat(r.COSTO) || 0) * MARKUP_AIBOX * 2),
+    stock: (r.STOCK || '').toString().toUpperCase().trim(),
+  }));
+}
+
+// Búsqueda de discos por código Fremax o descripción libre
 router.get('/frasle/discos', authMiddleware, async (req, res) => {
   try {
     const q = (req.query.q || '').toString().trim().toUpperCase();
@@ -723,19 +737,43 @@ router.get('/frasle/discos', authMiddleware, async (req, res) => {
       const descrip = (r.DESCRIP || '').toString().toUpperCase();
       return est.includes(q) || codigo.includes(q) || descrip.includes(q);
     });
-    const resultado = matches.slice(0, 50).map(r => ({
-      marca: r.MARCA,
-      codigo: r.CODIGO,
-      est: r.EST,
-      descripcion: r.DESCRIP,
-      costo: parseFloat(r.COSTO) || 0,
-      precioUnitario: Math.round((parseFloat(r.COSTO) || 0) * MARKUP_AIBOX),
-      precioPar: Math.round((parseFloat(r.COSTO) || 0) * MARKUP_AIBOX * 2),
-      stock: (r.STOCK || '').toString().toUpperCase().trim(),
-    }));
-    res.json(resultado);
+    res.json(mapearDiscosAibox(matches.slice(0, 50)));
   } catch (err) {
     console.error('Error frasle/discos:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Búsqueda automática de discos por modelo de auto (busca en DESCRIP de Aibox)
+router.get('/frasle/discos-auto', authMiddleware, async (req, res) => {
+  try {
+    const modelo = (req.query.modelo || '').toString().trim().toUpperCase();
+    if (!modelo || modelo.length < 2) return res.json([]);
+    const aibox = await cargarAibox();
+    if (!aibox) return res.json([]);
+
+    // Tokenizar modelo: buscar filas donde DESCRIP contenga TODAS las palabras del modelo
+    const tokens = modelo.split(/\s+/).filter(t => t.length >= 2);
+    const matches = aibox.discos.filter(r => {
+      if (!aiboxTieneStock(r)) return false;
+      const descrip = (r.DESCRIP || '').toString().toUpperCase();
+      return tokens.every(t => descrip.includes(t));
+    });
+
+    // Si no matchea con todas las palabras, intentar con la más significativa (la más larga)
+    let resultado = matches;
+    if (resultado.length === 0 && tokens.length > 1) {
+      const principal = tokens.reduce((a, b) => a.length >= b.length ? a : b);
+      resultado = aibox.discos.filter(r => {
+        if (!aiboxTieneStock(r)) return false;
+        const descrip = (r.DESCRIP || '').toString().toUpperCase();
+        return descrip.includes(principal);
+      });
+    }
+
+    res.json(mapearDiscosAibox(resultado.slice(0, 80)));
+  } catch (err) {
+    console.error('Error frasle/discos-auto:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

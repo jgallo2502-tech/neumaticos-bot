@@ -201,11 +201,11 @@
       <!-- Discos de freno -->
       <div id="discos-section" class="disco-section" style="display:none">
         <h2 style="font-size:14px;margin-bottom:10px">💿 Discos de freno (opcional)</h2>
-        <div class="disco-search">
-          <input type="text" id="disco-buscar-input" placeholder="Código Fremax (ej: BD0006)" oninput="if(this.value.length>=3)buscarDiscos()">
+        <div id="discos-resultados" style="margin-top:6px"></div>
+        <div class="disco-search" style="margin-top:10px">
+          <input type="text" id="disco-buscar-input" placeholder="Buscar por código Fremax (ej: BD0006)" oninput="if(this.value.length>=3)buscarDiscos()">
           <button class="btn-buscar-disco" onclick="buscarDiscos()">🔍 Buscar</button>
         </div>
-        <div id="discos-resultados" style="margin-top:10px"></div>
       </div>
 
       <div id="btn-generar-frenos-wrap" style="display:none;margin-top:16px">
@@ -400,6 +400,7 @@
       });
       div.innerHTML = html;
       document.getElementById('discos-section').style.display = 'block';
+      buscarDiscosAuto();
     }
 
     function seleccionarOpcion(posIdx, optIdx) {
@@ -422,6 +423,42 @@
       actualizarBotonGenerarFrenos();
     }
 
+    function renderDiscosHtml(data) {
+      if (!data.length) return '<div class="sin-stock" style="padding:12px">Sin discos disponibles en Aibox para este auto.</div>';
+      let html = '';
+      data.forEach((d, i) => {
+        const sel = discosSeleccionados[d.codigo];
+        html += '<div class="opcion-card' + (sel ? ' seleccionado' : '') + '" id="disco-card-' + i + '" onclick="toggleDisco(' + i + ')">';
+        html += '<div>';
+        html += '<div class="opcion-marca">' + d.marca + ' <span style="font-size:11px;font-weight:400;color:#888">' + d.codigo + '</span></div>';
+        html += '<div class="opcion-desc">' + d.descripcion + '</div>';
+        const stockLabel = d.stock === 'S' ? '🏪 Aibox: disponible' : '🏪 Aibox: consultar';
+        html += '<div class="stock-info badge-aibox">' + stockLabel + '</div>';
+        html += '</div>';
+        html += '<div style="text-align:right">';
+        html += '<div class="producto-precio-main">' + fmt(d.precioPar) + '</div>';
+        html += '<div style="font-size:10px;color:#888;margin-top:2px">el par</div>';
+        html += '<div class="check">✓</div>';
+        html += '</div></div>';
+      });
+      return html;
+    }
+
+    async function buscarDiscosAuto() {
+      const modelo = document.getElementById('frenos-modelo').value;
+      if (!modelo) return;
+      const div = document.getElementById('discos-resultados');
+      div.innerHTML = '<div class="loading">🔍 Buscando discos para ' + modelo + '...</div>';
+      try {
+        const res = await fetch('/app/frasle/discos-auto?modelo=' + encodeURIComponent(modelo), { headers: { 'Authorization': 'Bearer ' + token } });
+        const data = await res.json();
+        window.discosIdx = data;
+        div.innerHTML = renderDiscosHtml(data);
+      } catch(e) {
+        div.innerHTML = '<div style="color:#888;font-size:13px;padding:10px">No se pudieron cargar discos automáticamente. Buscá por código abajo.</div>';
+      }
+    }
+
     async function buscarDiscos() {
       const q = document.getElementById('disco-buscar-input').value.trim();
       if (!q || q.length < 2) return;
@@ -430,25 +467,8 @@
       try {
         const res = await fetch('/app/frasle/discos?q=' + encodeURIComponent(q), { headers: { 'Authorization': 'Bearer ' + token } });
         const data = await res.json();
-        if (!data.length) { div.innerHTML = '<div class="sin-stock" style="padding:12px">Sin resultados para ese código.</div>'; return; }
-        let html = '';
-        data.forEach((d, i) => {
-          const sel = discosSeleccionados[d.codigo];
-          html += '<div class="opcion-card' + (sel ? ' seleccionado' : '') + '" id="disco-card-' + i + '" onclick="toggleDisco(' + i + ')" data-idx="' + i + '">';
-          html += '<div>';
-          html += '<div class="opcion-marca">' + d.marca + ' <span style="font-size:11px;font-weight:400;color:#888">' + d.codigo + '</span></div>';
-          html += '<div class="opcion-desc">' + d.descripcion + '</div>';
-          const stockLabel = d.stock === 'S' ? '🏪 Aibox: disponible' : '🏪 Aibox: consultar';
-          html += '<div class="stock-info badge-aibox">' + stockLabel + '</div>';
-          html += '</div>';
-          html += '<div style="text-align:right">';
-          html += '<div class="producto-precio-main">' + fmt(d.precioPar) + '</div>';
-          html += '<div style="font-size:10px;color:#888;margin-top:2px">el par</div>';
-          html += '<div class="check">✓</div>';
-          html += '</div></div>';
-        });
-        div.innerHTML = html;
         window.discosIdx = data;
+        div.innerHTML = renderDiscosHtml(data);
       } catch(e) {
         div.innerHTML = '<div style="color:#e63946;font-size:13px;padding:10px">Error: ' + e.message + '</div>';
       }
@@ -602,7 +622,7 @@
       document.getElementById('frenos-resultados').innerHTML = '';
       document.getElementById('discos-section').style.display = 'none';
       document.getElementById('discos-resultados').innerHTML = '';
-      document.getElementById('disco-buscar-input').value = '';
+      if(document.getElementById('disco-buscar-input')) document.getElementById('disco-buscar-input').value = '';
       document.getElementById('mo-precio-frenos').value = '0';
       document.getElementById('btn-generar-frenos-wrap').style.display = 'none';
       document.getElementById('frenos-generado').style.display = 'none';

@@ -606,21 +606,27 @@ router.get('/frasle/buscar', authMiddleware, async (req, res) => {
 
     const productos = await autoexpertsBuscarTodosLosProductos({ brands: marca, names: modelo });
 
-    // Extraer, por cada producto que aplica a esta marca+modelo, la versión/motor y el rango de años
-    const versiones = new Map();
+    // Agrupar por partNumber, acumulando versiones únicas
+    const porPart = new Map();
     for (const p of productos) {
       for (const v of (p.vehicles || [])) {
         if (v.brand !== marca || v.name !== modelo) continue;
-        const key = [v.model, v.startYear, v.endYear, p.partNumber].join('|');
-        if (versiones.has(key)) continue;
-        versiones.set(key, {
-          version: v.model || '', anioDesde: v.startYear, anioHasta: v.endYear,
-          partNumber: p.partNumber, descripcion: p.applicationDescription,
-        });
+        if (!porPart.has(p.partNumber)) {
+          porPart.set(p.partNumber, { partNumber: p.partNumber, descripcion: p.applicationDescription, versiones: new Set() });
+        }
+        const vKey = [v.model, v.startYear, v.endYear].join('|');
+        porPart.get(p.partNumber).versiones.add(vKey);
       }
     }
-    const lista = [...versiones.values()].sort((a, b) =>
-      (a.version || '').localeCompare(b.version || '') || (a.anioDesde || 0) - (b.anioDesde || 0));
+    // Convertir versiones Set a array de objetos
+    const lista = [...porPart.values()].map(entry => ({
+      partNumber: entry.partNumber,
+      descripcion: entry.descripcion,
+      versiones: [...entry.versiones].sort().map(k => {
+        const [model, desde, hasta] = k.split('|');
+        return { model, desde, hasta };
+      }),
+    })).sort((a, b) => a.partNumber.localeCompare(b.partNumber));
 
     if (lista.length === 0) return res.json([]);
 
@@ -661,15 +667,7 @@ router.get('/frasle/buscar', authMiddleware, async (req, res) => {
       }, null);
     };
 
-    const resultadoRaw = lista.map(v => ({ ...v, stock: buscarCodigo(v.partNumber) }));
-    // Deduplicar por version+años+partNumber para evitar repetidos de la API
-    const seen = new Set();
-    const resultado = resultadoRaw.filter(v => {
-      const k = [v.version, v.anioDesde, v.anioHasta, v.partNumber].join('|');
-      if (seen.has(k)) return false;
-      seen.add(k);
-      return true;
-    });
+    const resultado = lista.map(v => ({ ...v, stock: buscarCodigo(v.partNumber) }));
     res.json(resultado);
   } catch (err) {
     console.error('Error frasle/buscar:', err.message);

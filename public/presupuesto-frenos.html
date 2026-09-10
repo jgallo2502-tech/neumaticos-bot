@@ -309,11 +309,14 @@
       let html = '<p style="font-size:13px;color:#666;margin-bottom:10px"><strong>' + vehiculoFrenosActual + '</strong></p>';
       data.forEach((it, idx) => {
         window.frenosIdx[idx] = it;
-        const rango = (it.anioDesde || '?') + ' a ' + (it.anioHasta || '?');
+        // Armar texto de versiones colapsado
+        const versiones = it.versiones || [];
+        const versionesTexto = versiones.map(v => (v.model || 'Versión') + ' (' + (v.desde || '?') + ' a ' + (v.hasta || '?') + ')').join(', ');
         if (!it.stock) {
           html += '<div class="producto-card" style="cursor:default;opacity:0.6">';
           html += '<div>';
-          html += '<div class="producto-nombre">' + (it.version || 'Versión sin dato') + ' (' + rango + ') — Fras-le ' + it.partNumber + '</div>';
+          html += '<div class="producto-nombre">Fras-le ' + it.partNumber + '</div>';
+          html += '<div style="font-size:11px;color:#888;margin-top:3px">Versiones: ' + versionesTexto + '</div>';
           html += '<div class="stock-info no-print" style="background:#f8d7da;color:#842029">⚠️ No está cargado en tu stock</div>';
           html += '</div></div>';
           return;
@@ -325,7 +328,8 @@
         const stockStr = stockParts.length > 0 ? stockParts.join(' | ') : 'Sin stock en Victoria/Nordelta';
         html += '<div class="producto-card" id="frenos-card-' + idx + '" onclick="toggleFrenoSeleccion(' + idx + ')">';
         html += '<div>';
-        html += '<div class="producto-nombre">' + (it.version || 'Versión sin dato') + ' (' + rango + '): ' + s.descripcion + (s.codAlternativo ? ' <span style="font-size:10px;font-weight:400;color:#999;margin-left:6px">[' + s.codAlternativo + ']</span>' : '') + '</div>';
+        html += '<div class="producto-nombre">' + s.descripcion + (s.codAlternativo ? ' <span style="font-size:10px;font-weight:400;color:#999;margin-left:6px">[' + s.codAlternativo + ']</span>' : '') + '</div>';
+        html += '<div style="font-size:11px;color:#888;margin-top:3px">Versiones: ' + versionesTexto + '</div>';
         html += '<div class="stock-info no-print">📦 ' + stockStr + '</div>';
         html += '</div>';
         html += '<div style="text-align:right">';

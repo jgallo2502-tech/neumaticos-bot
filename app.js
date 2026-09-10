@@ -680,14 +680,15 @@ router.get('/frasle/buscar', authMiddleware, async (req, res) => {
           const posicion = posm[1];
           const alternas = aibox.pastillas.filter(r => {
             const est = (r.EST || '').toString().toUpperCase();
-            const marca = (r.MARCA || '').toString().toUpperCase().trim();
-            return est.slice(-posicion.length) === posicion && MARCAS_AIBOX_PASTILLA.includes(marca);
+            return est.slice(-posicion.length) === posicion && aiboxTieneStock(r);
           });
           const porMarca = {};
           for (const r of alternas) {
             const marca = (r.MARCA || '').toString().trim();
-            const stockR = parseInt(r.STOCK || 0);
-            if (!porMarca[marca] || stockR > parseInt(porMarca[marca].STOCK || 0)) porMarca[marca] = r;
+            // Priorizar S sobre C cuando hay múltiples del mismo MARCA
+            const stockActual = (porMarca[marca]?.STOCK || '').toString().toUpperCase();
+            const stockNuevo = (r.STOCK || '').toString().toUpperCase();
+            if (!porMarca[marca] || (stockNuevo === 'S' && stockActual !== 'S')) porMarca[marca] = r;
           }
           aiboxOpciones = Object.values(porMarca).map(r => ({
             marca: r.MARCA,
@@ -696,7 +697,7 @@ router.get('/frasle/buscar', authMiddleware, async (req, res) => {
             descripcion: r.DESCRIP,
             costo: parseFloat(r.COSTO) || 0,
             precio: Math.round((parseFloat(r.COSTO) || 0) * MARKUP_AIBOX),
-            stock: parseInt(r.STOCK) || 0,
+            stock: (r.STOCK || '').toString().toUpperCase().trim(),
           }));
         }
       }
@@ -716,6 +717,7 @@ router.get('/frasle/discos', authMiddleware, async (req, res) => {
     const aibox = await cargarAibox();
     if (!aibox) return res.json([]);
     const matches = aibox.discos.filter(r => {
+      if (!aiboxTieneStock(r)) return false;
       const est = (r.EST || '').toString().toUpperCase();
       const codigo = (r.CODIGO || '').toString().toUpperCase();
       const descrip = (r.DESCRIP || '').toString().toUpperCase();
@@ -729,7 +731,7 @@ router.get('/frasle/discos', authMiddleware, async (req, res) => {
       costo: parseFloat(r.COSTO) || 0,
       precioUnitario: Math.round((parseFloat(r.COSTO) || 0) * MARKUP_AIBOX),
       precioPar: Math.round((parseFloat(r.COSTO) || 0) * MARKUP_AIBOX * 2),
-      stock: parseInt(r.STOCK) || 0,
+      stock: (r.STOCK || '').toString().toUpperCase().trim(),
     }));
     res.json(resultado);
   } catch (err) {
@@ -742,8 +744,13 @@ router.get('/frasle/discos', authMiddleware, async (req, res) => {
 let aiboxCache = null;
 let aiboxCacheTs = 0;
 const AIBOX_CACHE_TTL = 30 * 60 * 1000;
-const MARCAS_AIBOX_PASTILLA = ['FRASLE A', 'STP', 'COBREQ', 'DURBLOC'];
+const MARCAS_AIBOX_OCULTAS = []; // no ocultar nada por defecto
 const MARKUP_AIBOX = 0.50 * 1.21 * 1.70;
+
+function aiboxTieneStock(r) {
+  const s = (r.STOCK || '').toString().toUpperCase().trim();
+  return s === 'S' || s === 'C';
+}
 
 async function cargarAibox() {
   const ahora = Date.now();

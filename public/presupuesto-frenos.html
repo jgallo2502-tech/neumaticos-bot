@@ -349,12 +349,13 @@
         });
       }
       for (const o of (it.aiboxOpciones || [])) {
+        const stockLabel = o.stock === 'S' ? '🏪 Aibox: disponible' : '🏪 Aibox: consultar';
         list.push({
           tipo: 'aibox',
           marca: o.marca,
           descripcion: o.descripcion,
           precio: o.precio,
-          stockLabel: '🏪 Aibox: ' + o.stock + ' u.',
+          stockLabel,
           badgeClass: 'badge-aibox',
         });
       }
@@ -437,7 +438,8 @@
           html += '<div>';
           html += '<div class="opcion-marca">' + d.marca + ' <span style="font-size:11px;font-weight:400;color:#888">' + d.codigo + '</span></div>';
           html += '<div class="opcion-desc">' + d.descripcion + '</div>';
-          html += '<div class="stock-info badge-aibox">🏪 Aibox: ' + d.stock + ' u.</div>';
+          const stockLabel = d.stock === 'S' ? '🏪 Aibox: disponible' : '🏪 Aibox: consultar';
+          html += '<div class="stock-info badge-aibox">' + stockLabel + '</div>';
           html += '</div>';
           html += '<div style="text-align:right">';
           html += '<div class="producto-precio-main">' + fmt(d.precioPar) + '</div>';

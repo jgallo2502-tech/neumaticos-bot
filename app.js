@@ -667,12 +667,113 @@ router.get('/frasle/buscar', authMiddleware, async (req, res) => {
       }, null);
     };
 
-    const resultado = lista.map(v => ({ ...v, stock: buscarCodigo(v.partNumber) }));
+    // Enriquecer con opciones Aibox
+    let aibox = null;
+    try { aibox = await cargarAibox(); } catch(e) { console.error('Aibox load error:', e.message); }
+
+    const resultado = lista.map(v => {
+      const stock = buscarCodigo(v.partNumber);
+      let aiboxOpciones = [];
+      if (aibox) {
+        const posm = v.partNumber.match(/(\d{4,})/);
+        if (posm) {
+          const posicion = posm[1];
+          const alternas = aibox.pastillas.filter(r => {
+            const est = (r.EST || '').toString().toUpperCase();
+            const marca = (r.MARCA || '').toString().toUpperCase().trim();
+            return est.slice(-posicion.length) === posicion && MARCAS_AIBOX_PASTILLA.includes(marca);
+          });
+          const porMarca = {};
+          for (const r of alternas) {
+            const marca = (r.MARCA || '').toString().trim();
+            const stockR = parseInt(r.STOCK || 0);
+            if (!porMarca[marca] || stockR > parseInt(porMarca[marca].STOCK || 0)) porMarca[marca] = r;
+          }
+          aiboxOpciones = Object.values(porMarca).map(r => ({
+            marca: r.MARCA,
+            codigo: r.CODIGO,
+            est: r.EST,
+            descripcion: r.DESCRIP,
+            costo: parseFloat(r.COSTO) || 0,
+            precio: Math.round((parseFloat(r.COSTO) || 0) * MARKUP_AIBOX),
+            stock: parseInt(r.STOCK) || 0,
+          }));
+        }
+      }
+      return { ...v, stock, aiboxOpciones };
+    });
     res.json(resultado);
   } catch (err) {
     console.error('Error frasle/buscar:', err.message);
     res.status(500).json({ error: err.message });
   }
+});
+
+router.get('/frasle/discos', authMiddleware, async (req, res) => {
+  try {
+    const q = (req.query.q || '').toString().trim().toUpperCase();
+    if (!q || q.length < 2) return res.json([]);
+    const aibox = await cargarAibox();
+    if (!aibox) return res.json([]);
+    const matches = aibox.discos.filter(r => {
+      const est = (r.EST || '').toString().toUpperCase();
+      const codigo = (r.CODIGO || '').toString().toUpperCase();
+      const descrip = (r.DESCRIP || '').toString().toUpperCase();
+      return est.includes(q) || codigo.includes(q) || descrip.includes(q);
+    });
+    const resultado = matches.slice(0, 50).map(r => ({
+      marca: r.MARCA,
+      codigo: r.CODIGO,
+      est: r.EST,
+      descripcion: r.DESCRIP,
+      costo: parseFloat(r.COSTO) || 0,
+      precioUnitario: Math.round((parseFloat(r.COSTO) || 0) * MARKUP_AIBOX),
+      precioPar: Math.round((parseFloat(r.COSTO) || 0) * MARKUP_AIBOX * 2),
+      stock: parseInt(r.STOCK) || 0,
+    }));
+    res.json(resultado);
+  } catch (err) {
+    console.error('Error frasle/discos:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Aibox cache ---
+let aiboxCache = null;
+let aiboxCacheTs = 0;
+const AIBOX_CACHE_TTL = 30 * 60 * 1000;
+const MARCAS_AIBOX_PASTILLA = ['FRASLE A', 'STP', 'COBREQ', 'DURBLOC'];
+const MARKUP_AIBOX = 0.50 * 1.21 * 1.70;
+
+async function cargarAibox() {
+  const ahora = Date.now();
+  if (aiboxCache && ahora - aiboxCacheTs < AIBOX_CACHE_TTL) return aiboxCache;
+  const os = require('os');
+  const fs = require('fs');
+  const XLSX = require('xlsx');
+  const { drive, archivos } = await listarDrive();
+  const f = encontrarEnDrive(archivos, DRIVE_KEYWORDS['aibox']);
+  if (!f) return null;
+  const ext = f.name.toLowerCase().endsWith('.xls') ? '.xls' : '.xlsx';
+  const tmpPath = path.join(os.tmpdir(), 'aibox_tmp' + ext);
+  const dest = fs.createWriteStream(tmpPath);
+  const dlRes = await drive.files.get({ fileId: f.id, alt: 'media' }, { responseType: 'stream' });
+  await new Promise((resolve, reject) => { dlRes.data.pipe(dest); dlRes.data.on('end', resolve); dlRes.data.on('error', reject); });
+  const wb = XLSX.readFile(tmpPath);
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+  try { fs.unlinkSync(tmpPath); } catch(_) {}
+  const pastillas = rows.filter(r => (r.RUBRO || '').toString().toUpperCase().includes('PASTILLA'));
+  const discos = rows.filter(r => (r.RUBRO || '').toString().toUpperCase().includes('DISCO'));
+  aiboxCache = { pastillas, discos };
+  aiboxCacheTs = ahora;
+  console.log(`Aibox cargado: ${pastillas.length} pastillas, ${discos.length} discos`);
+  return aiboxCache;
+}
+
+router.post('/frasle/invalidar-aibox', adminMiddleware, (req, res) => {
+  aiboxCache = null; aiboxCacheTs = 0;
+  res.json({ ok: true });
 });
 
 // --- Imágenes de productos ---
@@ -2459,12 +2560,14 @@ const DRIVE_KEYWORDS = {
   filtros:     { include: [['filtros'], ['filtro']], exclude: [] },
   frasle:      { include: [['frasle'], ['pastillas'], ['freno']], exclude: [] },
   nankang:     { include: [['nankang'], ['fortalein']], exclude: [] },
+  aibox:       { include: [['aibox']], exclude: [] },
 };
 
 function detectarTipoFuente(nombre) {
   const n = nombre.toLowerCase();
   if (n.includes('baterias') || n.includes('bateria')) return 'baterias';
   if (n.includes('filtros') || n.includes('filtro')) return 'filtros';
+  if (n.includes('aibox')) return 'aibox';
   if (n.includes('frasle') || n.includes('pastillas') || n.includes('freno')) return 'frasle';
   if (n.includes('celsur') || n.includes('stock_disponible') || n.includes('stock disponible')) return 'celsur';
   if (n.includes('hankook')) return 'hankook';

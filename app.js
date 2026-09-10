@@ -748,7 +748,26 @@ router.get('/frasle/buscar', authMiddleware, async (req, res) => {
       }
       return { ...v, stock, aiboxOpciones, posicionReal, ejeReal };
     });
-    res.json(resultado);
+    // Deduplicar por posicionReal (misma posición Aibox, distintos códigos Frasle)
+    const porPosicion = new Map();
+    for (const item of resultado) {
+      const key = item.posicionReal || item.partNumber;
+      if (!porPosicion.has(key)) {
+        porPosicion.set(key, { ...item });
+      } else {
+        const existing = porPosicion.get(key);
+        // Combinar versiones sin duplicados
+        const vMap = new Map(existing.versiones.map(v => [v.model + '|' + v.desde, v]));
+        item.versiones.forEach(v => vMap.set(v.model + '|' + v.desde, v));
+        existing.versiones = [...vMap.values()];
+        // Preferir el que tiene stock Gallo
+        if (!existing.stock && item.stock) {
+          existing.stock = item.stock;
+          existing.partNumber = item.partNumber;
+        }
+      }
+    }
+    res.json([...porPosicion.values()]);
   } catch (err) {
     console.error('Error frasle/buscar:', err.message);
     res.status(500).json({ error: err.message });

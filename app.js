@@ -696,7 +696,8 @@ router.get('/frasle/buscar', authMiddleware, async (req, res) => {
           if (!artRaw) return false;
           const rubrodto = (r.RUBRODTO || '').toString().toUpperCase().trim();
           const art = rubrodto && artRaw.startsWith(rubrodto) ? artRaw.slice(rubrodto.length) : artRaw;
-          return art === codNorm || art.startsWith(codNorm) || codNorm.startsWith(art);
+          if (art.length < 4) return false; // ignorar ARTPROV muy cortos
+          return art === codNorm || art.startsWith(codNorm);
         });
         console.log('[Aibox] partNumber:', v.partNumber, '→ codNorm:', codNorm, '→ frasleEntry EST:', frasleEntry ? frasleEntry.EST : 'NO ENCONTRADO');
 

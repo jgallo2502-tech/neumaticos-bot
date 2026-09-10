@@ -678,21 +678,59 @@ router.get('/frasle/buscar', authMiddleware, async (req, res) => {
         const posm = v.partNumber.match(/(\d{4,})/);
         if (posm) {
           const posicion = posm[1];
-          const alternas = aibox.pastillas.filter(r => {
+          // Marcas abreviadas para filtrar por descripción en Aibox
+          const MARCA_ALIAS = {
+            VOLKSWAGEN: ['VW', 'VOLKSWAGEN', 'VOLK'],
+            FORD: ['FORD'],
+            CHEVROLET: ['CHEVROLET', 'CHEVY'],
+            PEUGEOT: ['PEUGEOT', 'PEUG'],
+            RENAULT: ['RENAULT', 'RENO'],
+            FIAT: ['FIAT'],
+            TOYOTA: ['TOYOTA', 'TOYO'],
+            HONDA: ['HONDA'],
+            HYUNDAI: ['HYUNDAI', 'HYU'],
+            KIA: ['KIA'],
+            CITROEN: ['CITROEN', 'CITRO'],
+            BMW: ['BMW'],
+            MERCEDES: ['MERCEDES', 'BENZ', 'MB'],
+            AUDI: ['AUDI'],
+            NISSAN: ['NISSAN'],
+            MITSUBISHI: ['MITSUBISHI', 'MITS'],
+          };
+          const marcaAliases = MARCA_ALIAS[marca] || [marca.slice(0, 4)];
+          const modeloTokens = modelo.split(/\s+/).filter(t => t.length >= 2);
+
+          const coincideVehiculo = (descrip) => {
+            const d = descrip.toUpperCase();
+            const tieneModelo = modeloTokens.length > 0 && modeloTokens.some(t => d.includes(t));
+            const tieneMarca = marcaAliases.some(a => d.includes(a));
+            return tieneModelo || tieneMarca;
+          };
+
+          let alternas = aibox.pastillas.filter(r => {
             const est = (r.EST || '').toString().toUpperCase();
-            return est.slice(-posicion.length) === posicion && aiboxTieneStock(r);
+            if (est.slice(-posicion.length) !== posicion) return false;
+            if (!aiboxTieneStock(r)) return false;
+            return coincideVehiculo(r.DESCRIP || '');
           });
+          // Fallback: si no hay nada con filtro de vehículo, mostrar todas las de esa posición
+          if (alternas.length === 0) {
+            alternas = aibox.pastillas.filter(r => {
+              const est = (r.EST || '').toString().toUpperCase();
+              return est.slice(-posicion.length) === posicion && aiboxTieneStock(r);
+            });
+          }
           const porMarca = {};
           for (const r of alternas) {
-            const marca = (r.MARCA || '').toString().trim();
-            // Priorizar S sobre C cuando hay múltiples del mismo MARCA
-            const stockActual = (porMarca[marca]?.STOCK || '').toString().toUpperCase();
+            const marcaKey = (r.MARCA || '').toString().trim();
+            const stockActual = (porMarca[marcaKey]?.STOCK || '').toString().toUpperCase();
             const stockNuevo = (r.STOCK || '').toString().toUpperCase();
-            if (!porMarca[marca] || (stockNuevo === 'S' && stockActual !== 'S')) porMarca[marca] = r;
+            if (!porMarca[marcaKey] || (stockNuevo === 'S' && stockActual !== 'S')) porMarca[marcaKey] = r;
           }
           aiboxOpciones = Object.values(porMarca).map(r => ({
             marca: r.MARCA,
             codigo: r.CODIGO,
+            artprov: r.ARTPROV,
             est: r.EST,
             descripcion: r.DESCRIP,
             costo: parseFloat(r.COSTO) || 0,
@@ -744,26 +782,48 @@ router.get('/frasle/discos', authMiddleware, async (req, res) => {
   }
 });
 
-// Búsqueda automática de discos por modelo de auto (busca en DESCRIP de Aibox)
+// Búsqueda automática de discos por marca+modelo de auto (busca en DESCRIP de Aibox)
 router.get('/frasle/discos-auto', authMiddleware, async (req, res) => {
   try {
+    const marca = (req.query.marca || '').toString().trim().toUpperCase();
     const modelo = (req.query.modelo || '').toString().trim().toUpperCase();
     if (!modelo || modelo.length < 2) return res.json([]);
     const aibox = await cargarAibox();
     if (!aibox) return res.json([]);
 
-    // Tokenizar modelo: buscar filas donde DESCRIP contenga TODAS las palabras del modelo
-    const tokens = modelo.split(/\s+/).filter(t => t.length >= 2);
+    const MARCA_ALIAS = {
+      VOLKSWAGEN: ['VW', 'VOLKSWAGEN'], FORD: ['FORD'], CHEVROLET: ['CHEVROLET'],
+      PEUGEOT: ['PEUGEOT', 'PEUG'], RENAULT: ['RENAULT'], FIAT: ['FIAT'],
+      TOYOTA: ['TOYOTA'], HONDA: ['HONDA'], HYUNDAI: ['HYUNDAI', 'HYU'],
+      KIA: ['KIA'], CITROEN: ['CITROEN'], BMW: ['BMW'],
+      MERCEDES: ['MERCEDES', 'BENZ'], AUDI: ['AUDI'], NISSAN: ['NISSAN'],
+      MITSUBISHI: ['MITSUBISHI', 'MITS'],
+    };
+    const marcaAliases = MARCA_ALIAS[marca] || [marca.slice(0, 4)];
+    const modeloTokens = modelo.split(/\s+/).filter(t => t.length >= 2);
+
+    // Intento 1: modelo + marca en DESCRIP
     const matches = aibox.discos.filter(r => {
       if (!aiboxTieneStock(r)) return false;
       const descrip = (r.DESCRIP || '').toString().toUpperCase();
-      return tokens.every(t => descrip.includes(t));
+      const tieneModelo = modeloTokens.length > 0 && modeloTokens.every(t => descrip.includes(t));
+      const tieneMarca = marcaAliases.some(a => descrip.includes(a));
+      return tieneModelo && tieneMarca;
     });
 
-    // Si no matchea con todas las palabras, intentar con la más significativa (la más larga)
+    // Intento 2: solo modelo (todos los tokens)
     let resultado = matches;
-    if (resultado.length === 0 && tokens.length > 1) {
-      const principal = tokens.reduce((a, b) => a.length >= b.length ? a : b);
+    if (resultado.length === 0) {
+      resultado = aibox.discos.filter(r => {
+        if (!aiboxTieneStock(r)) return false;
+        const descrip = (r.DESCRIP || '').toString().toUpperCase();
+        return modeloTokens.every(t => descrip.includes(t));
+      });
+    }
+
+    // Intento 3: token más largo del modelo
+    if (resultado.length === 0 && modeloTokens.length > 0) {
+      const principal = modeloTokens.reduce((a, b) => a.length >= b.length ? a : b);
       resultado = aibox.discos.filter(r => {
         if (!aiboxTieneStock(r)) return false;
         const descrip = (r.DESCRIP || '').toString().toUpperCase();

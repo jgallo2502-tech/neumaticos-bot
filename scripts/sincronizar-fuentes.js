@@ -654,6 +654,10 @@ async function main() {
       precio = precioMap[codArt];
     }
 
+    if (codArt === '10320023') {
+      console.log(`  🔎 DEBUG 10320023: marca="${marca}" stockVic=${stockVic} precioGallo=${precioMap[codArt]} precio=${precio} prodExiste=${!!productos[codArt]}`);
+    }
+
     if (marca === 'MICHELIN' || marca === 'BFGOODRICH') {
       stockExpr = calsurStockPorCAI(celsurStock, codAlt);
       // Lista oficial solo si Gallo no tiene stock propio

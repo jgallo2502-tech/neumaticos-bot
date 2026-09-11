@@ -633,6 +633,15 @@ async function main() {
         console.log(`  🔧 Marca corregida fila ${fila} CodAlt:${codAlt} → ${marca}`);
       }
     }
+    // Si sigue vacía, inferir desde descripción del Inventario Gallo
+    if (!marca && codArt && productos[codArt]) {
+      const { marca: marcaParsed } = parsearDesc(productos[codArt].desc);
+      if (marcaParsed) {
+        marca = marcaParsed.toUpperCase();
+        updates.push({ range: `Bot WhatsApp!D${fila}`, values: [[marcaParsed]] });
+        console.log(`  🔧 Marca inferida desde Gallo fila ${fila} CodArt:${codArt} → ${marca}`);
+      }
+    }
 
     let stockVic = 0, stockNor = 0, stockExpr = null, precio = null;
 
@@ -687,7 +696,7 @@ async function main() {
 
     } else if (marca === 'LINGLONG') {
       const dSku = llData.skuMap[codAlt];
-      const d = dSku || (!codArt ? llData.medidaMap[medida] : null);
+      const d = dSku || llData.medidaMap[medida];
       if (d) {
         stockExpr = d.stock;
         if (precio === null) precio = d.precio || 0;

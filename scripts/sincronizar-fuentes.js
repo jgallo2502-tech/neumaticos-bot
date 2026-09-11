@@ -789,10 +789,11 @@ async function main() {
   for (const [codArt, prod] of Object.entries(productos)) {
     const stockVicN = Math.round(vicMap[codArt] || 0);
     const stockNorN = Math.round(norMap[codArt] || 0);
-    // Log detallado para debug (marcas que pueden ser nuevas)
-    if (/tracmax|giti|gtradial|sailun|triangle|sportcat|firemax/i.test(prod.desc)) {
+    // Log detallado para debug
+    if (/linglong|tracmax|giti|gtradial|sailun|triangle|sportcat|firemax/i.test(prod.desc)) {
       const enHoja = codArtsEnHoja.has(codArt);
-      console.log(`  🔍 ${prod.desc?.substring(0,50)} | CodArt:${codArt} | Vic:${stockVicN} Nor:${stockNorN} | EnHoja:${enHoja}`);
+      const medida = normalizarMedida(prod.desc);
+      console.log(`  🔍 ${prod.desc?.substring(0,60)} | CodArt:${codArt} | Vic:${stockVicN} Nor:${stockNorN} | EnHoja:${enHoja} | Medida:${medida || 'NO DETECTADA'}`);
     }
     if (codArtsEnHoja.has(codArt)) continue;
     if (stockVicN <= 0 && stockNorN <= 0) continue;

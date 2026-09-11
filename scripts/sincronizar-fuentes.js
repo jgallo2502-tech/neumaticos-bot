@@ -642,6 +642,14 @@ async function main() {
         console.log(`  🔧 Marca inferida desde Gallo fila ${fila} CodArt:${codArt} → ${marca}`);
       }
     }
+    // Si medida vacía en el sheet, completarla desde Gallo
+    if (!medida && codArt && productos[codArt]) {
+      const medidaInferida = normalizarMedida(productos[codArt].desc);
+      if (medidaInferida) {
+        updates.push({ range: `Bot WhatsApp!F${fila}`, values: [[medidaInferida]] });
+        console.log(`  🔧 Medida inferida fila ${fila} CodArt:${codArt} → ${medidaInferida}`);
+      }
+    }
 
     let stockVic = 0, stockNor = 0, stockExpr = null, precio = null;
 

@@ -802,7 +802,21 @@ app.listen(PORT, () => console.log(`Bot corriendo en puerto ${PORT}`));
     res.json({ ok: true, mensaje: 'Reporte iniciado', fecha: fecha || 'ayer' });
   });
 
+  app.get('/admin/sincronizar', (req, res) => {
+    const secret = req.query.secret || req.headers['x-secret'];
+    if (secret !== REPORTE_SECRET) return res.status(401).json({ error: 'No autorizado' });
+    res.json({ ok: true, mensaje: 'Sync iniciado — revisá los logs de Railway' });
+    const { execFile } = require('child_process');
+    const path = require('path');
+    const script = path.join(__dirname, 'scripts', 'sincronizar-fuentes.js');
+    const child = execFile('node', [script], { cwd: __dirname });
+    child.stdout.on('data', d => process.stdout.write(d));
+    child.stderr.on('data', d => process.stderr.write(d));
+    child.on('exit', code => console.log(`✅ Sync finalizado (exit ${code})`));
+  });
+
   console.log('📧 Endpoint reporte activo: GET /admin/reporte-diario?secret=...');
+  console.log('🔄 Endpoint sync activo: GET /admin/sincronizar?secret=...');
 }
 
 // Exportar funciones para uso en app.js

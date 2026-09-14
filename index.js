@@ -44,10 +44,9 @@ app.use('/reventa', reventaRouter);
 
 // --- Historial de conversaciones ---
 // Guarda mensajes por número y cierra la sesión tras 30 min de inactividad
-const sesiones = new Map(); // numero -> { mensajes: [], timer, inicio }
-const encuestasPendientes = new Set(); // numeros esperando respuesta de encuesta
-const INACTIVIDAD_ENCUESTA_MS = 25 * 60 * 1000; // 25 min de inactividad → enviar encuesta
-const INACTIVIDAD_CIERRE_MS   = 10 * 60 * 1000; // 10 min más sin respuesta → cerrar sesión
+const sesiones = new Map(); // numero -> { mensajes: [], timer, inicio, productosExtra: [], ultimaMedida: null }
+const INACTIVIDAD_SEGUIMIENTO_MS = 25 * 60 * 1000; // 25 min de inactividad → seguimiento conversacional
+const INACTIVIDAD_CIERRE_MS      = 10 * 60 * 1000; // 10 min más sin respuesta → cerrar sesión
 
 const WA_SUCURSALES = `📍 *Neumáticos Gallo — Sucursales:*\n• *Victoria:* wa.me/541137735246\n• *Nordelta (Tigre):* wa.me/541157347692\n\nUn asesor te va a atender por ahí. 😊`;
 
@@ -57,6 +56,8 @@ function registrarMensajeSesion(numero, rol, texto) {
       mensajes: [],
       timer: null,
       inicio: new Date(Date.now() - 3 * 60 * 60 * 1000),
+      productosExtra: [],
+      ultimaMedida: null,
     });
   }
   const sesion = sesiones.get(numero);
@@ -67,7 +68,7 @@ function registrarMensajeSesion(numero, rol, texto) {
 
   // Reiniciar timer de inactividad
   if (sesion.timer) clearTimeout(sesion.timer);
-  sesion.timer = setTimeout(() => enviarEncuesta(numero).catch(e => console.error('enviarEncuesta error:', e.message)), INACTIVIDAD_ENCUESTA_MS);
+  sesion.timer = setTimeout(() => enviarSeguimiento(numero).catch(e => console.error('enviarSeguimiento error:', e.message)), INACTIVIDAD_SEGUIMIENTO_MS);
 }
 
 async function guardarAlerta(numero, mensaje) {
@@ -103,20 +104,18 @@ async function guardarMensajes(lista) {
   });
 }
 
-async function enviarEncuesta(numero) {
+async function enviarSeguimiento(numero) {
   const sesion = sesiones.get(numero);
   if (!sesion || sesion.mensajes.length === 0) {
     sesiones.delete(numero);
-    encuestasPendientes.delete(numero);
     return;
   }
-  encuestasPendientes.add(numero);
-  const msg = `¡Hola! Esperamos haber podido ayudarte 😊\n\n¿Cómo fue tu experiencia?\n\n1️⃣ Me sirvió la ayuda\n2️⃣ Quiero hablar con alguien\n3️⃣ No encontré lo que buscaba`;
+  const msg = '¿Pudiste encontrar lo que buscabas? 😊 Si necesitás ayuda con algo más o querés consultar otra medida, estoy acá.';
   try {
     await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${numero}`, body: msg });
     guardarMensaje(numero, 'bot', msg).catch(() => {});
-  } catch(e) { console.error('Error enviando encuesta:', e.message); }
-  // Si no responden en 10 min, cerrar igual
+    sesion.mensajes.push({ rol: 'bot', texto: msg });
+  } catch(e) { console.error('Error enviando seguimiento:', e.message); }
   if (sesion.timer) clearTimeout(sesion.timer);
   sesion.timer = setTimeout(() => cerrarSesion(numero).catch(e => console.error('cerrarSesion error:', e.message)), INACTIVIDAD_CIERRE_MS);
 }
@@ -413,16 +412,93 @@ function preciosProducto(precio, esRev = false, marca = '') {
   return `💳 12 pagos: $${fmt(precio)}\n💳 6 cuotas (-10%): $${fmt(Math.round(precio * 0.90))} — $${fmt(p6)}/cuota\n💳 3 cuotas (-15%): $${fmt(Math.round(precio * 0.85))} — $${fmt(p3)}/cuota\n💵 Contado (-20%): $${fmt(contado)}`;
 }
 
-const PIE = `📌 *Precio unitario. Promociones por compra de 2 o más neumáticos.*
-🔧 Colocación sin cargo en nuestros locales. Válvulas, balanceo y alineación se cobran aparte.
-⚡ Stock Express disponible en 48/72 hs hábiles.
-🌐 Compra online: tienda.neumaticosgallo.com.ar (6 pagos o contado -20%, envíos a todo el país sin cargo superando mínimo de compra)
+const PIE = `📌 _Precios unitarios con IVA incluido._
 
 📍 *Suc. Victoria:* Pres. Perón 3479 — ☎️ 11-3773-5246
 📍 *Suc. Nordelta:* Agustín García 6318, Tigre — ☎️ 11-5734-7692
-🕐 Lun-Vie 8 a 19 hs | Sáb 8 a 16 hs
+🕐 Lun-Vie 8 a 19 hs | Sáb 8 a 16 hs`;
 
-🤖 _Soy un asistente automático. Para hablar con una persona contactá nuestras sucursales._`;
+// --- Prioridad de marcas para ordenar resultados (particulares) ---
+const PRIORIDAD_MARCA_BOT = {
+  'michelin': 1, 'bfgoodrich': 2, 'yokohama': 3, 'dunlop': 4, 'continental': 5,
+  'falken': 6, 'goodyear': 7, 'pirelli': 8, 'bridgestone': 9,
+  'giti': 10, 'gtradial': 11, 'hankook': 12, 'nexen': 13,
+  'tracmax': 14, 'linglong': 15, 'laufenn': 16, 'westlake': 17,
+};
+
+// --- Formatear un producto para WhatsApp (un mensaje por producto) ---
+function formatearProductoWA(p, esRev = false) {
+  const tienePropio = (p.stockVic + p.stockNor) > 0;
+  const express = !tienePropio && p.stockExpr > 0
+    ? '\n⚡ _Solo Express — entrega 48/72 hs hábiles_'
+    : '';
+  const promo = !esRev && p.promocion?.trim()
+    ? `\n🏷️ _Promo: ${p.promocion} (2+ neumáticos, presencial)_`
+    : '';
+  let msg = `🔹 *${p.descripcion}*\n${preciosProducto(p.precio, esRev, p.marca)}${promo}${express}`;
+  if (esRev) {
+    const parts = [];
+    if (p.stockVic > 0) parts.push(`Victoria: ${p.stockVic <= 7 ? p.stockVic : 'OK'}`);
+    if (p.stockNor > 0) parts.push(`Nordelta: ${p.stockNor <= 7 ? p.stockNor : 'OK'}`);
+    if (p.stockExpr > 0) parts.push(`Express: ${p.stockExpr <= 7 ? p.stockExpr : 'OK'} (48/72 hs)`);
+    if (parts.length) msg += `\n📦 _Stock: ${parts.join(' | ')}_`;
+  }
+  return msg;
+}
+
+// --- Enviar precios a particulares: greeting → 30s → productos → pie → seguimiento ---
+async function enviarPreciosParticulares(numero, productos, medidaNorm, sesionActual) {
+  if (productos.length === 0) {
+    const msg = `No encontré neumáticos *${medidaNorm}* con stock disponible.\n\nContactá nuestras sucursales:\n\n${WA_SUCURSALES}`;
+    await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${numero}`, body: msg });
+    guardarMensaje(numero, 'bot', msg).catch(() => {});
+    sesionActual.mensajes?.push({ rol: 'bot', texto: msg });
+    return;
+  }
+
+  // Ordenar: stock propio primero, luego por prioridad de marca
+  const sortPrio = arr => [...arr].sort((a, b) =>
+    (PRIORIDAD_MARCA_BOT[a.marca.toLowerCase()] || 99) - (PRIORIDAD_MARCA_BOT[b.marca.toLowerCase()] || 99)
+  );
+  const conPropio   = sortPrio(productos.filter(p => p.stockVic + p.stockNor > 0));
+  const soloExpress = sortPrio(productos.filter(p => p.stockVic + p.stockNor === 0));
+  const ordenados   = [...conPropio, ...soloExpress];
+  const mostrar     = ordenados.slice(0, 5);
+  const extra       = ordenados.slice(5);
+
+  sesionActual.productosExtra = extra;
+  sesionActual.ultimaMedida   = medidaNorm;
+
+  // Encabezado
+  const headerMsg = `🔍 Encontré estas opciones para *${medidaNorm}*:`;
+  await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${numero}`, body: headerMsg });
+  guardarMensaje(numero, 'bot', headerMsg).catch(() => {});
+
+  // Un mensaje por producto con delay
+  for (const p of mostrar) {
+    await new Promise(r => setTimeout(r, 1500));
+    const msg = formatearProductoWA(p);
+    await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${numero}`, body: msg });
+    guardarMensaje(numero, 'bot', msg).catch(() => {});
+    sesionActual.mensajes?.push({ rol: 'bot', texto: msg });
+  }
+
+  await new Promise(r => setTimeout(r, 2000));
+
+  // Pie de precio
+  await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${numero}`, body: PIE });
+  guardarMensaje(numero, 'bot', PIE).catch(() => {});
+
+  await new Promise(r => setTimeout(r, 1500));
+
+  // Pregunta de seguimiento
+  const followup = extra.length > 0
+    ? `¿Qué te parecieron los precios? 😊 Tenemos ${extra.length} opción${extra.length > 1 ? 'es' : ''} más disponibles. Si querés algo más económico o ver más opciones, avisame.`
+    : `¿Qué te parecieron los precios? 😊 Si necesitás algo más, estoy acá.`;
+  await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${numero}`, body: followup });
+  guardarMensaje(numero, 'bot', followup).catch(() => {});
+  sesionActual.mensajes?.push({ rol: 'bot', texto: followup });
+}
 
 // --- Armar lista de mensajes (uno por categoría) ---
 function armarMensajes(productos, medidaOriginal, esRev = false, sinLimite = false) {
@@ -624,30 +700,6 @@ app.post('/webhook', async (req, res) => {
     return res.sendStatus(200);
   }
 
-  // Respuesta a encuesta de satisfacción
-  if (encuestasPendientes.has(fromNumber)) {
-    encuestasPendientes.delete(fromNumber);
-    let msg;
-    if (body === '1') {
-      msg = '¡Gracias por tu respuesta! Nos alegra haber podido ayudarte. 😊 ¡Hasta la próxima!';
-    } else if (body === '2') {
-      guardarAlerta(fromNumber, 'Quiere hablar con alguien (encuesta)').catch(() => {});
-      msg = `Claro, te pasamos los contactos de nuestras sucursales:\n\n${WA_SUCURSALES}`;
-    } else if (body === '3') {
-      guardarAlerta(fromNumber, 'No encontró lo que buscaba (encuesta)').catch(() => {});
-      msg = `Lamentamos que no hayas encontrado lo que buscabas.\n\n${WA_SUCURSALES}`;
-    } else {
-      // Respondió otra cosa — dejar continuar normalmente sin borrar la sesión
-      encuestasPendientes.delete(fromNumber);
-    }
-    if (msg) {
-      await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${fromNumber}`, body: msg });
-      guardarMensaje(fromNumber, 'bot', msg).catch(() => {});
-      cerrarSesion(fromNumber);
-      return res.sendStatus(200);
-    }
-  }
-
   // Detectar pedido de atención humana
   if (/hablar|persona|alguien|humano|asesor|vendedor/i.test(lower)) {
     guardarAlerta(fromNumber, body).catch(() => {});
@@ -679,7 +731,7 @@ app.post('/webhook', async (req, res) => {
 
     // Si no hay medida en el mensaje actual, buscar la última medida consultada en la sesión
     // para manejar filtros de marca post-precio ("quiero Yokohama", "la más barata", etc.)
-    const sesionActual = sesiones.get(fromNumber) || { mensajes: [] };
+    const sesionActual = sesiones.get(fromNumber) || { mensajes: [], productosExtra: [], ultimaMedida: null };
     let medidaContexto = null;
     if (!medidaDirecta) {
       for (let i = sesionActual.mensajes.length - 1; i >= 0; i--) {
@@ -693,19 +745,49 @@ app.post('/webhook', async (req, res) => {
     const pideMarca = medidaContexto && !medidaDirecta && extraerMarca(body);
     const matchMedida = medidaDirecta ? [null, medidaDirecta] : (pideMarca ? [null, medidaContexto] : null);
 
-    // Detectar "ver más opciones" para evitar que Claude invente productos
+    // Detectar pedido de más opciones (extra guardadas en sesión)
+    const pideExtra = !esRev && (sesionActual.productosExtra || []).length > 0 &&
+      /\bs[ií]\b|m[aá]s econ[oó]m|ver\s+m[aá]s|mostr[aá]?me\s+m[aá]s|las\s+dem[aá]s|el\s+resto|todas|las\s+otras|m[aá]s\s+opciones|otras\s+opciones/i.test(body);
+    if (pideExtra) {
+      const extra = sesionActual.productosExtra || [];
+      sesionActual.productosExtra = [];
+      res.sendStatus(200);
+      registrarMensajeSesion(fromNumber, 'bot', '');
+      ;(async () => {
+        const headerMsg = 'Acá van más opciones:';
+        await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${fromNumber}`, body: headerMsg });
+        guardarMensaje(fromNumber, 'bot', headerMsg).catch(() => {});
+        for (const p of extra) {
+          await new Promise(r => setTimeout(r, 1500));
+          const msg = formatearProductoWA(p);
+          await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${fromNumber}`, body: msg });
+          guardarMensaje(fromNumber, 'bot', msg).catch(() => {});
+          sesionActual.mensajes?.push({ rol: 'bot', texto: msg });
+        }
+        await new Promise(r => setTimeout(r, 1500));
+        const closing = 'Si necesitás algo más, estoy acá. 😊';
+        await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${fromNumber}`, body: closing });
+        guardarMensaje(fromNumber, 'bot', closing).catch(() => {});
+      })().catch(e => console.error('Error enviando extra:', e.message));
+      return;
+    }
+
+    // Detectar "ver más opciones" full (sin extra guardado) — para reventa o segunda búsqueda
     const esVerMas = !medidaDirecta && medidaContexto && /ver\s+m[aá]s|mostr[aá]?me\s+m[aá]s|las\s+dem[aá]s|el\s+resto|todas\s+las\s+opciones|las\s+otras|las\s+5|las\s+dem[aá]s\s+opciones|opciones\s+restantes|quiero\s+ver\s+todas/i.test(body);
     if (esVerMas) {
       const productos = await obtenerPrecios(medidaContexto, null, false);
       registrarConsulta(fromNumber, medidaContexto, null, productos);
-      const mensajes = armarMensajes(productos, medidaContexto, esRev, true);
-      const todosBot = [...mensajes];
-      if (!esRev && productos.length > 0)
-        todosBot.push('¿Te puedo ayudar con algo más? 😊\n\n¿Cuál sucursal te queda más cómoda?\n• *Victoria* — wa.me/541137735246\n• *Nordelta* — wa.me/541157347692\n\nColocación *sin cargo* en ambas sucursales. 🔧');
-      res.sendStatus(200);
-      guardarMensajes(todosBot.map(m => [fromNumber, 'bot', m])).catch(() => {});
-      todosBot.forEach(m => sesionActual.mensajes?.push({ rol: 'bot', texto: m }));
-      enviarSecuencial(fromNumber, todosBot).catch(e => console.error('Error envío secuencial:', e.message));
+      if (esRev) {
+        const mensajes = armarMensajes(productos, medidaContexto, true, true);
+        res.sendStatus(200);
+        guardarMensajes(mensajes.map(m => [fromNumber, 'bot', m])).catch(() => {});
+        mensajes.forEach(m => sesionActual.mensajes?.push({ rol: 'bot', texto: m }));
+        enviarSecuencial(fromNumber, mensajes).catch(e => console.error('Error envío secuencial:', e.message));
+      } else {
+        res.sendStatus(200);
+        enviarPreciosParticulares(fromNumber, productos, medidaContexto, sesionActual)
+          .catch(e => console.error('Error envío precios:', e.message));
+      }
       return;
     }
 
@@ -724,14 +806,23 @@ app.post('/webhook', async (req, res) => {
         const pidioNieve = /\b(nieve|invierno|alpin|ice snow|x-ice|xice|agilis alpin|snow)\b/i.test(body.toLowerCase());
         const productos = await obtenerPrecios(medidaNorm, marca, pidioRunFlat, 4, pidioNieve);
         registrarConsulta(fromNumber, medidaNorm, marca, productos);
-        const mensajes = armarMensajes(productos, medidaNorm, esRev);
-        const todosBot = [...mensajes];
-        if (!esRev && productos.length > 0)
-          todosBot.push('¿Te puedo ayudar con algo más? 😊\n\n¿Cuál sucursal te queda más cómoda?\n• *Victoria* — wa.me/541137735246\n• *Nordelta* — wa.me/541157347692\n\nColocación *sin cargo* en ambas sucursales. 🔧');
-        res.sendStatus(200);
-        guardarMensajes(todosBot.map(m => [fromNumber, 'bot', m])).catch(() => {});
-        todosBot.forEach(m => sesionActual.mensajes?.push({ rol: 'bot', texto: m }));
-        enviarSecuencial(fromNumber, todosBot).catch(e => console.error('Error envío secuencial:', e.message));
+        if (esRev) {
+          const mensajes = armarMensajes(productos, medidaNorm, true);
+          res.sendStatus(200);
+          guardarMensajes(mensajes.map(m => [fromNumber, 'bot', m])).catch(() => {});
+          mensajes.forEach(m => sesionActual.mensajes?.push({ rol: 'bot', texto: m }));
+          enviarSecuencial(fromNumber, mensajes).catch(e => console.error('Error envío secuencial:', e.message));
+        } else {
+          const saludo = '¡Hola! Gracias por comunicarte con *Neumáticos Gallo* 😊 En seguida te pasamos los precios.';
+          await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${fromNumber}`, body: saludo });
+          guardarMensaje(fromNumber, 'bot', saludo).catch(() => {});
+          sesionActual.mensajes?.push({ rol: 'bot', texto: saludo });
+          res.sendStatus(200);
+          setTimeout(() => {
+            enviarPreciosParticulares(fromNumber, productos, medidaNorm, sesionActual)
+              .catch(e => console.error('Error envío precios:', e.message));
+          }, 30000);
+        }
         return;
       } else {
         twiml.message(respuesta);
@@ -750,14 +841,23 @@ app.post('/webhook', async (req, res) => {
       const productos = await obtenerPrecios(medidaNorm, marca, pidioRunFlat);
       console.log('Productos encontrados:', productos.length, '| Revendedor:', esRev);
       registrarConsulta(fromNumber, medidaNorm, marca, productos);
-      const mensajes = armarMensajes(productos, medidaNorm, esRev);
-      const todosBot = [...mensajes];
-      if (!esRev && productos.length > 0)
-        todosBot.push('¿Te puedo ayudar con algo más? 😊\n\n¿Cuál sucursal te queda más cómoda?\n• *Victoria* — wa.me/541137735246\n• *Nordelta* — wa.me/541157347692\n\nColocación *sin cargo* en ambas sucursales. 🔧');
-      res.sendStatus(200);
-      guardarMensajes(todosBot.map(m => [fromNumber, 'bot', m])).catch(() => {});
-      todosBot.forEach(m => sesionActual.mensajes?.push({ rol: 'bot', texto: m }));
-      enviarSecuencial(fromNumber, todosBot).catch(e => console.error('Error envío secuencial:', e.message));
+      if (esRev) {
+        const mensajes = armarMensajes(productos, medidaNorm, true);
+        res.sendStatus(200);
+        guardarMensajes(mensajes.map(m => [fromNumber, 'bot', m])).catch(() => {});
+        mensajes.forEach(m => sesionActual.mensajes?.push({ rol: 'bot', texto: m }));
+        enviarSecuencial(fromNumber, mensajes).catch(e => console.error('Error envío secuencial:', e.message));
+      } else {
+        const saludo = '¡Hola! Gracias por comunicarte con *Neumáticos Gallo* 😊 En seguida te pasamos los precios.';
+        await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${fromNumber}`, body: saludo });
+        guardarMensaje(fromNumber, 'bot', saludo).catch(() => {});
+        sesionActual.mensajes?.push({ rol: 'bot', texto: saludo });
+        res.sendStatus(200);
+        setTimeout(() => {
+          enviarPreciosParticulares(fromNumber, productos, medidaNorm, sesionActual)
+            .catch(e => console.error('Error envío precios:', e.message));
+        }, 30000);
+      }
       return;
     } else {
       twiml.message(respuesta);

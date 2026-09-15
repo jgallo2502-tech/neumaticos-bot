@@ -192,10 +192,14 @@ function parsearDesc(desc) {
 
 // ─── Leer Celsur (stock Express Michelin/BFG) ─────────────────────────────────
 function leerCelsur(wb) {
-  const rows = XLSX.utils.sheet_to_json(wb.Sheets['Hoja1'], { header: 1 });
+  const sheetName = wb.SheetNames[0];
+  console.log(`  Celsur hoja: "${sheetName}" (total hojas: ${wb.SheetNames.join(', ')})`);
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1 });
   const caiMap   = {};  // CAI → stock
   const descMap  = {};  // CAI → desc
   const marcaMap = {};  // CAI → marca (col D)
+  if (rows.length > 0) console.log(`  Celsur fila 0 (header?): ${JSON.stringify(rows[0]).substring(0, 200)}`);
+  if (rows.length > 1) console.log(`  Celsur fila 1 (datos?): ${JSON.stringify(rows[1]).substring(0, 200)}`);
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i];
     const cai   = r[0] ? r[0].toString().trim() : null;

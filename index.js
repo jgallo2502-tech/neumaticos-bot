@@ -124,7 +124,6 @@ async function cerrarSesion(numero) {
   const sesion = sesiones.get(numero);
   if (!sesion) return;
   sesiones.delete(numero);
-  encuestasPendientes.delete(numero);
   if (sesion.mensajes.length === 0) return;
   const resumen = generarResumen(sesion.mensajes, sesion.inicio);
   await guardarResumenSesion(numero, sesion.inicio, resumen);

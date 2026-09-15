@@ -30,6 +30,23 @@ const reventaRouter = require('./reventa');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+
+const GOOGLE_CSE_KEY = process.env.GOOGLE_CSE_KEY || '';
+const GOOGLE_CSE_ID  = process.env.GOOGLE_CSE_ID  || '';
+
+async function buscarImagenNeumatico(descripcion) {
+  if (!GOOGLE_CSE_KEY || !GOOGLE_CSE_ID) return null;
+  try {
+    const query = encodeURIComponent(`${descripcion} neumatico`);
+    const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_CSE_KEY}&cx=${GOOGLE_CSE_ID}&searchType=image&num=1&q=${query}&imgType=photo&safe=active`;
+    const res = await fetch(url);
+    const data = await res.json();
+    return data.items?.[0]?.link || null;
+  } catch (e) {
+    console.error('Error buscando imagen:', e.message);
+    return null;
+  }
+}
 // Número de WhatsApp del bot (sin prefijo whatsapp:)
 const BOT_PHONE = (process.env.TWILIO_WHATSAPP_NUMBER || process.env.TWILIO_PHONE || '').replace('whatsapp:', '');
 
@@ -749,6 +766,34 @@ app.post('/webhook', async (req, res) => {
     // Si el cliente pide filtrar por marca o "la más barata/cara" y hay medida en contexto
     const pideMarca = medidaContexto && !medidaDirecta && extraerMarca(body);
     const matchMedida = medidaDirecta ? [null, medidaDirecta] : (pideMarca ? [null, medidaContexto] : null);
+
+    // Detectar pedido de foto/imagen
+    const pideFoto = /foto|imagen|imagen|pic|picture|cómo\s+(es|se\s+ve)|ver\s+(el|la|los|las)\s+(neumatico|cubierta|llanta|goma)/i.test(body);
+    if (pideFoto && sesionActual.ultimaMedida && GOOGLE_CSE_KEY) {
+      res.status(200).end();
+      ;(async () => {
+        // Buscar la última descripción de producto mencionada
+        let descripcionBuscar = sesionActual.ultimaMedida;
+        // Intentar tomar la descripción del último producto mostrado
+        for (let i = sesionActual.mensajes.length - 1; i >= 0; i--) {
+          const m = sesionActual.mensajes[i];
+          if (m.rol === 'bot' && m.texto.startsWith('🔹')) {
+            const match = m.texto.match(/\*(.+?)\*/);
+            if (match) { descripcionBuscar = match[1]; break; }
+          }
+        }
+        const imgUrl = await buscarImagenNeumatico(descripcionBuscar);
+        if (imgUrl) {
+          await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${fromNumber}`, mediaUrl: [imgUrl] });
+          guardarMensaje(fromNumber, 'bot', `[foto: ${descripcionBuscar}]`).catch(() => {});
+        } else {
+          const msg = 'No encontré una foto disponible. Podés buscar el modelo en Google o pedirla directamente en la sucursal.';
+          await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${fromNumber}`, body: msg });
+          guardarMensaje(fromNumber, 'bot', msg).catch(() => {});
+        }
+      })().catch(e => console.error('Error enviando foto:', e.message));
+      return;
+    }
 
     // Detectar pedido de más opciones (extra guardadas en sesión)
     const pideExtra = !esRev && (sesionActual.productosExtra || []).length > 0 &&

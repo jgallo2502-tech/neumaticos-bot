@@ -429,7 +429,7 @@ const PRIORIDAD_MARCA_BOT = {
 function formatearProductoWA(p, esRev = false) {
   const tienePropio = (p.stockVic + p.stockNor) > 0;
   const express = !tienePropio && p.stockExpr > 0
-    ? '\n⚡ _Solo Express — entrega 48/72 hs hábiles_'
+    ? '\n⚡ _Pedido especial — retiro en sucursal en 48/72 hs hábiles_'
     : '';
   const promo = !esRev && p.promocion?.trim()
     ? `\n🏷️ _Promo: ${p.promocion} (2+ neumáticos, presencial)_`
@@ -619,8 +619,14 @@ SUCURSALES (solo si preguntan):
 - Victoria: Pres. Perón 3479 | 11-3773-5246 | Lun-Vie 8-19, Sáb 8-16
 - Nordelta: Agustín García 6318, Tigre | 11-5734-7692 | Lun-Vie 8-19, Sáb 8-16
 
+PRECIOS: Son SIEMPRE por unidad (1 neumático). Si alguien pregunta "¿es por las 4?", respondé: "No, el precio es por unidad. Para 4 neumáticos multiplicá por 4."
+
+STOCK EXPRESS: Significa que el neumático se pide especialmente al importador para ese cliente. Se retira en nuestras sucursales (o enviamos al interior si corresponde). El plazo es 48 a 72 horas hábiles desde la seña. No es envío a domicilio.
+
 SERVICIOS (si preguntan por mecánica, frenos, amortiguadores, baterías, etc.):
 También hacemos: frenos, amortiguadores, tren delantero, baterías, escobillas, antirrobos/bujes de seguridad y más. Si alguien pregunta por esto, respondé: "Sí, hacemos ese servicio! Contactá a la sucursal que te quede más cerca."
+
+FOTOS: No tenemos fotos en el chat. Si piden fotos, deciles que busquen el modelo en Google o que pasen por la sucursal a verlos.
 
 Respondé en español argentino. Sin emojis excesivos. Máximo 3 líneas por respuesta salvo que sean precios.`;
 
@@ -685,7 +691,7 @@ app.post('/webhook', async (req, res) => {
   // Mensaje sin texto (audio, imagen, video, sticker, documento)
   if (!body && numMedia === 0 && !req.body.Latitude) {
     // sticker u otro tipo sin media reportada — ignorar silenciosamente
-    return res.sendStatus(200);
+    return res.status(200).end();
   }
   if (!body && (numMedia > 0 || mediaType)) {
     let tipoMsg = 'ese archivo';
@@ -696,7 +702,7 @@ app.post('/webhook', async (req, res) => {
     await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${fromNumber}`, body: msg });
     registrarMensajeSesion(fromNumber, 'bot', msg);
     guardarMensaje(fromNumber, 'bot', msg).catch(() => {});
-    return res.sendStatus(200);
+    return res.status(200).end();
   }
 
   // Detectar pedido de atención humana
@@ -706,7 +712,7 @@ app.post('/webhook', async (req, res) => {
     await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${fromNumber}`, body: msg });
     registrarMensajeSesion(fromNumber, 'bot', msg);
     guardarMensaje(fromNumber, 'bot', msg).catch(() => {});
-    return res.sendStatus(200);
+    return res.status(200).end();
   }
 
   // Detectar consultas de servicios mecánicos → alertar y dar links directos
@@ -717,7 +723,7 @@ app.post('/webhook', async (req, res) => {
     await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${fromNumber}`, body: msg });
     registrarMensajeSesion(fromNumber, 'bot', msg);
     guardarMensaje(fromNumber, 'bot', msg).catch(() => {});
-    return res.sendStatus(200);
+    return res.status(200).end();
   }
 
   try {
@@ -730,7 +736,7 @@ app.post('/webhook', async (req, res) => {
 
     // Si no hay medida en el mensaje actual, buscar la última medida consultada en la sesión
     // para manejar filtros de marca post-precio ("quiero Yokohama", "la más barata", etc.)
-    const sesionActual = sesiones.get(fromNumber) || { mensajes: [], productosExtra: [], ultimaMedida: null };
+    const sesionActual = sesiones.get(fromNumber) || { mensajes: [], productosExtra: [], ultimaMedida: null, pendingTimeout: null };
     let medidaContexto = null;
     if (!medidaDirecta) {
       for (let i = sesionActual.mensajes.length - 1; i >= 0; i--) {
@@ -750,7 +756,7 @@ app.post('/webhook', async (req, res) => {
     if (pideExtra) {
       const extra = sesionActual.productosExtra || [];
       sesionActual.productosExtra = [];
-      res.sendStatus(200);
+      res.status(200).end();
       registrarMensajeSesion(fromNumber, 'bot', '');
       ;(async () => {
         const headerMsg = 'Acá van más opciones:';
@@ -778,12 +784,12 @@ app.post('/webhook', async (req, res) => {
       registrarConsulta(fromNumber, medidaContexto, null, productos);
       if (esRev) {
         const mensajes = armarMensajes(productos, medidaContexto, true, true);
-        res.sendStatus(200);
+        res.status(200).end();
         guardarMensajes(mensajes.map(m => [fromNumber, 'bot', m])).catch(() => {});
         mensajes.forEach(m => sesionActual.mensajes?.push({ rol: 'bot', texto: m }));
         enviarSecuencial(fromNumber, mensajes).catch(e => console.error('Error envío secuencial:', e.message));
       } else {
-        res.sendStatus(200);
+        res.status(200).end();
         enviarPreciosParticulares(fromNumber, productos, medidaContexto, sesionActual)
           .catch(e => console.error('Error envío precios:', e.message));
       }
@@ -807,17 +813,19 @@ app.post('/webhook', async (req, res) => {
         registrarConsulta(fromNumber, medidaNorm, marca, productos);
         if (esRev) {
           const mensajes = armarMensajes(productos, medidaNorm, true);
-          res.sendStatus(200);
+          res.status(200).end();
           guardarMensajes(mensajes.map(m => [fromNumber, 'bot', m])).catch(() => {});
           mensajes.forEach(m => sesionActual.mensajes?.push({ rol: 'bot', texto: m }));
           enviarSecuencial(fromNumber, mensajes).catch(e => console.error('Error envío secuencial:', e.message));
         } else {
+          if (sesionActual.pendingTimeout) { clearTimeout(sesionActual.pendingTimeout); sesionActual.pendingTimeout = null; }
           const saludo = '¡Hola! Gracias por comunicarte con *Neumáticos Gallo* 😊 En seguida te pasamos los precios.';
           await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${fromNumber}`, body: saludo });
           guardarMensaje(fromNumber, 'bot', saludo).catch(() => {});
           sesionActual.mensajes?.push({ rol: 'bot', texto: saludo });
-          res.sendStatus(200);
-          setTimeout(() => {
+          res.status(200).end();
+          sesionActual.pendingTimeout = setTimeout(() => {
+            sesionActual.pendingTimeout = null;
             enviarPreciosParticulares(fromNumber, productos, medidaNorm, sesionActual)
               .catch(e => console.error('Error envío precios:', e.message));
           }, 30000);
@@ -842,17 +850,19 @@ app.post('/webhook', async (req, res) => {
       registrarConsulta(fromNumber, medidaNorm, marca, productos);
       if (esRev) {
         const mensajes = armarMensajes(productos, medidaNorm, true);
-        res.sendStatus(200);
+        res.status(200).end();
         guardarMensajes(mensajes.map(m => [fromNumber, 'bot', m])).catch(() => {});
         mensajes.forEach(m => sesionActual.mensajes?.push({ rol: 'bot', texto: m }));
         enviarSecuencial(fromNumber, mensajes).catch(e => console.error('Error envío secuencial:', e.message));
       } else {
+        if (sesionActual.pendingTimeout) { clearTimeout(sesionActual.pendingTimeout); sesionActual.pendingTimeout = null; }
         const saludo = '¡Hola! Gracias por comunicarte con *Neumáticos Gallo* 😊 En seguida te pasamos los precios.';
         await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${fromNumber}`, body: saludo });
         guardarMensaje(fromNumber, 'bot', saludo).catch(() => {});
         sesionActual.mensajes?.push({ rol: 'bot', texto: saludo });
-        res.sendStatus(200);
-        setTimeout(() => {
+        res.status(200).end();
+        sesionActual.pendingTimeout = setTimeout(() => {
+          sesionActual.pendingTimeout = null;
           enviarPreciosParticulares(fromNumber, productos, medidaNorm, sesionActual)
             .catch(e => console.error('Error envío precios:', e.message));
         }, 30000);

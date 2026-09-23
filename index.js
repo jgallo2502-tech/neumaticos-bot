@@ -31,19 +31,33 @@ const reventaRouter = require('./reventa');
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
-const GOOGLE_CSE_KEY = process.env.GOOGLE_CSE_KEY || '';
-const GOOGLE_CSE_ID  = process.env.GOOGLE_CSE_ID  || '';
-
 async function buscarImagenNeumatico(descripcion) {
-  if (!GOOGLE_CSE_KEY || !GOOGLE_CSE_ID) return null;
   try {
-    const query = encodeURIComponent(`${descripcion} neumatico`);
-    const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_CSE_KEY}&cx=${GOOGLE_CSE_ID}&searchType=image&num=1&q=${query}&imgType=photo&safe=active`;
-    const res = await fetch(url);
-    const data = await res.json();
-    return data.items?.[0]?.link || null;
+    const q = encodeURIComponent(`${descripcion} tire neumatico`);
+    console.log(`[DDG] Buscando: ${descripcion}`);
+    const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+    // Paso 1: obtener vqd y cookies
+    const r1 = await fetch(`https://duckduckgo.com/?q=${q}&iax=images&ia=images`, {
+      headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9' }
+    });
+    const cookies = (r1.headers.get('set-cookie') || '').split(',').map(c => c.split(';')[0]).join('; ');
+    const html = await r1.text();
+    const vqdMatch = html.match(/vqd=([\d-]+)/);
+    if (!vqdMatch) { console.log('[DDG] No se encontró vqd'); return null; }
+    const vqd = vqdMatch[1];
+    console.log(`[DDG] vqd=${vqd}`);
+    // Paso 2: buscar imágenes con cookies
+    const r2 = await fetch(`https://duckduckgo.com/i.js?l=us-en&o=json&q=${q}&vqd=${vqd}&f=,,,,,&p=1`, {
+      headers: { 'User-Agent': UA, 'Referer': 'https://duckduckgo.com/', 'Cookie': cookies, 'Accept': 'application/json' }
+    });
+    const text = await r2.text();
+    console.log(`[DDG] status=${r2.status} preview=${text.substring(0, 80)}`);
+    const data = JSON.parse(text);
+    const link = data.results?.[0]?.image || null;
+    if (link) console.log(`[DDG] imagen: ${link.substring(0, 80)}`);
+    return link;
   } catch (e) {
-    console.error('Error buscando imagen:', e.message);
+    console.error('[DDG] Error buscando imagen:', e.message);
     return null;
   }
 }
@@ -75,6 +89,9 @@ function registrarMensajeSesion(numero, rol, texto) {
       inicio: new Date(Date.now() - 3 * 60 * 60 * 1000),
       productosExtra: [],
       ultimaMedida: null,
+      ultimosProductos: [],
+      esperandoFoto: false,
+      esperandoSeleccionFoto: false,
     });
   }
   const sesion = sesiones.get(numero);
@@ -145,6 +162,39 @@ async function cerrarSesion(numero) {
   const resumen = generarResumen(sesion.mensajes, sesion.inicio);
   await guardarResumenSesion(numero, sesion.inicio, resumen);
   console.log('Sesión cerrada para', numero, '| Resumen guardado');
+
+  // Programar seguimiento 4 horas después si hubo medidas consultadas
+  const medidas = new Set();
+  const marcas = new Set();
+  for (const m of sesion.mensajes) {
+    if (m.rol === 'cliente') {
+      const med = normalizarMedida(m.texto);
+      if (med) medidas.add(med);
+      const marc = extraerMarca(m.texto);
+      if (marc) marcas.add(marc);
+    }
+  }
+  if (medidas.size > 0) {
+    programarSeguimiento(numero, [...medidas], [...marcas]).catch(e =>
+      console.error('Error programando seguimiento:', e.message)
+    );
+  }
+}
+
+async function programarSeguimiento(numero, medidas, marcas) {
+  const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+  const sheets = google.sheets({ version: 'v4', auth });
+  const ahora = new Date(Date.now() - 3 * 60 * 60 * 1000); // hora Argentina
+  const programado = new Date(ahora.getTime() + 4 * 60 * 60 * 1000); // +4 horas
+  const fecha = ahora.toISOString().slice(0, 10).split('-').reverse().join('/');
+  const horaProg = programado.toISOString().slice(0, 16); // YYYY-MM-DDTHH:MM
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: process.env.GOOGLE_SHEET_ID,
+    range: 'Seguimientos!A:F',
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [[fecha, numero, medidas.join(', '), marcas.join(', '), horaProg, 'PENDIENTE']] },
+  });
+  console.log(`[seguimiento] Programado para ${numero} a las ${horaProg}`);
 }
 
 function generarResumen(mensajes, inicio) {
@@ -203,7 +253,8 @@ function normalizarMedida(texto) {
   // Sufijo LT (Light Truck) se descarta para normalizar
   const mAm = t.match(/(\d{2})\s*[xX]\s*(\d{2}\.?\d*)\s*[rR]\s*(\d{2})(?:LT)?\b/i);
   if (mAm) {
-    const ancho = parseFloat(mAm[2]).toString();
+    // Normalizar ancho: 10.50 → 10.50, 10.5 → 10.50 (siempre 2 decimales para consistencia)
+    const ancho = parseFloat(mAm[2]).toFixed(2);
     return `${mAm[1]}X${ancho}R${mAm[3]}`.toUpperCase();
   }
 
@@ -226,7 +277,7 @@ function normalizarMedida(texto) {
 // --- Extraer marca del texto ---
 const MARCAS_PREMIUM       = ['michelin', 'yokohama', 'falken', 'continental', 'dunlop', 'bfgoodrich', 'goodyear', 'pirelli', 'bridgestone'];
 const MARCAS_PRECIO_CALIDAD = ['giti', 'gtradial', 'hankook', 'nexen'];
-const MARCAS_ECONOMICAS     = ['tracmax', 'linglong', 'laufenn', 'westlake', 'windforce', 'lavigator', 'wanli', 'sunny'];
+const MARCAS_ECONOMICAS     = ['tracmax', 'linglong', 'atlas', 'laufenn', 'westlake', 'windforce', 'lavigator', 'wanli', 'sunny'];
 const TODAS_MARCAS = [...MARCAS_PREMIUM, ...MARCAS_PRECIO_CALIDAD, ...MARCAS_ECONOMICAS];
 
 // Marcas que NO se ofrecen a revendedores
@@ -250,7 +301,8 @@ function descuentoRevendedor(marca) {
   const m = marca.toLowerCase();
   if (['michelin', 'bfgoodrich'].includes(m)) return 0.35;
   if (['giti', 'gtradial'].includes(m)) return 0.33;
-  if (['yokohama', 'nexen'].includes(m)) return 0.32;
+  if (['yokohama', 'linglong', 'hankook', 'atlas'].includes(m)) return 0.32;
+  if (m === 'tracmax') return 0.45;
   return 0.28;
 }
 
@@ -482,8 +534,9 @@ async function enviarPreciosParticulares(numero, productos, medidaNorm, sesionAc
   const mostrar     = ordenados.slice(0, 5);
   const extra       = ordenados.slice(5);
 
-  sesionActual.productosExtra = extra;
-  sesionActual.ultimaMedida   = medidaNorm;
+  sesionActual.productosExtra    = extra;
+  sesionActual.ultimaMedida      = medidaNorm;
+  sesionActual.ultimosProductos  = mostrar;
 
   // Encabezado
   const headerMsg = `🔍 Encontré estas opciones para *${medidaNorm}*:`;
@@ -643,7 +696,7 @@ STOCK EXPRESS: Significa que el neumático se pide especialmente al importador p
 SERVICIOS (si preguntan por mecánica, frenos, amortiguadores, baterías, etc.):
 También hacemos: frenos, amortiguadores, tren delantero, baterías, escobillas, antirrobos/bujes de seguridad y más. Si alguien pregunta por esto, respondé: "Sí, hacemos ese servicio! Contactá a la sucursal que te quede más cerca."
 
-FOTOS: No tenemos fotos en el chat. Si piden fotos, deciles que busquen el modelo en Google o que pasen por la sucursal a verlos.
+FOTOS: Si piden fotos, deciles "¡Claro! En un momento te mando una foto." — el sistema las busca automáticamente.
 
 Respondé en español argentino. Sin emojis excesivos. Máximo 3 líneas por respuesta salvo que sean precios.`;
 
@@ -768,30 +821,111 @@ app.post('/webhook', async (req, res) => {
     const matchMedida = medidaDirecta ? [null, medidaDirecta] : (pideMarca ? [null, medidaContexto] : null);
 
     // Detectar pedido de foto/imagen
-    const pideFoto = /foto|imagen|imagen|pic|picture|cómo\s+(es|se\s+ve)|ver\s+(el|la|los|las)\s+(neumatico|cubierta|llanta|goma)/i.test(body);
-    if (pideFoto && sesionActual.ultimaMedida && GOOGLE_CSE_KEY) {
+    const pideFoto = /foto|imagen|pic|picture|cómo\s+(es|se\s+ve)|ver\s+(el|la|los|las)\s+(neumatico|cubierta|llanta|goma)/i.test(body);
+    console.log(`pideFoto=${pideFoto} esperandoFoto=${sesionActual.esperandoFoto} ultimaMedida=${sesionActual.ultimaMedida}`);
+
+    // Helper: enviar fotos de una lista de productos
+    async function enviarFotosProductos(productosAFotografiar) {
+      let enviadas = 0;
+      for (const p of productosAFotografiar.slice(0, 5)) {
+        if (enviadas > 0) await new Promise(r => setTimeout(r, 2500)); // delay entre búsquedas DDG
+        const imgUrl = await buscarImagenNeumatico(`${p.descripcion} tire`);
+        if (imgUrl) {
+          await new Promise(r => setTimeout(r, 500));
+          await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${fromNumber}`, mediaUrl: [imgUrl], body: p.descripcion });
+          guardarMensaje(fromNumber, 'bot', `[foto: ${p.descripcion}]`).catch(() => {});
+          enviadas++;
+        }
+      }
+      if (enviadas === 0) {
+        const msg = 'No encontré fotos disponibles. Podés buscarlas en Google o pedirlas en la sucursal.';
+        await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${fromNumber}`, body: msg });
+      }
+    }
+
+    // Helper: preguntar qué modelo quieren y listar opciones disponibles
+    async function preguntarModeloFoto(productos) {
+      const marcas = [...new Set(productos.map(p => p.marca))];
+      const lista = marcas.join(', ');
+      sesionActual.esperandoSeleccionFoto = true;
+      const msg = `¿De cuál modelo querés la foto? Tengo disponible: ${lista}.\n_(Escribí la marca o modelo que querés ver)_`;
+      await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${fromNumber}`, body: msg });
+      guardarMensaje(fromNumber, 'bot', msg).catch(() => {});
+    }
+
+    // Si el usuario está seleccionando qué modelo quiere ver (después de que se le preguntó)
+    if (sesionActual.esperandoSeleccionFoto) {
+      sesionActual.esperandoSeleccionFoto = false;
       res.status(200).end();
       ;(async () => {
-        // Buscar la última descripción de producto mencionada
-        let descripcionBuscar = sesionActual.ultimaMedida;
-        // Intentar tomar la descripción del último producto mostrado
-        for (let i = sesionActual.mensajes.length - 1; i >= 0; i--) {
-          const m = sesionActual.mensajes[i];
-          if (m.rol === 'bot' && m.texto.startsWith('🔹')) {
-            const match = m.texto.match(/\*(.+?)\*/);
-            if (match) { descripcionBuscar = match[1]; break; }
-          }
-        }
-        const imgUrl = await buscarImagenNeumatico(descripcionBuscar);
+        const productos = sesionActual.ultimosProductos || [];
+        const bodyLow = body.toLowerCase();
+        // Filtrar productos que coincidan con lo que escribió
+        let seleccionados = productos.filter(p =>
+          bodyLow.includes(p.marca.toLowerCase()) ||
+          p.descripcion.toLowerCase().split(' ').some(w => w.length > 3 && bodyLow.includes(w))
+        );
+        // Si no hay match específico, mandar todos
+        if (seleccionados.length === 0) seleccionados = productos;
+        console.log(`[foto selección] "${body}" → ${seleccionados.length} productos`);
+        await enviarFotosProductos(seleccionados);
+      })().catch(e => console.error('Error enviando foto selección:', e.message));
+      return;
+    }
+
+    // Si el bot había preguntado "¿de qué neumático?" (sin productos en sesión)
+    if (sesionActual.esperandoFoto) {
+      sesionActual.esperandoFoto = false;
+      res.status(200).end();
+      ;(async () => {
+        const descripcionBuscar = body.trim() || sesionActual.ultimaMedida;
+        const imgUrl = await buscarImagenNeumatico(`${descripcionBuscar} tire neumatico`);
         if (imgUrl) {
-          await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${fromNumber}`, mediaUrl: [imgUrl] });
+          await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${fromNumber}`, mediaUrl: [imgUrl], body: descripcionBuscar });
           guardarMensaje(fromNumber, 'bot', `[foto: ${descripcionBuscar}]`).catch(() => {});
         } else {
           const msg = 'No encontré una foto disponible. Podés buscar el modelo en Google o pedirla directamente en la sucursal.';
           await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${fromNumber}`, body: msg });
-          guardarMensaje(fromNumber, 'bot', msg).catch(() => {});
         }
       })().catch(e => console.error('Error enviando foto:', e.message));
+      return;
+    }
+
+    if (pideFoto) {
+      const productos = sesionActual.ultimosProductos || [];
+      if (productos.length === 0) {
+        // Sin productos en sesión: preguntar medida/modelo
+        sesionActual.esperandoFoto = true;
+        res.status(200).end();
+        const msg = '¿De qué neumático querés la foto? Pasame la medida o el modelo.';
+        await client.messages.create({ from: `whatsapp:${BOT_PHONE}`, to: `whatsapp:${fromNumber}`, body: msg });
+        guardarMensaje(fromNumber, 'bot', msg).catch(() => {});
+        return;
+      }
+
+      // Intentar detectar si el usuario ya especificó una marca en su mensaje
+      const marcaEnMensaje = extraerMarca(body);
+      const bodyLow = body.toLowerCase();
+      let productosSeleccionados = marcaEnMensaje
+        ? productos.filter(p => p.marca.toLowerCase() === marcaEnMensaje || p.descripcion.toLowerCase().includes(marcaEnMensaje))
+        : productos.filter(p =>
+            p.descripcion.toLowerCase().split(' ').some(w => w.length > 3 && bodyLow.includes(w))
+          );
+
+      if (productosSeleccionados.length > 0) {
+        // Ya especificó qué quiere → mandar directamente
+        res.status(200).end();
+        ;(async () => {
+          console.log(`[foto directa] ${productosSeleccionados.length} productos para "${body}"`);
+          await enviarFotosProductos(productosSeleccionados);
+        })().catch(e => console.error('Error enviando foto:', e.message));
+      } else {
+        // No especificó → preguntar qué modelo quieren
+        res.status(200).end();
+        ;(async () => {
+          await preguntarModeloFoto(productos);
+        })().catch(e => console.error('Error preguntando foto:', e.message));
+      }
       return;
     }
 
@@ -828,6 +962,8 @@ app.post('/webhook', async (req, res) => {
       const productos = await obtenerPrecios(medidaContexto, null, false);
       registrarConsulta(fromNumber, medidaContexto, null, productos);
       if (esRev) {
+        sesionActual.ultimaMedida = medidaContexto;
+        sesionActual.ultimosProductos = productos.filter(p => !MARCAS_EXCLUIDAS_REVENTA.includes(p.marca.toLowerCase()));
         const mensajes = armarMensajes(productos, medidaContexto, true, true);
         res.status(200).end();
         guardarMensajes(mensajes.map(m => [fromNumber, 'bot', m])).catch(() => {});
@@ -857,6 +993,8 @@ app.post('/webhook', async (req, res) => {
         const productos = await obtenerPrecios(medidaNorm, marca, pidioRunFlat, 4, pidioNieve);
         registrarConsulta(fromNumber, medidaNorm, marca, productos);
         if (esRev) {
+          sesionActual.ultimaMedida = medidaNorm;
+          sesionActual.ultimosProductos = productos.filter(p => !MARCAS_EXCLUIDAS_REVENTA.includes(p.marca.toLowerCase()));
           const mensajes = armarMensajes(productos, medidaNorm, true);
           res.status(200).end();
           guardarMensajes(mensajes.map(m => [fromNumber, 'bot', m])).catch(() => {});
@@ -894,6 +1032,8 @@ app.post('/webhook', async (req, res) => {
       console.log('Productos encontrados:', productos.length, '| Revendedor:', esRev);
       registrarConsulta(fromNumber, medidaNorm, marca, productos);
       if (esRev) {
+        sesionActual.ultimaMedida = medidaNorm;
+        sesionActual.ultimosProductos = productos.filter(p => !MARCAS_EXCLUIDAS_REVENTA.includes(p.marca.toLowerCase()));
         const mensajes = armarMensajes(productos, medidaNorm, true);
         res.status(200).end();
         guardarMensajes(mensajes.map(m => [fromNumber, 'bot', m])).catch(() => {});
@@ -971,6 +1111,102 @@ app.listen(PORT, () => console.log(`Bot corriendo en puerto ${PORT}`));
 
   console.log('📧 Endpoint reporte activo: GET /admin/reporte-diario?secret=...');
   console.log('🔄 Endpoint sync activo: GET /admin/sincronizar?secret=...');
+
+  // --- Enviar seguimientos pendientes (llamado por cron-job.org cada 30 min) ---
+  const respondio = require('./respondio');
+
+  app.get('/admin/enviar-seguimientos', async (req, res) => {
+    const secret = req.query.secret || req.headers['x-secret'];
+    if (secret !== REPORTE_SECRET) return res.status(401).json({ error: 'No autorizado' });
+
+    try {
+      const auth = new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+      const sheets = google.sheets({ version: 'v4', auth });
+
+      // Leer hoja Seguimientos (A=Fecha, B=Número, C=Medidas, D=Marcas, E=HoraProgramada, F=Estado)
+      const r = await sheets.spreadsheets.values.get({
+        spreadsheetId: process.env.GOOGLE_SHEET_ID,
+        range: 'Seguimientos!A:F',
+      });
+      const rows = r.data.values || [];
+
+      const ahoraArg = new Date(Date.now() - 3 * 60 * 60 * 1000);
+      const horaActual = ahoraArg.getHours();
+
+      // Solo enviar entre 8 y 21hs Argentina
+      if (horaActual < 8 || horaActual >= 21) {
+        return res.json({ ok: true, mensaje: 'Fuera de horario (8-21hs)', enviados: 0 });
+      }
+
+      let enviados = 0;
+      const updates = [];
+
+      for (let i = 1; i < rows.length; i++) {
+        const [fecha, numero, medidas, marcas, horaProg, estado] = rows[i];
+        if (estado !== 'PENDIENTE') continue;
+        if (!horaProg || !numero) continue;
+
+        const horaProgDate = new Date(horaProg + ':00Z'); // UTC
+        // horaProg está en hora Argentina (UTC-3), convertir a UTC para comparar
+        const horaProgUTC = new Date(horaProgDate.getTime() + 3 * 60 * 60 * 1000);
+        if (Date.now() < horaProgUTC.getTime()) continue;
+
+        // Armar mensaje personalizado
+        const medidasStr = medidas || '';
+        const marcasStr = marcas || '';
+        let msg = `Hola! 👋 Hace un rato consultaste precios de neumáticos`;
+        if (medidasStr) msg += ` *${medidasStr}*`;
+        msg += `.\n\n¿Pudiste decidirte? Si tenés alguna duda o querés reservar, estamos acá. 😊\n\n`;
+        msg += `📍 *Suc. Victoria:* 11-3773-5246\n📍 *Suc. Nordelta:* 11-5734-7692`;
+
+        let ok = false;
+
+        // 1) Enviar desde Victoria via respond.io (template aprobado por Meta)
+        try {
+          await respondio.enviarSeguimiento(numero, medidasStr || 'neumáticos');
+          ok = true;
+          console.log(`[seguimiento] respond.io ✅ ${numero}`);
+        } catch(e) {
+          console.error(`[seguimiento] respond.io ❌ ${numero}:`, e.message);
+        }
+
+        // 2) Enviar también desde bot Twilio (respaldo, y para mantener hilo con el cliente)
+        try {
+          await client.messages.create({
+            from: `whatsapp:${BOT_PHONE}`,
+            to: `whatsapp:${numero}`,
+            body: msg,
+          });
+          guardarMensaje(numero, 'bot', msg).catch(() => {});
+          ok = true;
+          console.log(`[seguimiento] Twilio ✅ ${numero}`);
+        } catch(e) {
+          console.error(`[seguimiento] Twilio ❌ ${numero}:`, e.message);
+        }
+
+        updates.push({ row: i + 1, estado: ok ? 'ENVIADO' : 'ERROR' });
+        if (ok) enviados++;
+        await new Promise(r => setTimeout(r, 1000));
+      }
+
+      // Marcar como ENVIADO/ERROR en la hoja
+      for (const u of updates) {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: process.env.GOOGLE_SHEET_ID,
+          range: `Seguimientos!F${u.row}`,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [[u.estado]] },
+        });
+      }
+
+      res.json({ ok: true, enviados, revisados: rows.length - 1 });
+    } catch(e) {
+      console.error('[seguimientos] Error:', e.message);
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  console.log('📨 Endpoint seguimientos activo: GET /admin/enviar-seguimientos?secret=...');
 }
 
 // Exportar funciones para uso en app.js

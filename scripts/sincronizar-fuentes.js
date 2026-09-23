@@ -163,7 +163,7 @@ function leerInventarioGallo(wb) {
 
 function parsearDesc(desc) {
   // Descripción típica: "N. MICHELIN 225/40 R18 92Y ZR PILOT SPORT 4S" o "N. TRACMAX 205/55 R16 91V XL X-PRIVILO ZR"
-  const marcas = ['MICHELIN','BFGOODRICH','YOKOHAMA','HANKOOK','LINGLONG','NEXEN','TRACMAX','GITI','GTRADIAL','CONTINENTAL','BRIDGESTONE','GOODYEAR','PIRELLI','DUNLOP','TOYO','NITTO','KUMHO','SUNNY','WESTLAKE','ROUTE'];
+  const marcas = ['MICHELIN','BFGOODRICH','YOKOHAMA','HANKOOK','LINGLONG','ATLAS','NEXEN','TRACMAX','GITI','GTRADIAL','CONTINENTAL','BRIDGESTONE','GOODYEAR','PIRELLI','DUNLOP','TOYO','NITTO','KUMHO','SUNNY','WESTLAKE','ROUTE'];
   const upper = desc.toUpperCase().replace(/^N\.\s*/,'').replace(/\bGT\s+RADIAL\b/g, 'GTRADIAL').replace(/\bBF\s+GOODRICH\b/g, 'BFGOODRICH');
   let marca = '';
   for (const m of marcas) {
@@ -219,17 +219,17 @@ function leerMichelinPrecios(wb) {
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1 });
     let headerIdx = -1;
     for (let i = 0; i < Math.min(10, rows.length); i++) {
-      if (rows[i].some(h => /precio mostrador gallo/i.test((h || '').toString()))) {
+      if (rows[i].some(h => /precio mostrador gallo|^pmg$/i.test((h || '').toString().trim()))) {
         headerIdx = i;
         break;
       }
     }
     if (headerIdx === -1) {
-      console.log(`  ⚠️  Sin columna "Precio Mostrador Gallo" en hoja: ${sheetName}`);
+      console.log(`  ⚠️  Sin columna "Precio Mostrador Gallo" ni "PMG" en hoja: ${sheetName}`);
       continue;
     }
     const header = rows[headerIdx];
-    const pmgCol  = header.findIndex(h => /precio mostrador gallo/i.test((h || '').toString()));
+    const pmgCol  = header.findIndex(h => /precio mostrador gallo|^pmg$/i.test((h || '').toString().trim()));
     const caiCol  = header.findIndex(h => /^cai$/i.test((h || '').toString().trim()));
     const descCol = header.findIndex(h => /^descripci[oó]n$/i.test((h || '').toString().trim()));
     const caiColFinal = caiCol !== -1 ? caiCol : 0;

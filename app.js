@@ -3253,4 +3253,35 @@ router.post('/admin/tiendanube', adminMiddleware, upload.single('csv'), async (r
   }
 });
 
+// --- Buscar foto de neumático via DuckDuckGo ---
+const fotoCache = new Map(); // descripcion → url | null
+
+router.get('/buscar-foto', authMiddleware, async (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (!q) return res.status(400).json({ error: 'Falta parámetro q' });
+  if (fotoCache.has(q)) return res.json({ url: fotoCache.get(q) });
+  try {
+    const query = encodeURIComponent(`${q} tire neumatico`);
+    const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+    const r1 = await fetch(`https://duckduckgo.com/?q=${query}&iax=images&ia=images`, {
+      headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9' }
+    });
+    const cookies = (r1.headers.get('set-cookie') || '').split(',').map(c => c.split(';')[0]).join('; ');
+    const html = await r1.text();
+    const vqdMatch = html.match(/vqd=([\d-]+)/);
+    if (!vqdMatch) { fotoCache.set(q, null); return res.json({ url: null }); }
+    const vqd = vqdMatch[1];
+    const r2 = await fetch(`https://duckduckgo.com/i.js?l=us-en&o=json&q=${query}&vqd=${vqd}&f=,,,,,&p=1`, {
+      headers: { 'User-Agent': UA, 'Referer': 'https://duckduckgo.com/', 'Cookie': cookies, 'Accept': 'application/json' }
+    });
+    const data = JSON.parse(await r2.text());
+    const url = data.results?.[0]?.image || null;
+    fotoCache.set(q, url);
+    res.json({ url });
+  } catch(e) {
+    console.error('[buscar-foto] Error:', e.message);
+    res.json({ url: null });
+  }
+});
+
 module.exports = router;

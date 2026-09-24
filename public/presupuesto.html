@@ -123,6 +123,13 @@
     .nota { font-size: 11px; color: #888; margin-top: 16px; line-height: 1.5; }
     .loading { text-align: center; padding: 30px; color: #888; }
     .sin-stock { text-align: center; padding: 30px; color: #888; background: #f9f9f9; border-radius: 10px; }
+    .btn-foto { background: none; border: 1px solid #d1d5db; color: #555; padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; margin-top: 6px; transition: all 0.15s; }
+    .btn-foto:hover { background: #f3f4f6; border-color: #9ca3af; }
+    .btn-foto.cargando { opacity: 0.6; cursor: default; }
+    #foto-modal { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.75); z-index:9999; align-items:center; justify-content:center; padding:20px; }
+    #foto-modal.visible { display:flex; }
+    #foto-modal img { max-width:90vw; max-height:80vh; border-radius:12px; box-shadow:0 8px 40px rgba(0,0,0,0.4); }
+    #foto-modal-titulo { color:white; font-size:14px; margin-top:12px; text-align:center; opacity:0.9; }
     /* Campaña */
     #campana-card table { width:100%; border-collapse:collapse; font-size:13px; }
     #campana-card th { background:#1a1a2e; color:white; padding:8px 10px; text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
@@ -152,6 +159,15 @@
       <button class="logout" onclick="logout()">Salir</button>
     </div>
   </header>
+
+  <!-- Modal de foto -->
+  <div id="foto-modal" onclick="cerrarFotoModal()">
+    <div style="display:flex;flex-direction:column;align-items:center" onclick="event.stopPropagation()">
+      <img id="foto-modal-img" src="" alt="">
+      <div id="foto-modal-titulo"></div>
+      <button onclick="cerrarFotoModal()" style="margin-top:14px;background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.4);padding:8px 20px;border-radius:8px;cursor:pointer;font-size:13px">✕ Cerrar</button>
+    </div>
+  </div>
 
   <div class="container">
 
@@ -222,13 +238,17 @@
       </div>
     </div>
 
-    <!-- Filtro Express -->
-    <div id="btn-express-wrap" style="display:none;margin-bottom:12px">
+    <!-- Filtros Express + Reventa -->
+    <div id="btn-express-wrap" style="display:none;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <button id="btn-toggle-express" onclick="toggleExpress()"
         style="background:#f59e0b;color:#fff;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">
         ⚡ Ocultar Express
       </button>
-      <span style="font-size:12px;color:#888;margin-left:10px">Los ítems en amarillo son solo Express (48/72 hs hábiles). Los verdes están en stock propio.</span>
+      <button id="btn-toggle-reventa" onclick="toggleReventa()"
+        style="background:#6b7280;color:#fff;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">
+        🏪 Mostrar Reventa
+      </button>
+      <span style="font-size:12px;color:#888">Los ítems en amarillo son solo Express. Los verdes están en stock propio.</span>
     </div>
 
     <!-- Resultados -->
@@ -573,7 +593,17 @@
 
     const MARCAS_PREMIUM        = ['michelin','yokohama','falken','continental','dunlop','bfgoodrich','goodyear','pirelli','bridgestone'];
     const MARCAS_PRECIO_CALIDAD = ['giti','gtradial','hankook','nexen'];
-    const MARCAS_ECONOMICAS     = ['tracmax','linglong','laufenn','westlake','windforce','lavigator','wanli','sunny'];
+    const MARCAS_ECONOMICAS     = ['tracmax','linglong','atlas','laufenn','westlake','windforce','lavigator','wanli','sunny'];
+    const MARCAS_EXCLUIDAS_REVENTA = ['pirelli','bridgestone'];
+
+    function descuentoReventa(marca) {
+      const m = (marca || '').toLowerCase();
+      if (['michelin','bfgoodrich'].includes(m)) return 0.35;
+      if (['giti','gtradial'].includes(m)) return 0.33;
+      if (['yokohama','linglong','hankook','atlas'].includes(m)) return 0.32;
+      if (m === 'tracmax') return 0.45;
+      return 0.28;
+    }
 
     let mostrarExpress = true;
 
@@ -584,6 +614,17 @@
       btn.style.background = mostrarExpress ? '#f59e0b' : '#9ca3af';
       document.querySelectorAll('.card-express').forEach(el => {
         el.style.display = mostrarExpress ? '' : 'none';
+      });
+    }
+
+    let mostrarReventa = false;
+    function toggleReventa() {
+      mostrarReventa = !mostrarReventa;
+      const btn = document.getElementById('btn-toggle-reventa');
+      btn.textContent = mostrarReventa ? '🏪 Ocultar Reventa' : '🏪 Mostrar Reventa';
+      btn.style.background = mostrarReventa ? '#7c3aed' : '#6b7280';
+      document.querySelectorAll('.reventa-info').forEach(el => {
+        el.style.display = mostrarReventa ? 'block' : 'none';
       });
     }
 
@@ -638,12 +679,24 @@
               html += '<div class="producto-nombre">' + p.descripcion + (p.codAlt ? ' <span style="font-size:10px;font-weight:400;color:#999;margin-left:6px">[' + p.codAlt + ']</span>' : '') + '</div>';
               html += '<div class="producto-precios">12 pagos: ' + fmt(p.precio) + ' &nbsp;|&nbsp; 6 cuotas (-10%): ' + fmt(c6) + ' &nbsp;|&nbsp; 3 cuotas (-15%): ' + fmt(c3) + '</div>';
               html += '<div class="stock-info no-print">📦 ' + stockStr + (soloExpr ? ' &nbsp;<span style="color:#b45309;font-weight:700">⚡ Solo Express</span>' : '') + '</div>';
+              html += '<button class="btn-foto no-print" onclick="verFoto(event,' + idx + ')" title="Ver foto del neumático">📷 Ver foto</button>';
               html += '</div></div>';
+              // Bloque reventa (dentro de la card, antes del precio derecho)
+              let reventaHtml = '';
+              if (!MARCAS_EXCLUIDAS_REVENTA.includes(p.marca.toLowerCase())) {
+                const desc = descuentoReventa(p.marca);
+                const precioRev = Math.round(p.precio * (1 - desc));
+                reventaHtml = '<div class="reventa-info" style="display:none;margin-top:6px;padding:6px 10px;background:#f3e8ff;border-radius:6px;font-size:12px;color:#5b21b6">'
+                  + '🏪 <strong>Reventa (' + Math.round(desc*100) + '% desc.):</strong> &nbsp;Lista: ' + fmt(p.precio) + ' &nbsp;→&nbsp; <strong>' + fmt(precioRev) + '</strong>'
+                  + '</div>';
+              }
               html += '<div style="text-align:right">';
               html += '<div class="producto-precio-main">' + fmt(contado) + '</div>';
               html += '<div style="font-size:11px;color:#888">contado</div>';
               html += '<div class="check">✓</div>';
-              html += '</div></div>';
+              html += '</div>';
+              html += reventaHtml;
+              html += '</div>';
               idx++;
             }
             html += '</div>';
@@ -657,13 +710,17 @@
       const btnIA = document.getElementById('btn-ia-wrap');
       if (btnIA) btnIA.style.display = 'block';
 
-      // Mostrar botón toggle express si hay items express
+      // Mostrar barra de botones si hay resultados
       const btnWrap = document.getElementById('btn-express-wrap');
       if (btnWrap) {
-        btnWrap.style.display = hayExpress ? 'block' : 'none';
+        btnWrap.style.display = 'flex';
         mostrarExpress = true;
+        mostrarReventa = false;
         const btn = document.getElementById('btn-toggle-express');
-        if (btn) { btn.textContent = '⚡ Ocultar Express'; btn.style.background = '#f59e0b'; }
+        if (btn) { btn.textContent = '⚡ Ocultar Express'; btn.style.background = hayExpress ? '#f59e0b' : '#9ca3af'; btn.style.display = hayExpress ? '' : 'none'; }
+        const btnRev = document.getElementById('btn-toggle-reventa');
+        if (btnRev) { btnRev.textContent = '🏪 Mostrar Reventa'; btnRev.style.background = '#6b7280'; }
+        document.querySelectorAll('.reventa-info').forEach(el => { el.style.display = 'none'; });
       }
     }
 
@@ -1116,6 +1173,41 @@
     async function enviarWhatsApp() {
       abrirWhatsApp();
     }
+
+    async function verFoto(event, idx) {
+      event.stopPropagation();
+      const p = window.productosIdx[idx];
+      if (!p) return;
+      const btn = event.currentTarget;
+      btn.textContent = '⏳ Buscando...';
+      btn.classList.add('cargando');
+      btn.disabled = true;
+      try {
+        const r = await fetch('/app/buscar-foto?q=' + encodeURIComponent(p.descripcion), {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await r.json();
+        if (data.url) {
+          document.getElementById('foto-modal-img').src = data.url;
+          document.getElementById('foto-modal-titulo').textContent = p.descripcion;
+          document.getElementById('foto-modal').classList.add('visible');
+        } else {
+          btn.textContent = '📷 Sin foto';
+        }
+      } catch(e) {
+        btn.textContent = '📷 Error';
+      } finally {
+        btn.classList.remove('cargando');
+        btn.disabled = false;
+        setTimeout(() => { if (btn.textContent !== '📷 Ver foto') btn.textContent = '📷 Ver foto'; }, 3000);
+      }
+    }
+
+    function cerrarFotoModal() {
+      document.getElementById('foto-modal').classList.remove('visible');
+      document.getElementById('foto-modal-img').src = '';
+    }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarFotoModal(); });
 
     function nuevoPresupuesto() {
       seleccionados = {};

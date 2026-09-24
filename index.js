@@ -267,9 +267,17 @@ function normalizarMedida(texto) {
   const m2 = t.match(/(\d{3})(\d{2})[rR][fF]?(\d{2})(C)?\b/i);
   if (m2) return `${m2[1]}/${m2[2]}R${m2[3]}${m2[4] ? 'C' : ''}`;
 
-  // Formato sin perfil: 195 R14 o 195 R14C (furgonetas/camionetas)
-  const m3 = t.match(/(\d{3})\s*[rR]\s*(\d{2})(C)?\b/i);
+  // Formato sin perfil métrico: 195 R14 o 195 R14C (solo anchos 1xx-3xx)
+  const m3 = t.match(/([123]\d{2})\s*[rR]\s*(\d{2})(C)?\b/i);
   if (m3) return `${m3[1]}R${m3[2]}${m3[3] ? 'C' : ''}`;
+
+  // Formato clásico con punto: 6.40R13, 7.50R16, 5.00R12
+  const mClas = t.match(/(\d)\s*[.,]\s*(\d{2})\s*[rR]\s*(\d{2})(C)?\b/i);
+  if (mClas) return `${mClas[1]}.${mClas[2]}R${mClas[3]}${mClas[4] ? 'C' : ''}`;
+
+  // Formato clásico sin punto: 640R13 → 6.40R13 (primer dígito 4-9 = clásica)
+  const mClas2 = t.match(/([4-9])(\d{2})\s*[rR]\s*(\d{2})(C)?\b/i);
+  if (mClas2) return `${mClas2[1]}.${mClas2[2]}R${mClas2[3]}${mClas2[4] ? 'C' : ''}`;
 
   return null;
 }

@@ -315,8 +315,33 @@ function generarHTML(mensajes, targetFecha, revendedores) {
 }
 
 // ── Generar HTML de recuperación de ventas (solo particulares) ───────────────
-const MSG_RECUPERACION = encodeURIComponent('Hola, soy Juan de Neumáticos Gallo, vi que estuviste consultando y te atendió el bot, queria saber si tenias alguna duda, que quizas el bot no te asesoro, y de paso que te parecio la atención del bot? Muchas Graciasss');
-const MSG_RECUPERACION_2 = encodeURIComponent('Hola! Soy Juan de Neumáticos Gallo 👋 Quería saber si pudiste conseguir lo que necesitabas, y cómo fue tu experiencia con nosotros. ¿Hay algo que creas que podemos mejorar? Tu opinión nos ayuda un montón. ¡Gracias!');
+const MSG_RECUPERACION_GENERICO = 'Hola! Soy Juan de Neumáticos Gallo 👋 Vi que consultaste con nuestro bot, ¿pudiste encontrar lo que buscabas? Si necesitás asesoramiento estoy a disposición 🙌';
+const MSG_RECUPERACION_2_GENERICO = 'Hola! Soy Juan de Neumáticos Gallo 👋 Quería saber si pudiste conseguir lo que necesitabas. Cualquier consulta avisame, ¡estamos para ayudarte!';
+
+function extraerMedida(msgs) {
+  const RE = /(\d{3}\/\d{2}\s*[rR]\s*\d{2}[Cc]?|\d\.\d{2}\s*[rR]\s*\d{2}[Cc]?|\d{3}\s*[rR]\s*\d{2}[Cc]?)/i;
+  for (const m of msgs) {
+    const match = (m.texto || '').match(RE);
+    if (match) return match[1].toUpperCase().replace(/\s+/g, '');
+  }
+  return null;
+}
+
+function msgRecuperacion(msgs, tipo) {
+  const medida = extraerMedida(msgs);
+  if (tipo === 2) {
+    return encodeURIComponent(
+      medida
+        ? `Hola! Soy Juan de Neumáticos Gallo 👋 Hace unos días consultaste por *${medida}*, ¿pudiste conseguirla? Si todavía la buscás o necesitás asesoramiento, avisame 🙌`
+        : MSG_RECUPERACION_2_GENERICO
+    );
+  }
+  return encodeURIComponent(
+    medida
+      ? `Hola! Soy Juan de Neumáticos Gallo 👋 Vi que consultaste por *${medida}*, ¿pudiste encontrar lo que buscabas? Si necesitás asesoramiento estoy a disposición 🙌`
+      : MSG_RECUPERACION_GENERICO
+  );
+}
 
 function generarHTMLRecuperacion(mensajes, targetFecha, revendedores, labelVentana, mensajes2) {
   const rev = revendedores || new Map();
@@ -401,7 +426,7 @@ function generarHTMLRecuperacion(mensajes, targetFecha, revendedores, labelVenta
     Hacé click en <strong>Enviar WhatsApp</strong> para contactarlos.
   </div>
   <div style="padding-top:4px">
-    ${numeros.map(n => bloqueCliente(n, grupos[n], MSG_RECUPERACION)).join('')}
+    ${numeros.map(n => bloqueCliente(n, grupos[n], msgRecuperacion(grupos[n], 1))).join('')}
   </div>` : ''}
   ${grupos2 && Object.keys(grupos2).length > 0 ? `
   ${seccionHeader('🔄 Segundo contacto (72hs)', 'Clientes que ya fueron contactados hace 3 días — seguimiento de cierre', '#7c3aed')}
@@ -409,7 +434,7 @@ function generarHTMLRecuperacion(mensajes, targetFecha, revendedores, labelVenta
     Preguntales si pudieron comprar y cómo fue su experiencia.
   </div>
   <div style="padding-top:4px">
-    ${Object.keys(grupos2).sort().map(n => bloqueCliente(n, grupos2[n], MSG_RECUPERACION_2)).join('')}
+    ${Object.keys(grupos2).sort().map(n => bloqueCliente(n, grupos2[n], msgRecuperacion(grupos2[n], 2))).join('')}
   </div>` : ''}
   <div style="text-align:center;padding:16px;font-size:11px;color:#999">Generado automáticamente por el bot de Neumáticos Gallo</div>
 </div></body></html>`;

@@ -380,7 +380,7 @@ async function registrarConsulta(numero, medida, marca, productos) {
 
 // --- Leer Google Sheets ---
 // Columnas: A=Cod.Art | B=Cod.Alt | C=Descripción | D=Marca | E=Modelo | F=Medida
-//           G=Victoria | H=Nordelta | I=Pedido Express 48hs | J=Precio | K=Promoción
+//           G=Victoria | H=Nordelta | I=Pedido Express 48hs | J=Precio | K=Promoción | L=PrecioReventa
 function getGoogleAuth(scopes) {
   return new google.auth.GoogleAuth({ credentials: GOOGLE_CREDS, scopes });
 }
@@ -390,7 +390,7 @@ async function obtenerPrecios(medida, marca, incluirRunFlat = false, minStock = 
   const sheets = google.sheets({ version: 'v4', auth });
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: process.env.GOOGLE_SHEET_ID,
-    range: 'Bot WhatsApp!A:K',
+    range: 'Bot WhatsApp!A:L',
   });
 
   const rows = res.data.values || [];
@@ -407,6 +407,7 @@ async function obtenerPrecios(medida, marca, incluirRunFlat = false, minStock = 
     const stockExpr  = row[8] || '0'; // I
     const rowPrecio  = row[9] || '';  // J
     const rowPromo   = row[10] || ''; // K
+    const rowPrecioRev = row[11] || ''; // L (precio reventa directo, usado para Tracmax)
 
     if (!rowMarca || !rowMedida || !rowPrecio || parseInt(rowPrecio) <= 0) continue;
 
@@ -436,6 +437,7 @@ async function obtenerPrecios(medida, marca, incluirRunFlat = false, minStock = 
         marca: rowMarca,
         medida: rowMedida,
         precio: parseInt(rowPrecio.toString().replace(/\D/g, '')),
+        precioReventa: rowPrecioRev ? parseInt(rowPrecioRev.toString().replace(/\D/g, '')) || 0 : 0,
         promocion: rowPromo,
         stockVic: sVic,
         stockNor: sNor,
@@ -476,10 +478,9 @@ function fmt(n) {
 }
 
 // --- Armar bloque de precios para un producto ---
-function preciosProducto(precio, esRev = false, marca = '') {
+function preciosProducto(precio, esRev = false, marca = '', precioReventa = 0) {
   if (esRev) {
-    const desc = descuentoRevendedor(marca);
-    const precioRev = Math.round(precio * (1 - desc));
+    const precioRev = precioReventa > 0 ? precioReventa : Math.round(precio * (1 - descuentoRevendedor(marca)));
     return `💲 Precio reventa: $${fmt(precioRev)}`;
   }
   const p6  = Math.round(precio / 6);
@@ -511,7 +512,7 @@ function formatearProductoWA(p, esRev = false) {
   const promo = !esRev && p.promocion?.trim()
     ? `\n🏷️ _Promo: ${p.promocion} (2+ neumáticos, presencial)_`
     : '';
-  let msg = `🔹 *${p.descripcion}*\n${preciosProducto(p.precio, esRev, p.marca)}${promo}${express}`;
+  let msg = `🔹 *${p.descripcion}*\n${preciosProducto(p.precio, esRev, p.marca, p.precioReventa || 0)}${promo}${express}`;
   if (esRev) {
     const parts = [];
     if (p.stockVic > 0) parts.push(`Victoria: ${p.stockVic <= 7 ? p.stockVic : 'OK'}`);
@@ -621,7 +622,7 @@ function armarMensajes(productos, medidaOriginal, esRev = false, sinLimite = fal
         ? '\n⚡ _Solo disponible vía Pedido Express — entrega en 48/72 hs hábiles (no en stock en local)_'
         : '';
       msg += `\n🔹 *${p.descripcion}*\n`;
-      msg += preciosProducto(p.precio, esRev, p.marca);
+      msg += preciosProducto(p.precio, esRev, p.marca, p.precioReventa || 0);
       if (p.promocion && !esRev && p.promocion.trim()) {
         msg += `\n🏷️ _Promo: ${p.promocion} (presencial, 2+ neumáticos)_`;
       }

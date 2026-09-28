@@ -523,6 +523,23 @@ function leerFortalein(wb) {
   return { skuMap, medidaMap };
 }
 
+// ─── Leer lista Tracmax para precio reventa ───────────────────────────────────
+// Archivo: inventario propio. Header en fila 4 (índice 4). Col 7 = Articulo, Col 15 = Precio Unitario
+function leerTracmax(wb) {
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  const medidaMap = {};
+  for (let i = 5; i < rows.length; i++) {
+    const r = rows[i];
+    const articulo = (r[7] || '').toString();
+    const precio   = parseFloat(r[15]) || 0;
+    if (!articulo || precio <= 0) continue;
+    const medida = normalizarMedida(articulo);
+    if (medida) medidaMap[medida] = precio;
+  }
+  return medidaMap;
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 async function main() {
   const auth  = await getAuth();
@@ -557,6 +574,7 @@ async function main() {
     || encontrarArchivo(archivos, ['gtradial', 'stock'])
     || encontrarArchivo(archivos, ['stock_cotiz'])
     || encontrarArchivo(archivos, ['cotiz_arg']);
+  const archivoTracmax     = encontrarArchivo(archivos, ['tracmax']);
 
   for (const [nombre, archivo] of [
     ['Inventario Gallo', archivoInventario],
@@ -585,6 +603,7 @@ async function main() {
   const wbNex      = archivoFortalein   ? await descargarXlsx(drive, archivoFortalein.id)   : null;
   const wbSJYSPre  = archivoSJYSPrecios ? await descargarXlsx(drive, archivoSJYSPrecios.id) : null;
   const wbSJYSSto  = archivoSJYSStock   ? await descargarXlsx(drive, archivoSJYSStock.id)   : null;
+  const wbTracmax  = archivoTracmax     ? await descargarXlsx(drive, archivoTracmax.id)     : null;
 
   console.log('🔄 Procesando fuentes...');
   const { vicMap, norMap, precioMap, productos } = wbInv ? leerInventarioGallo(wbInv) : { vicMap: {}, norMap: {}, precioMap: {}, productos: {} };
@@ -596,6 +615,9 @@ async function main() {
   const nankangData     = wbNex     ? leerFortalein(wbNex)      : { skuMap: {}, medidaMap: {} };
   const sjysPrecios     = wbSJYSPre ? leerSJYSPrecios(wbSJYSPre) : {};
   const sjysStock       = wbSJYSSto ? leerSJYSStock(wbSJYSSto)   : {};
+  const tracmaxPrecios  = wbTracmax  ? leerTracmax(wbTracmax)      : {};
+  if (!archivoTracmax) console.log('⚠️  Tracmax no encontrado — precios reventa Tracmax sin actualizar');
+  else console.log(`  Tracmax reventa: ${Object.keys(tracmaxPrecios).length} medidas`);
 
   console.log(`  Gallo Victoria: ${Object.keys(vicMap).length} productos`);
   console.log(`  Gallo Nordelta: ${Object.keys(norMap).length} productos`);
@@ -799,6 +821,11 @@ async function main() {
       precio !== null ? Math.round(precio) : (parseInt(r[9]) || 0),
     ];
     updates.push({ range: `Bot WhatsApp!G${fila}:J${fila}`, values: [rowData] });
+
+    // Columna L: precio reventa Tracmax (directo desde lista, sin descuento)
+    if (/tracmax/i.test(marca) && medida && tracmaxPrecios[medida]) {
+      updates.push({ range: `Bot WhatsApp!L${fila}`, values: [[Math.round(tracmaxPrecios[medida])]] });
+    }
   }
 
   // ─── Detectar productos nuevos que no están en la hoja ───────────────────────

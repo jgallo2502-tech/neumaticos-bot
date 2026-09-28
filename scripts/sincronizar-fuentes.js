@@ -524,15 +524,16 @@ function leerFortalein(wb) {
 }
 
 // ─── Leer lista Tracmax para precio reventa ───────────────────────────────────
-// Archivo: inventario propio. Header en fila 4 (índice 4). Col 7 = Articulo, Col 15 = Precio Unitario
+// Formato: fila 0=título, fila 1=vacía, fila 2=header, datos desde fila 3
+// Col 0=CodAlt, Col 1=Articulo, Col 2=Precio Unitario
 function leerTracmax(wb) {
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
   const medidaMap = {};
-  for (let i = 5; i < rows.length; i++) {
+  for (let i = 3; i < rows.length; i++) {
     const r = rows[i];
-    const articulo = (r[7] || '').toString();
-    const precio   = parseFloat(r[15]) || 0;
+    const articulo = (r[1] || '').toString();
+    const precio   = parseFloat(r[2]) || 0;
     if (!articulo || precio <= 0) continue;
     const medida = normalizarMedida(articulo);
     if (medida) medidaMap[medida] = precio;

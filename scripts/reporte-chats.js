@@ -315,8 +315,8 @@ function generarHTML(mensajes, targetFecha, revendedores) {
 }
 
 // ── Generar HTML de recuperación de ventas (solo particulares) ───────────────
-const MSG_RECUPERACION_GENERICO = 'Hola! Soy Juan de Neumáticos Gallo 👋 Vi que consultaste con nuestro bot, ¿pudiste encontrar lo que buscabas? Si necesitás asesoramiento estoy a disposición 🙌';
-const MSG_RECUPERACION_2_GENERICO = 'Hola! Soy Juan de Neumáticos Gallo 👋 Quería saber si pudiste conseguir lo que necesitabas. Cualquier consulta avisame, ¡estamos para ayudarte!';
+const MSG_RECUPERACION_GENERICO = 'Hola! Soy Juan de Neumáticos Gallo.\n\nVi que consultaste con nuestro bot, ¿pudiste encontrar lo que buscabas?\n\nSi necesitás asesoramiento avisame, estoy a disposición.';
+const MSG_RECUPERACION_2_GENERICO = 'Hola! Soy Juan de Neumáticos Gallo.\n\nQuería saber si pudiste conseguir lo que necesitabas.\n\nCualquier consulta avisame, estamos para ayudarte.';
 
 function extraerMedida(msgs) {
   const RE = /(\d{3}\/\d{2}\s*[rR]\s*\d{2}[Cc]?|\d\.\d{2}\s*[rR]\s*\d{2}[Cc]?|\d{3}\s*[rR]\s*\d{2}[Cc]?)/i;
@@ -332,13 +332,13 @@ function msgRecuperacion(msgs, tipo) {
   if (tipo === 2) {
     return encodeURIComponent(
       medida
-        ? `Hola! Soy Juan de Neumáticos Gallo 👋 Hace unos días consultaste por *${medida}*, ¿pudiste conseguirla? Si todavía la buscás o necesitás asesoramiento, avisame 🙌`
+        ? `Hola! Soy Juan de Neumáticos Gallo.\n\nHace unos días consultaste por *${medida}*, ¿pudiste conseguirla?\n\nSi todavía la buscás o necesitás asesoramiento, avisame.`
         : MSG_RECUPERACION_2_GENERICO
     );
   }
   return encodeURIComponent(
     medida
-      ? `Hola! Soy Juan de Neumáticos Gallo 👋 Vi que consultaste por *${medida}*, ¿pudiste encontrar lo que buscabas? Si necesitás asesoramiento estoy a disposición 🙌`
+      ? `Hola! Soy Juan de Neumáticos Gallo.\n\nVi que consultaste por *${medida}*, ¿pudiste encontrar lo que buscabas?\n\nSi necesitás asesoramiento estoy a disposición.`
       : MSG_RECUPERACION_GENERICO
   );
 }

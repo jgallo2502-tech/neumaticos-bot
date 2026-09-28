@@ -1586,9 +1586,9 @@ router.post('/reporte-chats/recupero', async (req, res) => {
     });
     let out = '';
     proc.stdout.on('data', d => { out += d; console.log('[recupero]', d.toString().trim()); });
-    proc.stderr.on('data', d => console.error('[recupero]', d.toString().trim()));
+    proc.stderr.on('data', d => { out += '[ERR] ' + d; console.error('[recupero]', d.toString().trim()); });
     proc.on('close', code => {
-      res.json({ ok: code === 0, log: out.slice(-500) });
+      res.json({ ok: code === 0, log: out.slice(-1000) });
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

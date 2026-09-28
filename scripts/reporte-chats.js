@@ -1,13 +1,12 @@
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const { google } = require('googleapis');
-const nodemailer = require('nodemailer');
 const fs = require('fs');
 const path = require('path');
 
-const SHEET_ID    = process.env.GOOGLE_SHEET_ID;
-const EMAIL_TO    = process.env.REPORTE_EMAIL   || 'j.gallo2502@gmail.com';
-const EMAIL_FROM  = process.env.GMAIL_USER;
-const GMAIL_PASS  = process.env.GMAIL_APP_PASS;
+const SHEET_ID      = process.env.GOOGLE_SHEET_ID;
+const EMAIL_TO      = process.env.REPORTE_EMAIL   || 'j.gallo2502@gmail.com';
+const EMAIL_FROM    = process.env.GMAIL_USER || 'j.gallo2502@gmail.com';
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const BOT_NUMBER  = (process.env.TWILIO_WHATSAPP_NUMBER || process.env.TWILIO_PHONE || '').replace('whatsapp:', '').replace('+', '');
 const TWILIO_SID  = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_TOK  = process.env.TWILIO_AUTH_TOKEN;
@@ -418,37 +417,28 @@ function generarHTMLRecuperacion(mensajes, targetFecha, revendedores, labelVenta
   return { html, numeros: numeros.length, numeros2: grupos2 ? Object.keys(grupos2).length : 0, fechaLabel, grupos };
 }
 
-// ── Enviar email via Gmail API OAuth2 (evita bloqueo SMTP de Railway) ────────
+// ── Enviar email via Resend API ───────────────────────────────────────────────
 async function enviarEmail(html, { numeros, numerosRev, numerosParticular, totalMensajes, fechaLabel }, asunto = null) {
-  const oauth2Client = new google.auth.OAuth2(
-    process.env.GMAIL_CLIENT_ID,
-    process.env.GMAIL_CLIENT_SECRET,
-    'https://developers.google.com/oauthplayground'
-  );
-  oauth2Client.setCredentials({ refresh_token: process.env.GMAIL_REFRESH_TOKEN });
-
-  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-  const from = EMAIL_FROM || 'j.gallo2502@gmail.com';
   const subject = asunto || `📊 Chats ${fechaLabel} — ${numeros} convs (🏪${numerosRev} rev · 👤${numerosParticular} part)`;
 
-  const boundary = 'boundary_gallo_' + Date.now();
-  const raw = [
-    `From: "Bot Neumáticos Gallo" <${from}>`,
-    `To: ${EMAIL_TO}`,
-    `Subject: =?UTF-8?B?${Buffer.from(subject).toString('base64')}?=`,
-    `MIME-Version: 1.0`,
-    `Content-Type: multipart/alternative; boundary="${boundary}"`,
-    ``,
-    `--${boundary}`,
-    `Content-Type: text/html; charset=UTF-8`,
-    `Content-Transfer-Encoding: base64`,
-    ``,
-    Buffer.from(html, 'utf8').toString('base64'),
-    `--${boundary}--`,
-  ].join('\r\n');
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: 'Bot Neumáticos Gallo <onboarding@resend.dev>',
+      to: [EMAIL_TO],
+      subject,
+      html,
+    }),
+  });
 
-  const encoded = Buffer.from(raw).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  await gmail.users.messages.send({ userId: 'me', requestBody: { raw: encoded } });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Resend error ${res.status}: ${err}`);
+  }
   console.log(`✅ Email enviado a ${EMAIL_TO}: ${subject.slice(0, 60)}`);
 }
 

@@ -86,19 +86,13 @@
 
     function logout() { localStorage.clear(); window.location.href = '/app/login.html'; }
 
-    const CALENDLY = localStorage.getItem('sucursal') === 'Nordelta'
-      ? 'https://calendar.app.google/j3vasgLTSBHfKnea9'
-      : 'https://calendar.app.google/mgYuYFpm823qZer18';
-
     function mensajeWA(c) {
       const nombre = (c.cliente || '').split(' ')[0];
       const nombre_fmt = nombre.charAt(0).toUpperCase() + nombre.slice(1).toLowerCase();
       const vehiculo = c.vehiculo ? ' tu ' + c.vehiculo : ' tu vehículo';
-      return '¡Hola ' + nombre_fmt + '! 👋 ¿Cómo andás?\n\n' +
-        'Desde *Neumáticos Gallo* te queremos hacer un regalo 🎁\n\n' +
-        'Como cambiaste tus neumáticos con nosotros hace 6 meses, te invitamos a venir a visitarnos *sin cargo* para hacer la rotación y alineación de' + vehiculo + ', como corresponde para mantenerlos en perfecto estado.\n\n' +
-        '📅 Para que no esperes, reservá tu turno acá:\n' + CALENDLY + '\n\n' +
-        'Te mando un abrazo y nos vemos pronto! 🤗\n_Neumáticos Gallo_';
+      return 'Hola ' + nombre_fmt + '! Como colocaste neumáticos con nosotros hace 6 meses, te invitamos a pasar sin cargo para hacer la rotación de' + vehiculo + '.\n\n' +
+        'Es un servicio que ayuda a que los neumáticos duren más y desgasten parejo.\n\n' +
+        'Cualquier consulta avisame, estamos en Neumáticos Gallo.';
     }
 
     function copiar(idx) {
@@ -129,7 +123,7 @@
       wrap.innerHTML = '<div class="loading">Cargando...</div>';
 
       try {
-        const params = new URLSearchParams({ semanas: '25', neu_min: '2', balanceo: '1', alineacion: '1' });
+        const params = new URLSearchParams({ semanas: '25', neu_min: '2', balanceo: '0', alineacion: '0' });
         const r = await fetch('/app/campana/vendedor?' + params, {
           headers: { 'Authorization': 'Bearer ' + token }
         });

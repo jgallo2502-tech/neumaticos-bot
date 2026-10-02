@@ -72,6 +72,7 @@
       <a href="/app/ordenes.html">🔩 Órdenes</a>
       <a href="/app/campana.html">📞 Campaña</a>
       <a href="/app/broadcast.html" id="nav-broadcast" style="display:none">📢 Broadcast</a>
+      <a href="/app/admin.html" id="nav-admin" style="display:none">⚙️ Admin</a>
       <span id="vendedor-nombre" style="font-size:13px;opacity:0.7"></span>
       <button class="logout" onclick="logout()">Salir</button>
     </div>
@@ -114,6 +115,7 @@
     if (localStorage.getItem('rol') === 'admin') {
       const navBroadcastEl = document.getElementById('nav-broadcast');
       if (navBroadcastEl) navBroadcastEl.style.display = 'inline';
+      const navAdminEl = document.getElementById('nav-admin'); if (navAdminEl) navAdminEl.style.display = 'inline';
       const navAdminEl = document.getElementById('nav-admin');
       if (navAdminEl) navAdminEl.style.display = 'inline';
     }

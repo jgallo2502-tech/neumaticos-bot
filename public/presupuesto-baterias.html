@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
@@ -115,6 +115,7 @@
       <a href="/app/ordenes.html">🔩 Órdenes</a>
       <a href="/app/campana.html">📞 Campaña</a>
       <a href="/app/broadcast.html" id="nav-broadcast" style="display:none">📢 Broadcast</a>
+      <a href="/app/admin.html" id="nav-admin" style="display:none">⚙️ Admin</a>
       <span id="vendedor-nombre" style="font-size:13px;opacity:0.7"></span>
       <button class="logout" onclick="logout()">Salir</button>
     </div>
@@ -201,6 +202,7 @@
     const token = localStorage.getItem('token');
     if (!token) window.location.href = '/app/login.html';
     document.getElementById('vendedor-nombre').textContent = localStorage.getItem('vendedor') || '';
+    if (localStorage.getItem('rol') === 'admin') { document.getElementById('nav-broadcast').style.display = 'inline'; document.getElementById('nav-admin').style.display = 'inline'; }
 
     function logout() {
       localStorage.clear();
@@ -474,3 +476,4 @@
   </script>
 </body>
 </html>
+

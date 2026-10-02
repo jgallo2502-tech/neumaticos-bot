@@ -579,11 +579,12 @@ function leerGlobalTyre(wbStock, wbPrecios) {
   }
 
   console.log(`  GlobalTyre — precios: ${Object.keys(pmgMap).length} | stock: ${Object.keys(codMap).length}`);
-  // Merge: código como clave, precio = precioGallo del stock (ya con descuento Gallo)
+  // Merge: precio = PMG de la lista de precios (precio mostrador oficial)
   const result = {};
   for (const [cod, entry] of Object.entries(codMap)) {
-    const precio = entry.precioGallo > 0 ? entry.precioGallo : (pmgMap[cod]?.pmg || 0);
-    result[cod] = { desc: entry.desc, stock: entry.stock, precio, marca: entry.marca };
+    const precio = (pmgMap[cod]?.pmg || 0) > 0 ? pmgMap[cod].pmg : entry.precioGallo;
+    const desc = pmgMap[cod]?.desc || entry.desc;
+    result[cod] = { desc, stock: entry.stock, precio, marca: entry.marca };
   }
   return result;
 }

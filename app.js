@@ -2727,8 +2727,10 @@ const DRIVE_KEYWORDS = {
   baterias:    { include: [['baterias'], ['bateria']], exclude: [] },
   filtros:     { include: [['filtros'], ['filtro']], exclude: [] },
   frasle:      { include: [['frasle'], ['pastillas'], ['freno']], exclude: [] },
-  nankang:     { include: [['nankang'], ['fortalein']], exclude: [] },
-  aibox:       { include: [['aibox']], exclude: [] },
+  nankang:       { include: [['nankang'], ['fortalein']], exclude: [] },
+  aibox:         { include: [['aibox']], exclude: [] },
+  globalprecios: { include: [['global', 'precio'], ['conti', 'xbri', 'precio'], ['calzetta', 'precio']], exclude: [] },
+  globalstock:   { include: [['gallo', 'stock', 'conti'], ['global', 'stock'], ['calzetta', 'stock'], ['stock', 'conti', 'xbri']], exclude: [['inv', 'gallo']] },
 };
 
 function detectarTipoFuente(nombre) {
@@ -2745,6 +2747,8 @@ function detectarTipoFuente(nombre) {
   if (n.includes('michelin') || n.includes('bfgoodrich')) return 'michelin';
   if ((n.includes('giti') || n.includes('gtradial')) && (n.includes('pmg') || n.includes('precio') || n.includes('lista'))) return 'sjysprecios';
   if (n.includes('stock_cotiz') || n.includes('cotiz_arg') || ((n.includes('giti') || n.includes('gtradial')) && n.includes('stock'))) return 'sjysstock';
+  if ((n.includes('global') || n.includes('calzetta')) && (n.includes('precio') || n.includes('lista'))) return 'globalprecios';
+  if ((n.includes('conti') || n.includes('xbri')) && n.includes('stock') && !n.includes('inv')) return 'globalstock';
   if (n.includes('gallo') || n.includes('inv ') || n.startsWith('inv')) return 'gallo';
   return null;
 }

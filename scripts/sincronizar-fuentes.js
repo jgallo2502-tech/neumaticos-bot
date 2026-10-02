@@ -55,6 +55,9 @@ function normalizarMedida(texto) {
   // Formato clásico sin punto: 640R13 → 6.40R13
   const mClas2 = t.match(/([4-9])(\d{2})\s*(?:[A-Z]\s*)?[rR]\s*(\d{2})(C)?\b/i);
   if (mClas2) return `${mClas2[1]}.${mClas2[2]}R${mClas2[3]}${mClas2[4] ? 'C' : ''}`;
+  // Formato Michelin TRX: 220/55 VR390, 240/55 VR415 (diámetro en mm)
+  const mTrx = t.match(/(\d{3})\s*\/\s*(\d{2})\s*(?:[A-Z]+)?[rR](\d{3})\b/i);
+  if (mTrx) return `${mTrx[1]}/${mTrx[2]}R${mTrx[3]}`;
   return null;
 }
 

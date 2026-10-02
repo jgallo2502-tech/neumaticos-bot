@@ -172,7 +172,7 @@ function leerInventarioGallo(wb) {
 
 function parsearDesc(desc) {
   // Descripción típica: "N. MICHELIN 225/40 R18 92Y ZR PILOT SPORT 4S" o "N. TRACMAX 205/55 R16 91V XL X-PRIVILO ZR"
-  const marcas = ['MICHELIN','BFGOODRICH','YOKOHAMA','HANKOOK','LINGLONG','ATLAS','NEXEN','TRACMAX','GITI','GTRADIAL','CONTINENTAL','BRIDGESTONE','GOODYEAR','PIRELLI','DUNLOP','TOYO','NITTO','KUMHO','SUNNY','WESTLAKE','ROUTE'];
+  const marcas = ['MICHELIN','BFGOODRICH','YOKOHAMA','HANKOOK','LINGLONG','ATLAS','NEXEN','TRACMAX','GITI','GTRADIAL','CONTINENTAL','XBRI','BRIDGESTONE','GOODYEAR','PIRELLI','DUNLOP','TOYO','NITTO','KUMHO','SUNNY','WESTLAKE','ROUTE'];
   const upper = desc.toUpperCase().replace(/^N\.\s*/,'').replace(/\bGT\s+RADIAL\b/g, 'GTRADIAL').replace(/\bBF\s+GOODRICH\b/g, 'BFGOODRICH');
   let marca = '';
   for (const m of marcas) {
@@ -544,6 +544,50 @@ function leerTracmax(wb) {
   return medidaMap;
 }
 
+// ─── Leer Global Tyre / Calzetta (Continental + XBri) ────────────────────────
+// Stock: col 0=Código, col 1=Desc, col 2=Stk Dep, col 4=Precio GALLO (con IVA)
+// Precios: col 0=Código, col 1=Desc, col 2=PMG
+// Match por Código. Precio base = col 4 del stock (precio GALLO), reventa -30%
+function leerGlobalTyre(wbStock, wbPrecios) {
+  // Leer precios (PMG) por código
+  const pmgMap = {};
+  for (const shName of wbPrecios.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json(wbPrecios.Sheets[shName], { header: 1, defval: '' });
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      const cod  = (r[0] || '').toString().trim();
+      const pmg  = parseFloat(r[2]) || 0;
+      const desc = (r[1] || '').toString().trim();
+      if (cod && pmg > 0) pmgMap[cod] = { pmg, desc };
+    }
+  }
+
+  // Leer stock por código (ambas hojas: CONTI y XBRI)
+  const codMap = {}; // cod → { desc, stock, precioGallo, marca }
+  for (const shName of wbStock.SheetNames) {
+    const marcaHoja = /xbri/i.test(shName) ? 'XBRI' : 'CONTINENTAL';
+    const rows = XLSX.utils.sheet_to_json(wbStock.Sheets[shName], { header: 1, defval: '' });
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      const cod        = (r[0] || '').toString().trim();
+      const desc       = (r[1] || '').toString().replace(/\xa0/g, ' ').trim();
+      const stock      = parseFloat(r[2]) || 0;
+      const precioGallo = parseFloat(r[4]) || 0;
+      if (!cod || !desc) continue;
+      codMap[cod] = { desc, stock, precioGallo, marca: marcaHoja };
+    }
+  }
+
+  console.log(`  GlobalTyre — precios: ${Object.keys(pmgMap).length} | stock: ${Object.keys(codMap).length}`);
+  // Merge: código como clave, precio = precioGallo del stock (ya con descuento Gallo)
+  const result = {};
+  for (const [cod, entry] of Object.entries(codMap)) {
+    const precio = entry.precioGallo > 0 ? entry.precioGallo : (pmgMap[cod]?.pmg || 0);
+    result[cod] = { desc: entry.desc, stock: entry.stock, precio, marca: entry.marca };
+  }
+  return result;
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 async function main() {
   const auth  = await getAuth();
@@ -578,7 +622,14 @@ async function main() {
     || encontrarArchivo(archivos, ['gtradial', 'stock'])
     || encontrarArchivo(archivos, ['stock_cotiz'])
     || encontrarArchivo(archivos, ['cotiz_arg']);
-  const archivoTracmax     = encontrarArchivo(archivos, ['tracmax']);
+  const archivoTracmax        = encontrarArchivo(archivos, ['tracmax']);
+  const archivoGlobalPrecios  = encontrarArchivo(archivos, ['global', 'precio'])
+    || encontrarArchivo(archivos, ['conti', 'xbri', 'precio'])
+    || encontrarArchivo(archivos, ['calzetta', 'precio']);
+  const archivoGlobalStock    = encontrarArchivo(archivos, ['gallo', 'stock', 'conti'])
+    || encontrarArchivo(archivos, ['global', 'stock'])
+    || encontrarArchivo(archivos, ['calzetta', 'stock'])
+    || encontrarArchivo(archivos, ['stock', 'conti', 'xbri']);
 
   for (const [nombre, archivo] of [
     ['Inventario Gallo', archivoInventario],
@@ -607,7 +658,9 @@ async function main() {
   const wbNex      = archivoFortalein   ? await descargarXlsx(drive, archivoFortalein.id)   : null;
   const wbSJYSPre  = archivoSJYSPrecios ? await descargarXlsx(drive, archivoSJYSPrecios.id) : null;
   const wbSJYSSto  = archivoSJYSStock   ? await descargarXlsx(drive, archivoSJYSStock.id)   : null;
-  const wbTracmax  = archivoTracmax     ? await descargarXlsx(drive, archivoTracmax.id)     : null;
+  const wbTracmax        = archivoTracmax       ? await descargarXlsx(drive, archivoTracmax.id)       : null;
+  const wbGlobalPrecios  = archivoGlobalPrecios ? await descargarXlsx(drive, archivoGlobalPrecios.id) : null;
+  const wbGlobalStock    = archivoGlobalStock   ? await descargarXlsx(drive, archivoGlobalStock.id)   : null;
 
   console.log('🔄 Procesando fuentes...');
   const { vicMap, norMap, precioMap, productos } = wbInv ? leerInventarioGallo(wbInv) : { vicMap: {}, norMap: {}, precioMap: {}, productos: {} };
@@ -622,6 +675,9 @@ async function main() {
   const tracmaxPrecios  = wbTracmax  ? leerTracmax(wbTracmax)      : {};
   if (!archivoTracmax) console.log('⚠️  Tracmax no encontrado — precios reventa Tracmax sin actualizar');
   else console.log(`  Tracmax reventa: ${Object.keys(tracmaxPrecios).length} medidas`);
+  const globalData = (wbGlobalStock && wbGlobalPrecios) ? leerGlobalTyre(wbGlobalStock, wbGlobalPrecios) : {};
+  if (!wbGlobalStock || !wbGlobalPrecios) console.log('⚠️  Global Tyre no encontrado — Continental/XBri Calzetta sin actualizar');
+  else console.log(`  Global Tyre (Conti/XBri): ${Object.keys(globalData).length} productos`);
 
   console.log(`  Gallo Victoria: ${Object.keys(vicMap).length} productos`);
   console.log(`  Gallo Nordelta: ${Object.keys(norMap).length} productos`);
@@ -784,6 +840,17 @@ async function main() {
         if (precio === null) precio = 0;
         sinStock++;
       }
+
+    } else if (marca === 'CONTINENTAL' || marca === 'XBRI') {
+      const d = globalData[codAlt] || (medida ? Object.values(globalData).find(e => e.marca === marca && normalizarMedida(e.desc) === medida) : null);
+      if (d) {
+        stockExpr = d.stock;
+        if (precio === null) precio = d.precio || 0;
+      } else {
+        stockExpr = 0;
+        if (precio === null) precio = 0;
+        sinStock++;
+      }
     }
     // Otras marcas (Giti, GTRadial, etc.): stock propio + precio del inventario Gallo
 
@@ -894,6 +961,12 @@ async function main() {
     const codAlt = 'NK' + sku;
     if (codAltsEnHoja.has(codAlt) || entry.stock <= 0) continue;
     agregarNuevo('', codAlt, entry.desc || '', 0, 0, entry.stock, entry.precio, 'NANKANG');
+  }
+
+  // 8. Global Tyre (Continental / XBri): códigos con stock no están en la hoja
+  for (const [cod, entry] of Object.entries(globalData)) {
+    if (codAltsEnHoja.has(cod) || entry.stock <= 0) continue;
+    agregarNuevo('', cod, entry.desc || '', 0, 0, entry.stock, entry.precio, entry.marca);
   }
 
   // 7. SJYS (Giti / GTRadial): códigos con stock no están en la hoja

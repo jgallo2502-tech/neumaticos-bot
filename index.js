@@ -289,7 +289,7 @@ function normalizarMedida(texto) {
 // --- Extraer marca del texto ---
 const MARCAS_PREMIUM       = ['michelin', 'yokohama', 'falken', 'continental', 'dunlop', 'bfgoodrich', 'goodyear', 'pirelli', 'bridgestone'];
 const MARCAS_PRECIO_CALIDAD = ['giti', 'gtradial', 'hankook', 'nexen'];
-const MARCAS_ECONOMICAS     = ['tracmax', 'linglong', 'atlas', 'laufenn', 'westlake', 'windforce', 'lavigator', 'wanli', 'sunny'];
+const MARCAS_ECONOMICAS     = ['tracmax', 'linglong', 'atlas', 'laufenn', 'westlake', 'windforce', 'lavigator', 'wanli', 'sunny', 'xbri'];
 const TODAS_MARCAS = [...MARCAS_PREMIUM, ...MARCAS_PRECIO_CALIDAD, ...MARCAS_ECONOMICAS];
 
 // Marcas que NO se ofrecen a revendedores
@@ -315,6 +315,7 @@ function descuentoRevendedor(marca) {
   if (['giti', 'gtradial'].includes(m)) return 0.33;
   if (['yokohama', 'linglong', 'hankook', 'atlas'].includes(m)) return 0.32;
   if (m === 'tracmax') return 0.45;
+  if (['continental', 'xbri'].includes(m)) return 0.30;
   return 0.28;
 }
 

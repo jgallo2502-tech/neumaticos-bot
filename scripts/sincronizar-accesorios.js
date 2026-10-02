@@ -29,13 +29,15 @@ if (!ARCHIVO) { console.error('Falta ruta del archivo'); process.exit(1); }
 
 function leerArchivo(archivo) {
   let wb;
-  try {
-    // Intenta como SpreadsheetML con prólogo roto (formato Gallo .xls)
-    let texto = fs.readFileSync(archivo, 'utf8');
-    texto = texto.replace(/^<xml version>/, '<?xml version="1.0"?>');
-    wb = XLSX.read(texto, { type: 'string' });
-  } catch {
-    // Si falla, lee como xlsx normal
+  if (archivo.endsWith('.xls')) {
+    try {
+      let texto = fs.readFileSync(archivo, 'utf8');
+      texto = texto.replace(/^<xml version>/, '<?xml version="1.0"?>');
+      wb = XLSX.read(texto, { type: 'string' });
+    } catch {
+      wb = XLSX.readFile(archivo);
+    }
+  } else {
     wb = XLSX.readFile(archivo);
   }
   return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 }).slice(1);
